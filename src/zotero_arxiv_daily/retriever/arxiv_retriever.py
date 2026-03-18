@@ -21,12 +21,18 @@ class ArxivRetriever(BaseRetriever):
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
         client = arxiv.Client(num_retries=10,delay_seconds=10)
         query = '+'.join(self.config.source.arxiv.category)
+        include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed
         feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
         if 'Feed error for query' in feed.feed.title:
             raise Exception(f"Invalid ARXIV_QUERY: {query}.")
         raw_papers = []
-        all_paper_ids = [i.id.removeprefix("oai:arXiv.org:") for i in feed.entries if i.get("arxiv_announce_type","new") == 'new']
+        allowed_announce_types = {"new", "cross"} if include_cross_list else {"new"}
+        all_paper_ids = [
+            i.id.removeprefix("oai:arXiv.org:")
+            for i in feed.entries
+            if i.get("arxiv_announce_type", "new") in allowed_announce_types
+        ]
         if self.config.executor.debug:
             all_paper_ids = all_paper_ids[:10]
 
@@ -70,7 +76,11 @@ def extract_text_from_pdf(paper: ArxivResult) -> str | None:
         if paper.pdf_url is None:
             logger.warning(f"No PDF URL available for {paper.title}")
             return None
-        urlretrieve(paper.pdf_url, path)
+        try:
+            urlretrieve(paper.pdf_url, path)
+        except Exception as e:
+            logger.warning(f"Failed to download pdf for {paper.title}: {type(e).__name__}: {e}")
+            return None
         try:
             full_text = extract_markdown_from_pdf(path)
         except Exception as e:
@@ -85,7 +95,11 @@ def extract_text_from_tar(paper: ArxivResult) -> str | None:
         if source_url is None:
             logger.warning(f"No source URL available for {paper.title}")
             return None
-        urlretrieve(source_url, path)
+        try:
+            urlretrieve(source_url, path)
+        except Exception as e:
+            logger.warning(f"Failed to download source for {paper.title}: {type(e).__name__}: {e}")
+            return None
         try:
             file_contents = extract_tex_code_from_tar(path, paper.entry_id)
             if "all" not in file_contents:
