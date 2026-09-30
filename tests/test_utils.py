@@ -133,16 +133,17 @@ def test_send_email_starttls_success(config, monkeypatch):
     assert "text/html" in body
 
 
-def test_send_email_uses_implicit_tls_on_port_465(config, monkeypatch):
+@pytest.mark.parametrize("port", [465, 994])
+def test_send_email_uses_implicit_tls(config, monkeypatch, port):
     from omegaconf import open_dict
     with open_dict(config):
-        config.email.smtp_port = 465
+        config.email.smtp_port = port
     sent = []
     class ImplicitTLS(make_stub_smtp(sent)):
         def starttls(self, **kwargs):
-            raise AssertionError("Port 465 must not use STARTTLS")
+            raise AssertionError("Implicit TLS ports must not use STARTTLS")
     monkeypatch.setattr(smtplib, "SMTP_SSL", ImplicitTLS)
-    monkeypatch.setattr(smtplib, "SMTP", lambda *a, **kw: pytest.fail("Port 465 must use SSL"))
+    monkeypatch.setattr(smtplib, "SMTP", lambda *a, **kw: pytest.fail("Implicit TLS ports must use SSL"))
     send_email(config, "<html>ssl</html>")
     assert len(sent) == 1
 

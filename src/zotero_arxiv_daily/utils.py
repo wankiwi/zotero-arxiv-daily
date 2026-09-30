@@ -82,10 +82,11 @@ def send_email(config:DictConfig, html:str):
     msg['Subject'] = Header(f'Daily Papers {today}', 'utf-8').encode()
 
     context = ssl.create_default_context()
-    # Port 465 speaks TLS immediately; other submission ports require STARTTLS.
-    server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30, context=context) if int(smtp_port) == 465 else smtplib.SMTP(smtp_server, smtp_port, timeout=30)
+    # CSTNET documents 994 as implicit TLS, alongside standard SMTPS port 465.
+    implicit_tls = int(smtp_port) in (465, 994)
+    server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30, context=context) if implicit_tls else smtplib.SMTP(smtp_server, smtp_port, timeout=30)
     try:
-        if int(smtp_port) != 465:
+        if not implicit_tls:
             server.starttls(context=context)
         server.login(sender, password)
         refused = server.sendmail(sender, [receiver], msg.as_string())

@@ -56,6 +56,10 @@ llm:
 
 reranker:
   local:
+    revision: null # Optional immutable model revision.
+    cpu_dtype: auto # Use float32 on CPUs without native BF16; same weights/model.
+    cpu_threads: null # Respect CPU affinity and cgroup quota.
+    cache_dir: null # Optional LOCAL ONLY directory; contains private vectors. Never upload.
     model: jinaai/jina-embeddings-v5-text-nano-retrieval # The Hugging Face model name of the local embedding model. Example: jinaai/jina-embeddings-v5-text-nano
     encode_kwargs:
     # The kwargs for the encode method of the local embedding model. Details see [here](https://www.sbert.net/docs/package_reference/SentenceTransformer.html#sentence_transformers.SentenceTransformer.encode)
