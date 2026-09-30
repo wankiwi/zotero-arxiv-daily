@@ -1,5 +1,7 @@
 from .protocol import Paper
 import math
+from html import escape
+from urllib.parse import urlsplit
 
 
 framework = """
@@ -85,7 +87,9 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
     </tr>
 </table>
 """
-    return block_template.format(title=title, authors=authors,rate=rate, tldr=tldr, pdf_url=pdf_url, affiliations=affiliations)
+    safe_url = pdf_url if pdf_url and urlsplit(pdf_url).scheme in ("http", "https") else ""
+    return block_template.format(title=escape(title), authors=escape(authors), rate=escape(str(rate)),
+        tldr=escape(tldr or "No abstract available"), pdf_url=escape(safe_url, quote=True), affiliations=escape(affiliations or "Unknown Affiliation"))
 
 def get_stars(score:float):
     full_star = '<span class="full-star">⭐</span>'
@@ -125,7 +129,13 @@ def render_email(papers:list[Paper]) -> str:
                 affiliations += ', ...'
         else:
             affiliations = 'Unknown Affiliation'
-        parts.append(get_block_html(p.title, authors, rate, p.tldr, p.pdf_url, affiliations))
+        block = get_block_html(p.title, authors, rate, p.tldr or p.abstract, p.pdf_url or p.url, affiliations)
+        if not p.pdf_url:
+            block = block.replace('>PDF</a>', '>Article</a>')
+        journal = escape(p.journal or p.source)
+        date = p.published.strftime('%Y-%m-%d') if p.published else 'Unknown'
+        basis = escape(p.scoring_basis)
+        parts.append(f'<p>{journal} · {date} · {basis}</p>' + block)
 
     content = '<br>' + '</br><br>'.join(parts) + '</br>'
     return framework.replace('__CONTENT__', content)

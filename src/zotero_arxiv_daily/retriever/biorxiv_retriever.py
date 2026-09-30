@@ -1,4 +1,6 @@
 import requests
+from datetime import datetime, timezone
+from ..identity import normalize_doi
 from .base import BaseRetriever, register_retriever
 from ..protocol import Paper
 from loguru import logger
@@ -20,7 +22,7 @@ class BiorxivRetriever(BaseRetriever):
         delay_time = 10
         for i in range(retry_num):
             try:
-                response = requests.get(api_url)
+                response = requests.get(api_url, timeout=(10, 30))
                 response.raise_for_status()
                 break
             except Exception as e:
@@ -38,7 +40,7 @@ class BiorxivRetriever(BaseRetriever):
         latest_date = sorted(all_dates)[-1]
         collection = [c for c in collection if c['date'] == latest_date]
         categories = [c.lower() for c in self.retriever_config.category]
-        collection = [c for c in collection if c['category'] in categories]
+        collection = [c for c in collection if c['category'].lower() in categories]
         if self.config.executor.debug:
             collection = collection[:10]
         return collection
@@ -57,5 +59,7 @@ class BiorxivRetriever(BaseRetriever):
             abstract=abstract,
             url=pdf_url,
             pdf_url=pdf_url,
-            full_text=full_text
+            full_text=full_text,
+            doi=normalize_doi(raw_paper.get('doi')),
+            published=datetime.fromisoformat(raw_paper['date']).replace(tzinfo=timezone.utc) if raw_paper.get('date') else None,
         )

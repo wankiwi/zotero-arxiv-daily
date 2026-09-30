@@ -176,7 +176,7 @@ Supported by [uv](https://github.com/astral-sh/uv), this workflow can easily run
 # export ZOTERO_ID=xxxx
 # ...
 cd zotero-arxiv-daily
-uv run main.py
+uv run --frozen python -m zotero_arxiv_daily.main
 ```
 
 ## 🚀 Sync with the latest version
@@ -211,3 +211,103 @@ If you find this project helpful, welcome to sponsor me via WeChat or via [ko-fi
 ## 🌟 Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=TideDra/zotero-arxiv-daily&type=Date)](https://star-history.com/#TideDra/zotero-arxiv-daily&Date)
+
+## 指定期刊推荐、RSS 与 GitHub Pages
+
+除了现有预印本来源，现在可以按期刊订阅候选文献，再使用 Zotero 文库的兴趣相似度排序。期刊预设如下：
+
+| 配置 ID | 期刊 |
+| --- | --- |
+| `jacs` | Journal of the American Chemical Society |
+| `jctc` | Journal of Chemical Theory and Computation |
+| `prl` | Physical Review Letters |
+| `nature` | Nature 主刊 |
+| `nature_family` | Nature 主刊和 Nature 品牌期刊，包含 Nature Reviews |
+| `science` | Science |
+| `science_advances` | Science Advances |
+| `jcp` | The Journal of Chemical Physics |
+| `jpcl` | The Journal of Physical Chemistry Letters |
+
+期刊候选来自官方 RSS 和 Crossref 的 ISSN 精确查询。Crossref 按发表时间窗口查询并完整分页，读取实际线上/纸本发表日期，避免将 DOI 创建时间当作发表时间。默认回溯最近 7 天，每次重叠抓取，通过持久状态去重。更晚入库的文献可以用较大的 `window_days` 回补；这不能保证发现任意延迟入库或抓取窗口之外的文章。
+
+`nature_family` 启用时，每周从 Nature 官方 `https://www.nature.com/siteindex` 更新以 Nature 命名的期刊清单，包含 Reviews，新增期刊自动加入。Crossref 按正式刊名解析 ISSN 并缓存。内置清单用于离线启动参考，**未经当前在线核验**。推荐配置 `config/journals.yaml` 启用 `require_live_catalog=true`：首次访问或过期清单刷新失败时明确报错，避免将旧清单当作完整覆盖。其他配置可允许缓存/内置清单降级，并从日志检查覆盖情况。
+
+期刊缺少摘要时使用标题进行评分，输出会标注 `title only`。没有摘要或正文时不生成 AI 内容；没有 PDF 时提供文章页面或 DOI 链接。不会绕过出版商的全文访问权限。来源明确标记的更正、撤稿、社论等会被过滤，元数据未注明文章类型的条目仍可能包含非研究内容。
+
+### 本地运行
+
+使用 Python 3.13 和仓库锁定的依赖：
+
+```bash
+uv sync --frozen
+# 在本地 .env 或进程环境中配置 ZOTERO_ID、ZOTERO_KEY。
+# 启用 LLM 时还需要 OPENAI_API_KEY 和对应的 API 地址/模型。
+uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals
+```
+
+该配置默认订阅上述全部期刊，只生成 `public/feed.xml`，不要求 SMTP 设置。保留最近 30 天、最多 300 条 RSS 推荐记录。
+
+```bash
+# 不调用 LLM，RSS 中显示原摘要；本地 embedding 模型仍需首次下载。
+uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.enabled=false
+
+# 仅启用所需期刊，并增大回溯窗口。
+uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals \
+  'source.journals.presets=[jacs,jctc,prl,jcp,jpcl]' source.journals.window_days=14
+
+# 同时保留预印本来源；须设置其分类。
+uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals \
+  'executor.source=[journals,arxiv]' 'source.arxiv.category=[physics.chem-ph,cond-mat.mtrl-sci]'
+
+# 同时发邮件；需 SENDER、RECEIVER、SENDER_PASSWORD 以及正确的 SMTP 设置。
+uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals output.email.enabled=true
+```
+
+需要自定义期刊时，可在配置中增加 `source.journals.custom`，填写正式名称、ISSN/eISSN 和可选官方 RSS：
+
+```yaml
+source:
+  journals:
+    custom:
+      - id: my_journal
+        title: 正式期刊名称
+        issns: [有效的ISSN]
+        rss: null
+```
+
+推荐数量由 `executor.max_paper_num` 控制，可设置 `executor.min_score`。分数沿用原有 embedding 相似度算法，期刊与预印本共用阈值；并非插件里的 LLM 评分。`zotero.include_path` / `ignore_path` 决定兴趣画像；去重默认覆盖整个文库，可用 `executor.exclude_existing=false` 关闭。
+
+### GitHub Actions 发布
+
+1. Fork/更新仓库，在 Actions Secrets 中配置 `ZOTERO_ID`、`ZOTERO_KEY`；使用 LLM 时配置 `OPENAI_API_KEY`。
+2. 在 Actions Variables 设置 `PAPER_CONFIG=journals`。不设置时保留原来的 `default` 预印本邮件配置。
+3. 可选 Variables：`OPENAI_API_BASE`、`LLM_MODEL`、`RSS_SITE_URL`；邮件需要额外配置 Secrets `SENDER`、`RECEIVER`、`SENDER_PASSWORD` 和 Variables `SMTP_SERVER`、`SMTP_PORT`。
+4. 在 **Settings → Pages → Source** 选择 **GitHub Actions**，启用工作流。
+5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的期刊回溯窗口。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
+6. 完成 Pages 部署后，在 Zotero Feed 中订阅 `https://<用户名>.github.io/<仓库名>/feed.xml`。以实际 Pages 地址为准。
+
+`CUSTOM_CONFIG` 仍可作为 YAML 配置覆盖使用，工作流生成忽略的 `config/runtime.yaml`，不会覆盖版本库的 `config/custom.yaml` 或打印配置内容。`vars.REPOSITORY` / `vars.REF` 的旧跨仓库执行选项已移除，工作流始终运行当前仓库的触发版本。CI 使用冻结锁文件。
+
+工作流将推荐历史保存到独立的 **`paper-state` 数据分支**，无需切换开发分支。它需要 `contents: write` 权限；组织策略/分支规则必须允许该分支的更新。数据包含已选推荐及投递状态，不包含 Zotero 文库原始数据、凭据或全文。Pages 只发布 `public/` 中的 RSS；其中的文献选择和相关性分数可被公开访问。
+
+邮件、RSS 独立记录结果：邮件失败时仍生成并发布有效 RSS，工作流同时报告错误；下次运行重试未成功的邮件，单次最多发送 `max_paper_num` 条。某一期刊失败会留下告警并使任务最终失败，其他来源的推荐仍可输出。当没有新结果时保留 RSS 历史。邮件投递与状态持久化之间发生进程退出时，重试仍可能重复发邮件，SMTP 无法提供严格的“恰好一次”保证。网络/进程中断后应检查 Actions 日志。
+
+本地运行需保留 `data/recommendations.json`、`data/journal_catalog.json`；本地多进程请勿同时写同一状态路径。GitHub 工作流已使用统一并发组避免冲突。状态默认保留 90 天，RSS 保留期应不超过状态保留期；超过状态保留期的文章重新回溯时可能再次推送。只需重新发布已有 RSS 时可手动重跑工作流。
+
+### 性能与故障处理
+
+- arXiv 全文在去重、评分和数量截断之后下载；`executor.fetch_full_text=false` 可省去全文下载。
+- 期刊请求默认 4 个并发任务，支持 `source.journals.workers`（1–16），HTTP 连接复用、有限重试与限流退避。
+- 本地 embedding 模型在同一进程复用；API embedding 对相同文本只请求一次并复用客户端。API 返回乱序索引、零向量或缺失结果时明确报错。
+- 关闭全文下载时，`executor.enrichment_workers`（1–8）可并行生成 TLDR；开启全文时保持串行，避免在工作线程中 fork PDF 子进程。
+- Tokenizer 无法下载时使用保守 UTF-8 字节上限继续调用 LLM，并记录告警；联网恢复后新进程会重新尝试，下载仍保留原始校验。
+- SMTP 465 使用隐式 TLS，其他端口使用 STARTTLS，不再自动降级为明文认证。
+
+开发验证：
+
+```bash
+uv run --frozen pytest -q                         # 默认离线功能测试
+uv run --frozen pytest -m slow                   # 可选：下载模型的实际 embedding 测试
+```
+
+测试包括精确期刊筛选、Crossref 分页、Nature 目录解析、缺失摘要、RSS 历史、独立渠道失败重试、筛选后全文提取、embedding 去重，以及本地真实 Git 数据分支保存/恢复。真实出版商访问、个人 API、SMTP 投递与 GitHub Pages 部署需另行集成验证。

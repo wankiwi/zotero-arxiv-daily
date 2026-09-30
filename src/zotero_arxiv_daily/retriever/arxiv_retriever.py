@@ -2,6 +2,7 @@ from .base import BaseRetriever, register_retriever
 import arxiv
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
+from ..identity import normalize_doi
 from ..utils import extract_markdown_from_pdf, extract_tex_code_from_tar
 from tempfile import TemporaryDirectory
 import feedparser
@@ -66,6 +67,9 @@ def _run_with_hard_timeout(
         return None
 
     process.join(5)
+    if process.is_alive():
+        process.kill()
+        process.join(5)
     result_queue.close()
     result_queue.join_thread()
 
@@ -109,6 +113,7 @@ def _extract_text_from_tar_worker(source_url: str, paper_id: str) -> str | None:
 class ArxivRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
+        self._raw = {}
         if self.config.source.arxiv.category is None:
             raise ValueError("category must be specified for arxiv.")
 
@@ -118,7 +123,7 @@ class ArxivRetriever(BaseRetriever):
         include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed
         feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
-        if 'Feed error for query' in feed.feed.title:
+        if 'Feed error for query' in feed.feed.get('title', ''):
             raise Exception(f"Invalid ARXIV_QUERY: {query}.")
         raw_papers = []
         allowed_announce_types = {"new", "cross"} if include_cross_list else {"new"}
@@ -146,11 +151,8 @@ class ArxivRetriever(BaseRetriever):
         authors = [a.name for a in raw_paper.authors]
         abstract = raw_paper.summary
         pdf_url = raw_paper.pdf_url
-        full_text = extract_text_from_html(raw_paper)
-        if full_text is None:
-            full_text = extract_text_from_pdf(raw_paper)
-        if full_text is None:
-            full_text = extract_text_from_tar(raw_paper)
+        self._raw[raw_paper.entry_id] = raw_paper
+        full_text = None
         return Paper(
             source=self.name,
             title=title,
@@ -159,13 +161,26 @@ class ArxivRetriever(BaseRetriever):
             url=raw_paper.entry_id,
             pdf_url=pdf_url,
             full_text=full_text,
+            doi=normalize_doi(getattr(raw_paper, "doi", None)),
+            published=getattr(raw_paper, "published", None),
         )
+
+    def enrich(self, paper: Paper) -> Paper:
+        raw = self._raw.get(paper.url)
+        if raw is not None and not paper.full_text:
+            paper.full_text = extract_text_from_html(raw)
+            if paper.full_text is None:
+                paper.full_text = extract_text_from_pdf(raw)
+            if paper.full_text is None:
+                paper.full_text = extract_text_from_tar(raw)
+        return paper
 
 
 def extract_text_from_html(paper: ArxivResult) -> str | None:
     html_url = paper.entry_id.replace("/abs/", "/html/")
     try:
-        return _extract_text_from_html_worker(html_url)
+        return _run_with_hard_timeout(_extract_text_from_html_worker, (html_url,),
+            timeout=PDF_EXTRACT_TIMEOUT, operation="HTML extraction", paper_title=paper.title)
     except Exception as exc:
         logger.warning(f"HTML extraction failed for {paper.title}: {exc}")
         return None

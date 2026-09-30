@@ -2,6 +2,10 @@ name: Test
 on:
   workflow_dispatch:
 
+concurrency:
+  group: daily-papers
+  cancel-in-progress: false
+
 jobs:
   calculate-and-send:
     runs-on: ubuntu-latest
@@ -28,7 +32,5 @@ jobs:
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
         run: |
           export DEBUG=true
-          printf "%b\n" "$CUSTOM_CONFIG" > config/custom.yaml
-          echo "Use custom config: "
-          cat config/custom.yaml
-          uv run src/zotero_arxiv_daily/main.py
+          uv run --frozen python scripts/prepare_workflow.py
+          uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime executor.debug=true state.enabled=false

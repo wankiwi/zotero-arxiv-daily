@@ -1,34 +1,85 @@
-name: Send emails daily
+name: Daily papers and RSS
 on:
   workflow_dispatch:
+    inputs:
+      output:
+        description: Output channels
+        type: choice
+        options: [configured, email, rss, both]
+        default: configured
+      window_days:
+        description: Journal lookback in days (1-90)
+        type: string
+        default: '7'
   schedule:
-    - cron: '0 22 * * *'
-
+    - cron: '0 22 * * *' # 06:00 Asia/Shanghai; GitHub schedules may be delayed.
+concurrency:
+  group: daily-papers
+  cancel-in-progress: false
+permissions:
+  contents: read
 jobs:
-  calculate-and-send:
+  recommend:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # Persist deduplication history to paper-state.
+    outputs:
+      rss: ${{ steps.feed.outputs.exists }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
-          repository: ${{ vars.REPOSITORY }}
-          ref: ${{ vars.REF }}
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Run script
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Restore delivery history
+        run: uv run --frozen python scripts/workflow_state.py restore
+      - name: Prepare runtime configuration
+        env:
+          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'default' }}
+          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
+          OUTPUT_CHANNEL: ${{ inputs.output || 'configured' }}
+          WINDOW_DAYS: ${{ inputs.window_days || '7' }}
+        run: uv run --frozen python scripts/prepare_workflow.py
+      - name: Retrieve, rank and deliver
         env:
           ZOTERO_ID: ${{ secrets.ZOTERO_ID }}
           ZOTERO_KEY: ${{ secrets.ZOTERO_KEY }}
           SENDER: ${{ secrets.SENDER }}
           RECEIVER: ${{ secrets.RECEIVER }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          SMTP_SERVER: ${{ vars.SMTP_SERVER || 'smtp.qq.com' }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '465' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
-          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
+          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE || secrets.OPENAI_API_BASE || 'https://api.openai.com/v1' }}
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+          RSS_SITE_URL: ${{ vars.RSS_SITE_URL }}
+        run: uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime
+      - name: Save successful and pending deliveries
+        if: ${{ always() && !cancelled() }}
+        run: uv run --frozen python scripts/workflow_state.py save
+      - name: Check RSS artifact
+        id: feed
+        if: ${{ always() && !cancelled() }}
         run: |
-          printf "%b\n" "$CUSTOM_CONFIG" > config/custom.yaml
-          echo "Use custom config: "
-          cat config/custom.yaml
-          uv run src/zotero_arxiv_daily/main.py
+          if [ -f public/feed.xml ]; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        if: ${{ always() && !cancelled() && steps.feed.outputs.exists == 'true' }}
+        with:
+          path: public
+  deploy:
+    needs: recommend
+    if: ${{ always() && !cancelled() && needs.recommend.outputs.rss == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -1,12 +1,29 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
+from functools import lru_cache
 import re
 import tiktoken
 from openai import OpenAI
 from loguru import logger
 import json
 RawPaperItem = TypeVar('RawPaperItem')
+
+@lru_cache(maxsize=1)
+def _tokenizer():
+    try:
+        return tiktoken.encoding_for_model("gpt-4o")
+    except Exception as exc:
+        logger.warning(f"Tokenizer unavailable; using conservative UTF-8 byte limit: {exc}")
+        return None
+
+
+def truncate_prompt(prompt: str, limit: int) -> str:
+    enc = _tokenizer()
+    if enc is None:
+        return prompt.encode('utf-8')[:limit].decode('utf-8', errors='ignore')
+    return enc.decode(enc.encode(prompt, disallowed_special=())[:limit])
+
 
 @dataclass
 class Paper:
@@ -20,6 +37,12 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    doi: Optional[str] = None
+    journal: Optional[str] = None
+    issns: list[str] = field(default_factory=list)
+    published: Optional[datetime] = None
+    scoring_basis: str = "abstract"
+
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
         lang = llm_params.get('language', 'English')
@@ -38,10 +61,7 @@ class Paper:
             return "Failed to generate TLDR. Neither full text nor abstract is provided"
         
         # use gpt-4o tokenizer for estimation
-        enc = tiktoken.encoding_for_model("gpt-4o")
-        prompt_tokens = enc.encode(prompt)
-        prompt_tokens = prompt_tokens[:4000]  # truncate to 4000 tokens
-        prompt = enc.decode(prompt_tokens)
+        prompt = truncate_prompt(prompt, 4000)
         
         response = openai_client.chat.completions.create(
             messages=[
@@ -71,10 +91,7 @@ class Paper:
         if self.full_text is not None:
             prompt = f"Given the beginning of a paper, extract the affiliations of the authors in a python list format, which is sorted by the author order. If there is no affiliation found, return an empty list '[]':\n\n{self.full_text}"
             # use gpt-4o tokenizer for estimation
-            enc = tiktoken.encoding_for_model("gpt-4o")
-            prompt_tokens = enc.encode(prompt)
-            prompt_tokens = prompt_tokens[:2000]  # truncate to 2000 tokens
-            prompt = enc.decode(prompt_tokens)
+            prompt = truncate_prompt(prompt, 2000)
             affiliations = openai_client.chat.completions.create(
                 messages=[
                     {
@@ -89,8 +106,9 @@ class Paper:
 
             affiliations = re.search(r'\[.*?\]', affiliations, flags=re.DOTALL).group(0)
             affiliations = json.loads(affiliations)
-            affiliations = list(set(affiliations))
-            affiliations = [str(a) for a in affiliations]
+            if not isinstance(affiliations, list):
+                raise ValueError("Affiliations must be a JSON list")
+            affiliations = list(dict.fromkeys(str(a) for a in affiliations))
 
             return affiliations
     
@@ -109,3 +127,4 @@ class CorpusPaper:
     abstract: str
     added_date: datetime
     paths: list[str]
+    doi: Optional[str] = None

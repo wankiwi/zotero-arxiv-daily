@@ -19,12 +19,15 @@ class LocalReranker(BaseReranker):
             logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
             warnings.filterwarnings("ignore", category=FutureWarning)
 
-        encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
+        if not hasattr(self, "_encoder"):
+            self._encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
+        encoder = self._encoder
         if self.config.reranker.local.encode_kwargs:
             encode_kwargs = self.config.reranker.local.encode_kwargs
         else:
             encode_kwargs = {}
-        s1_feature = encoder.encode(s1,**encode_kwargs,show_progress_bar=True)
-        s2_feature = encoder.encode(s2,**encode_kwargs,show_progress_bar=True)
-        sim = encoder.similarity(s1_feature, s2_feature)
+        texts = list(dict.fromkeys(s1 + s2))
+        features = encoder.encode(texts, **encode_kwargs, show_progress_bar=True)
+        lookup = dict(zip(texts, features))
+        sim = encoder.similarity(np.stack([lookup[t] for t in s1]), np.stack([lookup[t] for t in s2]))
         return sim.numpy()
