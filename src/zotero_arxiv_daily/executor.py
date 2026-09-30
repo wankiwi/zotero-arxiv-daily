@@ -13,6 +13,7 @@ from .reranker import get_reranker_cls
 from .construct_email import render_email
 from .utils import send_email
 from openai import OpenAI
+from .llm import ModelRequests
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -39,6 +40,7 @@ class Executor:
         self.retrievers = {source: get_retriever_cls(source)(config) for source in config.executor.source}
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = None
+        self.model_requests = ModelRequests()
         self.library_dois, self.library_titles, self.library_titles_without_doi = set(), set(), set()
 
     def fetch_zotero_corpus(self) -> list[CorpusPaper]:
@@ -106,15 +108,21 @@ class Executor:
                     logger.warning(f"Full text unavailable for {paper.url}: {exc}")
         if self.openai_client:
             if not paper.tldr:
-                paper.generate_tldr(self.openai_client, self.config.llm)
+                paper.generate_tldr(self.openai_client, self.config.llm, self.model_requests)
             if paper.affiliations is None and paper.full_text:
-                paper.generate_affiliations(self.openai_client, self.config.llm)
+                paper.generate_affiliations(self.openai_client, self.config.llm, self.model_requests)
+        elif not paper.tldr:
+            paper.tldr_status, paper.tldr_error = 'not_generated', None
         return paper
 
     def run(self):
         output = self.config.get('output', {})
         email_cfg, rss_cfg = output.get('email', {}), output.get('rss', {})
         email_enabled, rss_enabled = email_cfg.get('enabled', True), rss_cfg.get('enabled', False)
+        # Deliberately exclude recipient, model credentials, endpoints and custom YAML.
+        logger.info(f'Effective configuration: sources={list(self.retrievers)}, '
+                    f'llm_enabled={bool(self.config.llm.get("enabled", True))}, '
+                    f'email_enabled={bool(email_enabled)}, rss_enabled={bool(rss_enabled)}')
         if not email_enabled and not rss_enabled:
             raise ValueError('Enable at least one output channel')
         state_cfg = self.config.get('state', {})
@@ -126,6 +134,7 @@ class Executor:
         if maximum < 1 or not 1 <= workers <= 8:
             raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
         errors = []
+        self.model_requests = ModelRequests()
         try:
             ranked = self._recommend(state, errors, maximum, workers)
         except Exception as exc:
@@ -193,4 +202,13 @@ class Executor:
                 ranked = list(pool.map(self._enrich, ranked))
         else:
             ranked = [self._enrich(p) for p in ranked]
+        failed = sum(bool(p.tldr_error) for p in ranked)
+        generated = sum(p.tldr_status == 'generated' for p in ranked)
+        not_generated = sum(p.tldr_status == 'not_generated' and not p.tldr_error for p in ranked)
+        if failed:
+            logger.warning(f'AI summary degradation: {failed}/{len(ranked)} unavailable; '
+                           f'{generated} generated; original abstracts retained when available. '
+                           f'Model requests stopped={self.model_requests.unavailable}')
+        else:
+            logger.info(f'AI summaries: {generated} generated; {not_generated} not generated')
         return ranked

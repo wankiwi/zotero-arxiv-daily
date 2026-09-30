@@ -18,6 +18,17 @@ def prepare(root: Path, environ=os.environ):
         if not OmegaConf.is_dict(supplied) or 'defaults' in supplied:
             raise ValueError('CUSTOM_CONFIG must be a YAML mapping without defaults')
         config = OmegaConf.merge(config, supplied)
+    sources = environ.get('SOURCE_MODE', 'configured')
+    if sources not in ('configured', 'all', 'journals'):
+        raise ValueError('Invalid sources mode')
+    if sources != 'configured':
+        selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']
+        config = OmegaConf.merge(config, {'executor': {'source': selected}})
+    llm_mode = environ.get('LLM_MODE', 'configured')
+    if llm_mode not in ('configured', 'disabled'):
+        raise ValueError('Invalid llm_mode')
+    if llm_mode == 'disabled':
+        config = OmegaConf.merge(config, {'llm': {'enabled': False}})
     channel = environ.get('OUTPUT_CHANNEL', 'configured')
     if channel not in ('configured', 'email', 'rss', 'both'):
         raise ValueError('Invalid output channel')
@@ -42,6 +53,16 @@ def prepare(root: Path, environ=os.environ):
     OmegaConf.save(config, root / 'config' / 'runtime.yaml')
     with initialize_config_dir(config_dir=str((root / 'config').resolve()), version_base=None):
         effective = compose(config_name='runtime')
+    if sources == 'all':
+        # Legacy presets leave unused platforms unconfigured. Supply defaults
+        # only for those platforms; retain explicit categories/windows.
+        for name in ('arxiv', 'biorxiv', 'medrxiv'):
+            if effective.source[name].category is None:
+                defaults = {'category': ['*']}
+                if effective.source[name].window_days is None:
+                    defaults['window_days'] = 7 if name == 'arxiv' else 1
+                config = OmegaConf.merge(config, {'source': {name: defaults}})
+        OmegaConf.save(config, root / 'config' / 'runtime.yaml')
     # Avoid redeploying an old restored feed during an email-only run.
     if not effective.output.rss.enabled:
         (root / 'public' / 'feed.xml').unlink(missing_ok=True)

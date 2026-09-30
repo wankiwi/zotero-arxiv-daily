@@ -123,3 +123,49 @@ def test_invalid_explicit_recipient_rejected(tmp_path, recipient):
     shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
     with pytest.raises(ValueError, match='recipient'):
         prepare(tmp_path, {'RECEIVER_OVERRIDE': recipient})
+
+
+@pytest.mark.parametrize('sources,expected', [
+    ('configured', ['arxiv', 'biorxiv']),
+    ('all', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('journals', ['journals']),
+])
+@pytest.mark.parametrize('llm_mode', ['configured', 'disabled'])
+def test_single_run_sources_and_llm_override_custom_config(tmp_path, sources, expected, llm_mode):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    original = (tmp_path / 'config' / 'custom.yaml').read_bytes()
+    prepare(tmp_path, {'PAPER_CONFIG': 'all', 'SOURCE_MODE': sources, 'LLM_MODE': llm_mode,
+                      'CUSTOM_CONFIG': 'executor:\n  source: [arxiv, biorxiv]\nllm:\n  enabled: true\n  generation_kwargs:\n    model: existing-model\n'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert list(config.executor.source) == expected
+    assert config.llm.enabled == (llm_mode == 'configured')
+    assert config.llm.generation_kwargs.model == 'existing-model'
+    assert (tmp_path / 'config' / 'custom.yaml').read_bytes() == original
+
+
+def test_default_modes_retain_custom_disabled_llm_and_sources(tmp_path):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    prepare(tmp_path, {'CUSTOM_CONFIG': 'executor:\n  source: [biorxiv]\nllm:\n  enabled: false\n'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert list(config.executor.source) == ['biorxiv'] and not config.llm.enabled
+
+
+def test_all_sources_fills_unconfigured_legacy_platforms(tmp_path):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    prepare(tmp_path, {'PAPER_CONFIG': 'legacy', 'SOURCE_MODE': 'all', 'LLM_MODE': 'disabled', 'OUTPUT_CHANNEL': 'rss'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    # Preserve explicitly configured arXiv categories and announcement mode.
+    assert list(config.source.arxiv.category) == ['cs.AI', 'cs.CV', 'cs.LG', 'cs.CL']
+    assert config.source.arxiv.window_days is None
+    assert list(config.source.medrxiv.category) == ['*'] and config.source.medrxiv.window_days == 1
+    assert list(config.source.biorxiv.category) == ['*'] and config.source.biorxiv.window_days == 1
+
+
+@pytest.mark.parametrize('overrides', [{'SOURCE_MODE': 'unknown'}, {'LLM_MODE': 'paid'}])
+def test_invalid_run_modes_are_rejected(tmp_path, overrides):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    with pytest.raises(ValueError, match='Invalid'):
+        prepare(tmp_path, overrides)

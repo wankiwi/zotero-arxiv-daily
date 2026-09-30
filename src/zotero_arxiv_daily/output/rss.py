@@ -40,7 +40,7 @@ def write_rss(state, config):
             f'Journal: {paper.journal or paper.source}', f'Authors: {", ".join(paper.authors)}',
             f'Published: {paper.published.isoformat() if paper.published else "Unknown"}',
             f'Relevance: {score} ({paper.scoring_basis})',
-            f'TLDR: {paper.tldr or paper.abstract or "No abstract available"}',
+            f'{paper.summary_label}: {paper.summary_text}',
             f'DOI: {paper.doi or "Unavailable"}', f'Article: {paper.url}'])
     path = Path(config.get('path', 'public/feed.xml'))
     path.parent.mkdir(parents=True, exist_ok=True)

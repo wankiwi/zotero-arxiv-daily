@@ -6,6 +6,7 @@ import re
 import tiktoken
 from openai import OpenAI
 from loguru import logger
+from .llm import model_unavailable
 import json
 RawPaperItem = TypeVar('RawPaperItem')
 
@@ -42,6 +43,22 @@ class Paper:
     issns: list[str] = field(default_factory=list)
     published: Optional[datetime] = None
     scoring_basis: str = "abstract"
+    tldr_status: Optional[str] = None
+    tldr_error: Optional[str] = None
+
+    @property
+    def summary_label(self):
+        if self.tldr_status == 'generated':
+            return 'AI summary'
+        if self.tldr_status == 'fallback':
+            return 'Original abstract (AI summary unavailable)'
+        if self.tldr_status == 'legacy' or (self.tldr_status is None and self.tldr):
+            return 'Summary (legacy; origin unknown)'
+        return 'Original abstract (AI summary not generated)' if self.abstract else 'AI summary not generated'
+
+    @property
+    def summary_text(self):
+        return self.tldr or self.abstract or 'No abstract available'
 
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
@@ -74,17 +91,29 @@ class Paper:
             **llm_params.get('generation_kwargs', {})
         )
         tldr = response.choices[0].message.content
+        if not isinstance(tldr, str) or not tldr.strip():
+            raise ValueError('Empty summary response')
         return tldr
     
-    def generate_tldr(self, openai_client:OpenAI,llm_params:dict) -> str:
+    def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
+        self.tldr_error = None
+        if not self.abstract and not self.full_text:
+            self.tldr, self.tldr_status = '', 'not_generated'
+            return self.tldr
         try:
-            tldr = self._generate_tldr_with_llm(openai_client,llm_params)
+            operation = lambda: self._generate_tldr_with_llm(openai_client,llm_params)
+            tldr = requests.call(operation) if requests is not None else operation()
             self.tldr = tldr
+            self.tldr_status = 'generated'
             return tldr
         except Exception as e:
-            logger.warning(f"Failed to generate tldr of {self.url}: {e}")
+            self.tldr_error = 'model_unavailable' if model_unavailable(e) else 'request_failed'
+            # Do not log provider response bodies, account IDs or request payloads.
+            if requests is None:
+                logger.warning(f'AI summary unavailable ({self.tldr_error}); using original abstract when available')
             tldr = self.abstract
             self.tldr = tldr
+            self.tldr_status = 'fallback' if self.abstract else 'not_generated'
             return tldr
 
     def _generate_affiliations_with_llm(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
@@ -112,13 +141,15 @@ class Paper:
 
             return affiliations
     
-    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
+    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict, requests=None) -> Optional[list[str]]:
         try:
-            affiliations = self._generate_affiliations_with_llm(openai_client,llm_params)
+            operation = lambda: self._generate_affiliations_with_llm(openai_client,llm_params)
+            affiliations = requests.call(operation) if requests is not None else operation()
             self.affiliations = affiliations
             return affiliations
         except Exception as e:
-            logger.warning(f"Failed to generate affiliations of {self.url}: {e}")
+            if requests is None or not model_unavailable(e):
+                logger.warning('AI affiliation extraction unavailable; preserving unknown affiliation')
             self.affiliations = None
             return None
 @dataclass

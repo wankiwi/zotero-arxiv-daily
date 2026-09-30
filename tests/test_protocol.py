@@ -24,13 +24,15 @@ def test_tldr_returns_response(llm_params):
     result = paper.generate_tldr(client, llm_params)
     assert result == "Hello! How can I assist you today?"
     assert paper.tldr == result
+    assert paper.tldr_status == 'generated' and paper.tldr_error is None
 
 
 def test_tldr_without_abstract_or_fulltext(llm_params):
     client = make_stub_openai_client()
     paper = make_sample_paper(abstract="", full_text=None)
     result = paper.generate_tldr(client, llm_params)
-    assert "Failed to generate TLDR" in result
+    assert result == ''
+    assert paper.tldr_status == 'not_generated' and paper.tldr_error is None
 
 
 def test_tldr_falls_back_to_abstract_on_error(llm_params):
@@ -46,6 +48,7 @@ def test_tldr_falls_back_to_abstract_on_error(llm_params):
     )
     result = paper.generate_tldr(broken_client, llm_params)
     assert result == paper.abstract
+    assert paper.tldr_status == 'fallback' and paper.tldr_error == 'request_failed'
 
 
 def test_tldr_truncates_long_prompt(llm_params):

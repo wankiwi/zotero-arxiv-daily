@@ -23,6 +23,7 @@ def paper_dict(paper):
 
 def load_paper(data):
     data = dict(data)
+    data.setdefault('tldr_status', 'legacy' if data.get('tldr') else 'not_generated')
     if data.get('published'):
         data['published'] = datetime.fromisoformat(data['published'])
     return Paper(**data)

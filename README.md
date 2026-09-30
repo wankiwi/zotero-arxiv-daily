@@ -298,6 +298,10 @@ source:
 5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的统一回溯窗口；留空沿用各平台配置。可选 `recipient` 为本次运行指定一个收件邮箱，优先于 `CUSTOM_CONFIG` 和 `RECEIVER`；留空保留原配置，不修改长期收件人。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
 6. 完成 Pages 部署后，在 Zotero Feed 中订阅 `https://<用户名>.github.io/<仓库名>/feed.xml`。以实际 Pages 地址为准。
 
+手动运行还可设置 `sources=configured/all/journals` 和 `llm_mode=configured/disabled`。默认 `configured` 保留现有 preset 与 `CUSTOM_CONFIG` 的合并结果；其他选项在 `CUSTOM_CONFIG` 之后应用，只影响本次运行，不修改仓库 Variables、Secrets 或长期来源选择。`sources=all` 选择全部五个来源，保留已配置的学科和窗口，并为 legacy 配置中未配置的平台补上必要默认值。`sources=journals` 只检索期刊。`llm_mode=disabled` 使用原摘要，不读取 LLM 凭据、不调用 LLM，也不切换模型或供应商。运行日志仅列出生效来源、LLM 开关与邮件/RSS 开关，不打印完整配置、收件人、API 地址或凭据。
+
+邮件和 RSS 区分 AI 摘要、AI 失败后的原摘要回退、未生成摘要。旧状态没有可靠的摘要来源信息时标记为 `Summary (legacy; origin unknown)`，不会重新发送已经投递的记录。摘要调用失败时保留原摘要并汇总降级警告，仍允许投递，因此工作流成功不等于 AI 摘要成功。确定性“模型不可用”的 404 会停止本次后续 LLM 请求；普通路由 404、网络等暂时错误不会触发该熔断。首次请求先完成探测再开启并发；探测成功后若模型失效，已在途请求不能撤回。下次运行重新探测，不自动启用收费模型。
+
 可用 `CUSTOM_CONFIG` 同时选择期刊和预印本，并限定学科，例如：
 
 ```yaml

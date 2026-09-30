@@ -54,7 +54,7 @@ def get_empty_html():
   """
   return block_template
 
-def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None):
+def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None, summary_label:str='AI summary'):
     block_template = """
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
     <tr>
@@ -76,7 +76,7 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
     </tr>
     <tr>
         <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>TLDR:</strong> {tldr}
+            <strong>{summary_label}:</strong> {tldr}
         </td>
     </tr>
 
@@ -89,7 +89,7 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
 """
     safe_url = pdf_url if pdf_url and urlsplit(pdf_url).scheme in ("http", "https") else ""
     return block_template.format(title=escape(title), authors=escape(authors), rate=escape(str(rate)),
-        tldr=escape(tldr or "No abstract available"), pdf_url=escape(safe_url, quote=True), affiliations=escape(affiliations or "Unknown Affiliation"))
+        tldr=escape(tldr or "No abstract available"), summary_label=escape(summary_label), pdf_url=escape(safe_url, quote=True), affiliations=escape(affiliations or "Unknown Affiliation"))
 
 def get_stars(score:float):
     full_star = '<span class="full-star">⭐</span>'
@@ -129,7 +129,7 @@ def render_email(papers:list[Paper]) -> str:
                 affiliations += ', ...'
         else:
             affiliations = 'Unknown Affiliation'
-        block = get_block_html(p.title, authors, rate, p.tldr or p.abstract, p.pdf_url or p.url, affiliations)
+        block = get_block_html(p.title, authors, rate, p.summary_text, p.pdf_url or p.url, affiliations, p.summary_label)
         if not p.pdf_url:
             block = block.replace('>PDF</a>', '>Article</a>')
         journal = escape(p.journal or p.source)
