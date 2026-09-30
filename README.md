@@ -344,3 +344,29 @@ uv run --frozen pytest -m slow                   # 可选：下载模型的实�
 ```
 
 测试包括精确期刊筛选、Crossref 分页、Nature 目录解析、缺失摘要、RSS 历史、独立渠道失败重试、筛选后全文提取、embedding 去重，以及本地真实 Git 数据分支保存/恢复。真实出版商访问、个人 API、SMTP 投递与 GitHub Pages 部署需另行集成验证。
+
+### 独立配置预印本研究方向
+
+`preprint_interests` 与普通期刊的 presets、ISSN、窗口独立。未指定或根值为 `null` 时沿用旧 `source.<平台>.category`；已有配置无需迁移。新配置中 `categories` 优先于旧 `category`，去除前后空白。示例为已确认的方向：
+
+```yaml
+preprint_interests:
+  arxiv:
+    categories: [physics.chem-ph, physics.comp-ph, cond-mat.mtrl-sci, cond-mat.soft, cs.LG, cs.AI]
+  biorxiv:
+    categories: [biophysics, biochemistry]
+  medrxiv:
+    enabled: false
+  researchsquare:
+    keywords: [physical chemistry, chemical physics, computational physics, materials science, material science, soft matter, machine learning, artificial intelligence, biophysics, biophysical, biochemistry, biochemical]
+```
+
+上述配置保存在 `config/interests.yaml`。本地用 `--config-name=interests`；Actions 本次选择 `preprint_profile=interests`，会在 `CUSTOM_CONFIG` 后应用该方向配置，不改长期 Variables。它只改变预印本筛选，不改变来源选择；如需期刊和全部允许的预印本来源，同时选 `sources=all`。默认 `preprint_profile=configured` 保持原行为。长期启用可将这段映射加入已有 `CUSTOM_CONFIG`（保留其他设置），或显式选择 `PAPER_CONFIG=interests` 并检查旧覆盖配置。
+
+`enabled: false` 独立于来源列表，在 `sources=all` 和旧 `executor.source` 合并后仍禁止该平台检索。本例明确关闭 medRxiv。`categories: null` 仅继承旧配置，不表示关闭；`categories: ['*']` 才明确选择全部分类。空列表、空映射、空字符串、未知配置字段/平台和错误类型会报错，不会自动放宽范围。分类检查包含格式校验，并不内置各平台完整、不断变化的分类词典；拼写错误可能返回零结果，请使用平台原生名称。禁用来源不删除历史 RSS 或待投递状态。
+
+- arXiv 使用[原生分类](https://arxiv.org/category_taxonomy)，日期窗口检索通过[官方 API](https://info.arxiv.org/help/api/user-manual.html)的 `cat:` 筛选；可选关键词通过 `ti:` / `abs:` 查询再本地复核，仍遵循 `include_cross_list`。
+- bioRxiv / medRxiv 使用各自的原生分类名称，[官方 API](https://api.biorxiv.org/)按每个分类独立请求和分页，并复核返回分类。新方向配置使用日期窗口；未指定窗口时默认回溯 1 天，旧的无方向配置保留旧检索行为。
+- Research Square 当前通过 Crossref 接口抓取；[接口文档](https://github.com/CrossRef/rest-api-doc)未提供本项目所需的等价原生学科筛选。上例是物理化学、计算物理、材料、软物质、机器学习/AI、生物物理和生物化学的**本地标题/摘要关键词**映射，并非平台类别。它减少排序和 LLM 候选量，但不减少元数据抓取量；缺摘要或使用其他措辞可能漏检。先选最新版本，再筛选，不会因旧版本命中而恢复已撤回或不匹配的新版本。
+
+各平台可选 `keywords` 为字面短语列表，短语间取 OR、与分类取 AND，忽略大小写及标点分隔，不做语义扩展或自动词干推导。普通期刊完全不受这些关键词影响；不要把 arXiv 分类代码套用到其他平台。

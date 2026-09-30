@@ -20,6 +20,11 @@ on:
         type: choice
         options: [configured, all, journals]
         default: configured
+      preprint_profile:
+        description: Preprint directions; interests uses the saved profile and disables medRxiv
+        type: choice
+        options: [configured, interests]
+        default: configured
       llm_mode:
         description: Keep configured LLM behavior or use original abstracts without LLM calls
         type: choice
@@ -57,6 +62,7 @@ jobs:
           WINDOW_DAYS: ${{ inputs.window_days || '' }}
           RECEIVER_OVERRIDE: ${{ inputs.recipient || '' }}
           SOURCE_MODE: ${{ inputs.sources || 'configured' }}
+          PREPRINT_PROFILE: ${{ inputs.preprint_profile || 'configured' }}
           LLM_MODE: ${{ inputs.llm_mode || 'configured' }}
         run: uv run --frozen python scripts/prepare_workflow.py
       - name: Retrieve, rank and deliver

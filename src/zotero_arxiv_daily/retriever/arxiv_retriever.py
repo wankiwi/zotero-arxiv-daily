@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
 from ..identity import normalize_doi
+from ..preprint_interests import categories_for, keyword_text
 from ..utils import extract_markdown_from_pdf, extract_tex_code_from_tar
 from tempfile import TemporaryDirectory
 import feedparser
@@ -115,13 +116,15 @@ class ArxivRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
         self._raw = {}
-        if self.config.source.arxiv.category is None:
-            raise ValueError("category must be specified for arxiv.")
+        self.categories = categories_for(config, self.name) if self.interests.get('enabled', True) else []
 
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
-        categories = list(self.retriever_config.category)
+        if not self.interests.get('enabled', True):
+            return []
+        categories = self.categories
+        keywords = self.interests.get('keywords', [])
         days = self.retriever_config.get('window_days')
-        if '*' in categories or days is not None:
+        if '*' in categories or days is not None or keywords:
             # Submission dates precede public announcements, especially over weekends.
             days = int(days if days is not None else 7)
             if not 1 <= days <= 90:
@@ -131,6 +134,9 @@ class ArxivRetriever(BaseRetriever):
             query = f'submittedDate:[{since:%Y%m%d%H%M} TO {until:%Y%m%d%H%M}]'
             if '*' not in categories:
                 query += ' AND (' + ' OR '.join(f'cat:{category}' for category in categories) + ')'
+            if keywords:
+                query += ' AND (' + ' OR '.join(f'{field}:"{keyword_text(term)}"'
+                    for term in keywords for field in ('ti', 'abs')) + ')'
             search = arxiv.Search(query=query, max_results=10 if self.config.executor.debug else None,
                                   sort_by=arxiv.SortCriterion.SubmittedDate,
                                   sort_order=arxiv.SortOrder.Descending)
@@ -140,7 +146,7 @@ class ArxivRetriever(BaseRetriever):
                 results = [paper for paper in results if paper.primary_category in categories]
             return results
         client = arxiv.Client(num_retries=3, delay_seconds=3)
-        query = '+'.join(self.config.source.arxiv.category)
+        query = '+'.join(categories)
         include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed
         feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")

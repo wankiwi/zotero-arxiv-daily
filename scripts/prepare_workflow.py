@@ -5,6 +5,7 @@ import re
 
 from omegaconf import OmegaConf
 from hydra import compose, initialize_config_dir
+from zotero_arxiv_daily.preprint_interests import enabled_sources
 
 
 def prepare(root: Path, environ=os.environ):
@@ -18,6 +19,12 @@ def prepare(root: Path, environ=os.environ):
         if not OmegaConf.is_dict(supplied) or 'defaults' in supplied:
             raise ValueError('CUSTOM_CONFIG must be a YAML mapping without defaults')
         config = OmegaConf.merge(config, supplied)
+    profile = environ.get('PREPRINT_PROFILE', 'configured')
+    if profile not in ('configured', 'interests'):
+        raise ValueError('Invalid preprint profile')
+    if profile == 'interests':
+        preferences = OmegaConf.load(root / 'config' / 'interests.yaml').preprint_interests
+        config = OmegaConf.merge(config, {'preprint_interests': preferences})
     sources = environ.get('SOURCE_MODE', 'configured')
     if sources not in ('configured', 'all', 'journals'):
         raise ValueError('Invalid sources mode')
@@ -63,6 +70,11 @@ def prepare(root: Path, environ=os.environ):
                     defaults['window_days'] = 7 if name == 'arxiv' else 1
                 config = OmegaConf.merge(config, {'source': {name: defaults}})
         OmegaConf.save(config, root / 'config' / 'runtime.yaml')
+    selected = enabled_sources(effective)
+    if not selected:
+        raise ValueError('No enabled sources remain after preprint interest filtering')
+    config = OmegaConf.merge(config, {'executor': {'source': selected}})
+    OmegaConf.save(config, root / 'config' / 'runtime.yaml')
     # Avoid redeploying an old restored feed during an email-only run.
     if not effective.output.rss.enabled:
         (root / 'public' / 'feed.xml').unlink(missing_ok=True)

@@ -14,6 +14,7 @@ from .construct_email import render_email
 from .utils import send_email
 from openai import OpenAI
 from .llm import ModelRequests
+from .preprint_interests import enabled_sources
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -37,7 +38,9 @@ class Executor:
         self.config = config
         self.include_path_patterns = normalize_path_patterns(config.zotero.include_path, "include_path")
         self.ignore_path_patterns = normalize_path_patterns(config.zotero.ignore_path, "ignore_path")
-        self.retrievers = {source: get_retriever_cls(source)(config) for source in config.executor.source}
+        self.retrievers = {source: get_retriever_cls(source)(config) for source in enabled_sources(config)}
+        if not self.retrievers:
+            raise ValueError('No enabled sources remain after preprint interest configuration')
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = None
         self.model_requests = ModelRequests()

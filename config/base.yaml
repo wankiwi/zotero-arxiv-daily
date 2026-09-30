@@ -4,6 +4,9 @@ zotero:
   include_path: null # A list of glob patterns marking the Zotero collections that should be included. Example: ["2026/survey/**","2026/reading-group/**"]
   ignore_path: null # A list of glob patterns marking the Zotero collections that should be excluded. Example: ["2026/ignore/**","archive/**"]
 
+# null keeps existing source.<platform>.category behavior. See config/interests.yaml.
+preprint_interests: null
+
 source:
   arxiv:
     window_days: null # null preserves the latest category RSS announcement.
