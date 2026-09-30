@@ -42,7 +42,10 @@ def validate_interests(config):
             raise ValueError(f'Unknown preprint platform: {name}')
         if not isinstance(values, (Mapping, DictConfig)) or not values:
             raise ValueError(f'preprint_interests.{name} must be a non-empty mapping')
-        unknown = set(values) - {'enabled', 'categories', 'keywords'}
+        allowed = {'enabled', 'categories', 'keywords'}
+        if name == 'researchsquare':
+            allowed |= {'backend', 'source_ids', 'type', 'subfield'}
+        unknown = set(values) - allowed
         if unknown:
             raise ValueError(f'Unknown preprint interest options for {name}: {sorted(unknown)}')
         spec = {}
@@ -56,6 +59,10 @@ def validate_interests(config):
             spec['categories'] = _terms(values['categories'], f'{name}.categories', True, name)
         if 'keywords' in values:
             spec['keywords'] = _terms(values['keywords'], f'{name}.keywords')
+        if name == 'researchsquare':
+            for key in ('backend', 'source_ids', 'type', 'subfield'):
+                if key in values:
+                    spec[key] = values[key]
         result[name] = spec
     return result
 

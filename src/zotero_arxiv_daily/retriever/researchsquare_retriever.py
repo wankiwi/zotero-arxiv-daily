@@ -7,6 +7,7 @@ from .journal_retriever import clean_text, crossref_date
 from ..http import session
 from ..identity import deduplicate, normalize_doi
 from ..protocol import Paper
+from .openalex_researchsquare import OpenAlexResearchSquare
 
 
 def posted_date(item):
@@ -15,7 +16,22 @@ def posted_date(item):
 
 @register_retriever('researchsquare')
 class ResearchSquareRetriever(BaseRetriever):
+    def __init__(self, config):
+        super().__init__(config)
+        options = dict(self.retriever_config) | self.interests
+        backend = options.get('backend', 'crossref')
+        if backend not in ('crossref', 'openalex'):
+            raise ValueError('Research Square backend must be crossref or openalex')
+        self.openalex = OpenAlexResearchSquare(options) if backend == 'openalex' and self.interests.get('enabled', True) else None
+        if self.openalex:
+            # OpenAlex subfields replace the legacy keyword approximation.
+            self.interests = {key: value for key, value in self.interests.items() if key != 'keywords'}
+
     def _retrieve_raw_papers(self):
+        if not self.interests.get('enabled', True):
+            return []
+        if self.openalex:
+            return self.openalex.retrieve()
         days = int(self.retriever_config.get('window_days', 1))
         max_pages = int(self.retriever_config.get('max_pages', 100))
         if not 1 <= days <= 90 or max_pages < 1:
@@ -71,6 +87,8 @@ class ResearchSquareRetriever(BaseRetriever):
         return papers[:10] if self.config.executor.debug else papers
 
     def convert_to_paper(self, raw_paper):
+        if self.openalex:
+            return self.openalex.convert(raw_paper)
         doi = normalize_doi(raw_paper.get('DOI'))
         title = clean_text(' '.join(raw_paper.get('title', [])))
         if re.match(r'^(?:withdrawn|retracted|withdrawal|retraction)\s*[:：]|^\[(?:withdrawn|retracted)\]', title, re.I):

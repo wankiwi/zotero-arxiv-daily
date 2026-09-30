@@ -10,5 +10,14 @@ preprint_interests:
   medrxiv:
     enabled: false
   researchsquare:
-    # Local title/abstract phrases, NOT Research Square native categories.
-    keywords: [physical chemistry, chemical physics, computational physics, materials science, material science, soft matter, machine learning, artificial intelligence, biophysics, biophysical, biochemistry, biochemical]
+    backend: openalex
+    source_ids: [S4306525896, S4306402450]
+    type: [preprint]
+    subfield:
+      - Physical and Theoretical Chemistry
+      - Materials Chemistry
+      - General Materials Science
+      - Condensed Matter Physics
+      - Artificial Intelligence
+      - Biophysics
+      - Biochemistry

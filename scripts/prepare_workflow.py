@@ -24,7 +24,7 @@ def prepare(root: Path, environ=os.environ):
         raise ValueError('Invalid preprint profile')
     if profile == 'interests':
         preferences = OmegaConf.load(root / 'config' / 'interests.yaml').preprint_interests
-        config = OmegaConf.merge(config, {'preprint_interests': preferences})
+        config.preprint_interests = preferences  # Replace legacy keyword approximations too.
     sources = environ.get('SOURCE_MODE', 'configured')
     if sources not in ('configured', 'all', 'journals'):
         raise ValueError('Invalid sources mode')

@@ -358,7 +358,17 @@ preprint_interests:
   medrxiv:
     enabled: false
   researchsquare:
-    keywords: [physical chemistry, chemical physics, computational physics, materials science, material science, soft matter, machine learning, artificial intelligence, biophysics, biophysical, biochemistry, biochemical]
+    backend: openalex
+    source_ids: [S4306525896, S4306402450]
+    type: [preprint]
+    subfield:
+      - Physical and Theoretical Chemistry
+      - Materials Chemistry
+      - General Materials Science
+      - Condensed Matter Physics
+      - Artificial Intelligence
+      - Biophysics
+      - Biochemistry
 ```
 
 上述配置保存在 `config/interests.yaml`。本地用 `--config-name=interests`；Actions 本次选择 `preprint_profile=interests`，会在 `CUSTOM_CONFIG` 后应用该方向配置，不改长期 Variables。它只改变预印本筛选，不改变来源选择；如需期刊和全部允许的预印本来源，同时选 `sources=all`。默认 `preprint_profile=configured` 保持原行为。长期启用可将这段映射加入已有 `CUSTOM_CONFIG`（保留其他设置），或显式选择 `PAPER_CONFIG=interests` 并检查旧覆盖配置。
@@ -367,6 +377,12 @@ preprint_interests:
 
 - arXiv 使用[原生分类](https://arxiv.org/category_taxonomy)，日期窗口检索通过[官方 API](https://info.arxiv.org/help/api/user-manual.html)的 `cat:` 筛选；可选关键词通过 `ti:` / `abs:` 查询再本地复核，仍遵循 `include_cross_list`。
 - bioRxiv / medRxiv 使用各自的原生分类名称，[官方 API](https://api.biorxiv.org/)按每个分类独立请求和分页，并复核返回分类。新方向配置使用日期窗口；未指定窗口时默认回溯 1 天，旧的无方向配置保留旧检索行为。
-- Research Square 当前通过 Crossref 接口抓取；[接口文档](https://github.com/CrossRef/rest-api-doc)未提供本项目所需的等价原生学科筛选。上例是物理化学、计算物理、材料、软物质、机器学习/AI、生物物理和生物化学的**本地标题/摘要关键词**映射，并非平台类别。它减少排序和 LLM 候选量，但不减少元数据抓取量；缺摘要或使用其他措辞可能漏检。先选最新版本，再筛选，不会因旧版本命中而恢复已撤回或不匹配的新版本。
+- Research Square 的 `interests` 配置使用 OpenAlex。两个 `locations.source.id` 取 OR，`type:preprint` 与七个子学科取 AND；子学科使用 `topics.subfield.id`，匹配任意已分配 topic 的子学科，不限于排名第一的 `primary_topic.subfield.id`。这是[官方定义的两种覆盖语义](https://help.openalex.org/data/subfields/)，可以保留主学科不同的交叉研究。没有分配这些子学科或已经被归为 `article` 的记录仍不匹配。
 
-各平台可选 `keywords` 为字面短语列表，短语间取 OR、与分类取 AND，忽略大小写及标点分隔，不做语义扩展或自动词干推导。普通期刊完全不受这些关键词影响；不要把 arXiv 分类代码套用到其他平台。
+OpenAlex 后端先请求 `/sources/<ID>` 核对 ID 与 Research Square 名称，再分页读取 `/subfields`，按上列**精确名称**解析 ID；不猜测映射、不模糊匹配。名称缺失、歧义、来源身份不符时失败并报告。作品按[官方 cursor 分页](https://help.openalex.org/api/paging/)抓取，每页 100 条，分页截断/循环明确报错。日期窗口使用 `from_publication_date` / `to_publication_date`，不是索引新增日期或 Research Square 修订日期；OpenAlex 收录延迟及合并已发表版本可能导致窗口漏检，不能承诺抓全平台新增稿件。
+
+返回后复核来源、类型、子学科和日期，按 OpenAlex work ID 与规范化 DOI 去重；同窗口中返回多个 Research Square DOI 版本时保留最新再排除撤稿。窗口/服务端过滤外的其他版本不会额外查询，撤稿信息亦受 OpenAlex 元数据时效限制。无摘要仍保留论文；有倒排摘要则重建；无 DOI 使用 OpenAlex work URL。若后续才补 DOI，历史身份可能改变。不会下载全文。OpenAlex 后端忽略旧 `keywords` 近似筛选，单次 `preprint_profile=interests` 会整体替换旧方向映射；未选该配置的旧 Crossref 后端保持兼容。
+
+[当前官方认证说明](https://help.openalex.org/api/authentication/)允许免 key 基础请求，本实现仅使用无 key API，不读取/创建凭据、不启用付费或付费增量过滤器。401/403/429 会报告访问或配额错误，无付费回退。开发环境访问 `api.openalex.org` 被代理 `403 Forbidden` 阻止，因此截至本次修改，**两个来源身份和七项实际名称-ID 映射尚未完成在线核验**；上述安全校验须在可访问 API 的环境中实际通过后，才算完成集成验证。测试中的子学科 ID 为明确标注的合成数据，不是声称核实的映射。
+
+arXiv、bioRxiv、medRxiv 和旧 Crossref 后端可选 `keywords` 为字面短语列表，短语间取 OR、与分类取 AND，忽略大小写及标点分隔，不做语义扩展或自动词干推导。普通期刊完全不受这些关键词影响；不要把 arXiv 分类代码套用到其他平台。
