@@ -137,3 +137,37 @@ def test_journal_configuration_rejects_invalid_issn_and_plain_http_feed():
         Journal('bad', 'Bad', ('wrong',))
     with pytest.raises(ValueError, match='HTTPS'):
         Journal('bad', 'Bad', rss='http://example.org/feed')
+
+
+@pytest.mark.parametrize('content', ['{broken', '[]', '{"nature": null}', '{"issns": {"jacs": ["invalid"]}}'])
+def test_invalid_catalog_cache_is_rebuilt(config, tmp_path, content):
+    path = tmp_path / 'catalog.json'
+    path.write_text(content)
+    config.source.journals.catalog_cache = str(path)
+    config.source.journals.presets = ['jacs']
+    retriever = JournalRetriever(config)
+    assert retriever._catalog() == [CORE['jacs']]
+    assert retriever.cache == {}
+
+
+def test_explicit_issns_override_old_catalog_cache(config, tmp_path):
+    path = tmp_path / 'catalog.json'
+    path.write_text('{"issns": {"jacs": ["1549-9618"]}}')
+    config.source.journals.catalog_cache = str(path)
+    config.source.journals.presets = ['jacs']
+    assert JournalRetriever(config)._catalog()[0].issns == CORE['jacs'].issns
+
+
+def test_rss_bad_entry_does_not_discard_good_entries(config, monkeypatch):
+    import feedparser
+    entries = [
+        {'title': 'Invalid link', 'link': 'javascript:alert(1)', 'published_parsed': (2026,3,2,0,0,0)},
+        {'title': 'Invalid date', 'link': 'https://example.org/bad', 'published_parsed': (2026,99,2,0,0,0)},
+        {'title': 'Good', 'link': 'https://example.org/good', 'published_parsed': (2026,3,2,0,0,0)},
+    ]
+    monkeypatch.setattr(feedparser, 'parse', lambda _: SimpleNamespace(bozo=False, entries=entries))
+    client = SimpleNamespace(get=lambda *a, **kw: SimpleNamespace(content=b'', raise_for_status=lambda: None))
+    retriever = JournalRetriever(config)
+    papers = retriever._rss(CORE['jacs'], client, datetime(2026,3,1,tzinfo=timezone.utc), datetime(2026,3,5,tzinfo=timezone.utc))
+    assert [p.title for p in papers] == ['Good']
+    assert CORE['jacs'].title in retriever.failures

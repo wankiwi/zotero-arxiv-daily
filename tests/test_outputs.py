@@ -49,7 +49,8 @@ def test_rss_stable_guid_escape_and_history_without_new_results(tmp_path):
     first = ET.parse(config['path'])
     guid = first.findtext('./channel/item/guid')
     assert first.findtext('./channel/item/title') == paper.title
-    assert '<script>' in first.findtext('./channel/item/description')
+    assert '<script>' not in first.findtext('./channel/item/description')
+    assert '&lt;script&gt;' in first.findtext('./channel/item/description')
     write_rss(state, config)
     second = ET.parse(config['path'])
     assert second.findtext('./channel/item/guid') == guid
@@ -93,3 +94,46 @@ def test_identical_titles_with_distinct_dois_are_not_merged(tmp_path):
 
 def test_doi_tracking_parameters_do_not_change_identity():
     assert normalize_doi('https://doi.org/10.1021/ABC?utm_source=email#section') == '10.1021/abc'
+
+
+def test_query_identity_preserves_article_ids_and_ignores_only_tracking(tmp_path):
+    first = make_sample_paper(title='First', doi=None, url='https://example.org/article?id=1&utm_source=rss#top')
+    repeated = make_sample_paper(title='First renamed', doi=None, url='https://example.org/article?id=1')
+    second = make_sample_paper(title='Second', doi=None, url='https://example.org/article?id=2')
+    assert paper_id(first) == paper_id(repeated)
+    state = State(tmp_path / 'state.json')
+    state.add([first])
+    assert state.has(repeated) and not state.has(second)
+
+
+def test_arxiv_query_and_fragment_do_not_break_version_identity():
+    assert paper_id(make_sample_paper(url='https://arxiv.org/abs/2401.01234v3?context=cs#top')) == 'arxiv:2401.01234'
+    assert not paper_id(make_sample_paper(url='https://notarxiv.org/abs/2401.01234')).startswith('arxiv:')
+
+
+def test_old_state_keys_migrate_without_repeating_or_breaking_pending_delivery(tmp_path):
+    from zotero_arxiv_daily.state import paper_dict
+    first = make_sample_paper(title='First', doi=None, url='https://example.org/article?id=1')
+    second = make_sample_paper(title='Second', doi=None, url='https://doi.org/10.1021/second')
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps({'version': 1, 'records': {
+        'https://example.org/article': {'added': datetime.now(timezone.utc).isoformat(), 'paper': paper_dict(first), 'channels': {'email': True}},
+        'https://doi.org/10.1021/second': {'added': datetime.now(timezone.utc).isoformat(), 'paper': paper_dict(second), 'channels': {'rss': True}},
+    }}))
+    state = State(path)
+    assert state.has(first) and state.has(second)
+    assert [p.title for p in state.pending('email')] == ['Second']
+    state.mark(state.pending('email'), 'email')
+    state.save()
+    assert not State(path).pending('email')
+    assert [p.title for p in State(path).pending('rss')] == ['First']
+
+
+def test_doi_links_protect_identical_titles_from_false_deduplication(tmp_path):
+    first = make_sample_paper(title='Introduction', doi=None, url='https://doi.org/10.1021/one')
+    second = make_sample_paper(title='Introduction', doi='10.1021/two', url='https://doi.org/10.1021/two')
+    assert len(deduplicate([first, second])) == 2
+    state = State(tmp_path / 'state.json')
+    state.add([first])
+    state.save()
+    assert not State(state.path).has(second)

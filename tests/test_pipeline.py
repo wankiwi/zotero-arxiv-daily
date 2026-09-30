@@ -130,3 +130,41 @@ def test_missing_abstract_ranks_with_title(config):
     from tests.canned_responses import make_sample_corpus
     paper = make_sample_paper(title='A title', abstract='')
     assert Reranker(config).rerank([paper], make_sample_corpus(1))[0].scoring_basis == 'title only'
+
+
+@pytest.mark.parametrize('failure_stage', ['corpus', 'ranking'])
+def test_pending_delivery_survives_new_recommendation_failure(pipeline, monkeypatch, failure_stage):
+    with open_dict(pipeline):
+        pipeline.output.email.enabled = True
+    previous = make_sample_paper(title='Previously selected', url='https://example.org/previous', score=8)
+    state = State(pipeline.state.path)
+    state.add([previous])
+    state.save()
+    executor = Executor(pipeline)
+    def fail(*args):
+        raise OSError('upstream unavailable')
+    if failure_stage == 'corpus':
+        monkeypatch.setattr(executor, 'fetch_zotero_corpus', fail)
+    else:
+        monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: [make_sample_paper()])
+        monkeypatch.setattr(executor.reranker, 'rerank', fail)
+    sent = []
+    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email', lambda *args: sent.append(args))
+    with pytest.raises((RuntimeError, OSError), match='upstream unavailable'):
+        executor.run()
+    assert len(sent) == 1
+    assert not State(pipeline.state.path).pending('email')
+    assert not State(pipeline.state.path).pending('rss')
+    assert ET.parse(pipeline.output.rss.path).findtext('./channel/item/title') == 'Previously selected'
+
+
+def test_existing_research_square_version_is_not_recommended_again(pipeline, monkeypatch):
+    items = [{'data': {'title': 'Earlier title', 'DOI': '10.21203/rs.3.rs-123/v1',
+                      'dateAdded': '2026-03-02T00:00:00Z', 'abstractNote': 'Useful abstract', 'collections': []}}]
+    monkeypatch.setattr('zotero_arxiv_daily.executor.zotero.Zotero', lambda *a, **kw: make_stub_zotero_client(items=items))
+    executor = Executor(pipeline)
+    paper = make_sample_paper(title='Revised title', doi='10.21203/rs.3.rs-123/v2', url='https://doi.org/10.21203/rs.3.rs-123/v2')
+    monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: [paper])
+    monkeypatch.setattr(executor.reranker, 'rerank', lambda *a: pytest.fail('Existing DOI identity must be excluded'))
+    executor.run()
+    assert not ET.parse(pipeline.output.rss.path).findall('./channel/item')

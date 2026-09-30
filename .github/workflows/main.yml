@@ -11,6 +11,10 @@ on:
         description: Lookback in days (1-90); blank uses preset windows
         type: string
         default: ''
+      recipient:
+        description: Optional email recipient for this run; blank uses existing configuration
+        type: string
+        default: ''
   schedule:
     - cron: '0 22 * * *' # 06:00 Asia/Shanghai; GitHub schedules may be delayed.
 concurrency:
@@ -41,6 +45,7 @@ jobs:
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
           OUTPUT_CHANNEL: ${{ inputs.output || 'configured' }}
           WINDOW_DAYS: ${{ inputs.window_days || '' }}
+          RECEIVER_OVERRIDE: ${{ inputs.recipient || '' }}
         run: uv run --frozen python scripts/prepare_workflow.py
       - name: Retrieve, rank and deliver
         env:

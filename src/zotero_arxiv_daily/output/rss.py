@@ -1,6 +1,7 @@
 """RSS 2.0 output with stable identifiers and a rolling recommendation history."""
 from datetime import datetime, timedelta
 from email.utils import format_datetime
+from html import escape
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -33,7 +34,9 @@ def write_rss(state, config):
         ET.SubElement(item, 'pubDate').text = format_datetime(published)
         ET.SubElement(item, 'category').text = paper.journal or paper.source
         score = f'{paper.score:.2f}' if paper.score is not None else 'Unknown'
-        ET.SubElement(item, 'description').text = '\n'.join([
+        # RSS descriptions are HTML after XML decoding; escape third-party text
+        # at the HTML layer as well as letting ElementTree escape the XML layer.
+        ET.SubElement(item, 'description').text = '<br/>'.join(escape(line) for line in [
             f'Journal: {paper.journal or paper.source}', f'Authors: {", ".join(paper.authors)}',
             f'Published: {paper.published.isoformat() if paper.published else "Unknown"}',
             f'Relevance: {score} ({paper.scoring_basis})',

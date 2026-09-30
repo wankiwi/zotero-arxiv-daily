@@ -63,3 +63,23 @@ Live public API checks on 2026-09-30 succeeded:
 Research Square returned a publicly marked `WITHDRAWN` record. The retriever now suppresses explicitly labelled withdrawn/retracted records, selecting the newest available version before conversion so an older version is not substituted within the fetched window. The DOI link keeps its actual version while recommendation/state/RSS identifiers ignore `/vN`. Newer versions of already recommended papers do not generate a second recommendation.
 
 These public metadata checks do not establish personal Zotero ingestion, LLM/SMTP delivery, complete live Nature catalogue coverage or online Actions/Pages deployment; the limitations above still apply. The live reports are stored outside application state in `/workspace/.setup/validation/preprints-*.json`.
+
+## Review fixes — 2026-09-30
+
+The follow-up review reproduced four defects using isolated fixtures: arXiv announcements delayed beyond a one-day submission window, distinct query-based article URLs sharing an identity, non-DOI Atom IDs masking DOI links, and one malformed Crossref record discarding valid records from the same journal. All four regression tests now pass.
+
+Additional checks cover canonical DOI identity in Zotero exclusion and saved state, migration of old delivery keys, recovery from corrupt catalogue caches, explicit ISSNs overriding stale discoveries, unsafe RSS article links, HTML escaping inside RSS descriptions, and pending deliveries surviving new Zotero/ranking failures. Malformed journal entries preserve valid results while still reporting incomplete retrieval.
+
+Validation performed after the fixes:
+
+- Full suite, including actual local embedding inference: **164 passed, 0 failed, 0 skipped/deselected**. One OmegaConf warning concerns an existing empty environment-variable default.
+- Default suite: **163 passed, 1 slow test deselected**.
+- Full-suite source coverage: **88%** (journal retriever 85%, local reranker 97%).
+- Ruff F401/F821/F841 checks passed for source/scripts and the added review regression file.
+- Actionlint 1.7.7 passed for the daily, manual test and CI workflows; `git diff --check` passed.
+
+Application credentials were excluded from the test environment. SMTP, Zotero and paid API transports used fixtures. The embedding model was downloaded anonymously into an isolated temporary cache and then tested offline. These checks do not establish real email receipt, Pages deployment or complete live publisher coverage.
+
+The daily workflow now accepts an optional single-run `recipient` that overrides configured recipients without changing repository secrets or the scheduled recipient. It logs SMTP acceptance counts and generated RSS item counts; SMTP acceptance is not proof of inbox delivery. Future Test runs retain generated RSS as a `test-rss` artifact and have a 90-minute timeout. The existing Test run at the pre-fix commit is unaffected by these changes.
+
+A formal daily workflow run with `output=both`, the explicitly confirmed recipient and the repaired branch is still required. At validation time, the saved environment's GitHub CLI API request returned `Forbidden`; the available connector could read run state but exposed no workflow-dispatch operation. No new live run or email was initiated by this review.

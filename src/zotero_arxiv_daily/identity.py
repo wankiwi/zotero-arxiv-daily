@@ -1,7 +1,7 @@
 """Stable identifiers shared by retrievers, deduplication and output channels."""
 import hashlib
 import re
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 
 def normalize_doi(value: str | None) -> str | None:
@@ -19,21 +19,33 @@ def title_key(title: str) -> str:
     return ' '.join(re.findall(r'\w+', title.casefold()))
 
 
+def canonical_doi(value):
+    doi = normalize_doi(value)
+    # Research Square versions share one recommendation identity.
+    if doi and doi.startswith('10.21203/rs.'):
+        doi = re.sub(r'/v\d+$', '', doi)
+    return doi
+
+
+def paper_doi(paper):
+    return canonical_doi(paper.doi) or canonical_doi(paper.url)
+
+
 def paper_id(paper) -> str:
-    doi = normalize_doi(paper.doi)
+    doi = paper_doi(paper)
     if doi:
-        # Research Square versions share one recommendation identity.
-        if doi.startswith('10.21203/rs.'):
-            doi = re.sub(r'/v\d+$', '', doi)
         return 'doi:' + doi
     url = paper.url.strip()
-    if 'arxiv.org/' in url:
-        match = re.search(r'/(?:abs|pdf|html)/(.+?)(?:v\d+)?(?:\.pdf)?$', url)
+    parts = urlsplit(url)
+    if parts.hostname in ('arxiv.org', 'www.arxiv.org', 'export.arxiv.org'):
+        match = re.fullmatch(r'/(?:abs|pdf|html)/(.+?)(?:v\d+)?(?:\.pdf)?', parts.path)
         if match:
             return 'arxiv:' + match.group(1)
     if url:
-        parts = urlsplit(url)
-        return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip('/'), '', ''))
+        tracking = {'fbclid', 'gclid', 'mc_cid', 'mc_eid'}
+        query = urlencode([(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+                           if not key.lower().startswith('utm_') and key.lower() not in tracking])
+        return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip('/'), query, ''))
     return 'title:' + hashlib.sha256(title_key(paper.title).encode()).hexdigest()
 
 
@@ -46,7 +58,7 @@ def deduplicate(papers):
         if previous is None and title:
             match = titles.get(title)
             # Different DOIs can legitimately share a generic article title.
-            if match is not None and (not normalize_doi(match.doi) or not normalize_doi(paper.doi) or normalize_doi(match.doi) == normalize_doi(paper.doi)):
+            if match is not None and (not paper_doi(match) or not paper_doi(paper) or paper_doi(match) == paper_doi(paper)):
                 previous = match
         if previous is not None:
             # Prefer the published record while preserving useful preprint text.

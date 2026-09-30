@@ -165,7 +165,7 @@ That's all! Now you can test the workflow by manually triggering it:
 ![test](./assets/test.png)
 
 > [!NOTE]
-> The Test workflow uses the selected PAPER_CONFIG with debug mode and disabled delivery history, retaining up to 10 papers per preprint platform. It uses real configured output channels and credentials. The main workflow runs daily within each source’s configured date window; weekends and holidays may have no new arXiv submissions.
+> The Test workflow uses the selected PAPER_CONFIG with debug mode and disabled delivery history, retaining up to 10 papers per preprint platform. It uses real configured output channels and credentials. Any generated RSS is retained as the `test-rss` artifact for inspection; this test does not deploy Pages or restore/save the remote delivery history. The main workflow runs daily within each source’s configured date window; weekends and holidays may have no new arXiv submissions.
 
 Then check the log and the receiver email after it finishes.
 
@@ -292,10 +292,10 @@ source:
    | `arxiv` / `biorxiv` / `medrxiv` / `researchsquare` | 单个预印本平台 |
    | `legacy` | 原有 arXiv 分类和邮件配置 |
 
-   新配置默认生成 RSS。`all`、`preprints` 及各平台配置默认预印本回溯 1 天，期刊回溯 7 天；`category: ["*"]` 表示全部学科。arXiv 使用提交日期 API 查询，bioRxiv/medRxiv 使用分页日期 API，Research Square 使用 Crossref 的 `10.21203` 前缀及预印本类型查询。日期精度只有天的平台包含窗口边界日，因此会有重叠；持久状态避免重复推荐。Research Square 缺少摘要时按标题评分，同一论文的 `/v1`、`/v2` 等版本只推荐一次。
+   新配置默认生成 RSS。`all`、`preprints` 及各平台配置默认 arXiv 回溯 7 天，其他预印本回溯 1 天，期刊回溯 7 天；`category: ["*"]` 表示全部学科。arXiv 使用提交日期 API 查询；7 天重叠窗口覆盖通常的审核和周末公告延迟，持久状态去重，超过窗口的延迟仍需手动扩大窗口回补。显式改为 1 天可能漏掉刚公开的论文。bioRxiv/medRxiv 使用分页日期 API，Research Square 使用 Crossref 的 `10.21203` 前缀及预印本类型查询。日期精度只有天的平台包含窗口边界日，因此会有重叠；持久状态避免重复推荐。Research Square 缺少摘要时按标题评分，同一论文的 `/v1`、`/v2` 等版本只推荐一次。
 3. 可选 Variables：`OPENAI_API_BASE`、`LLM_MODEL`、`RSS_SITE_URL`；邮件需要额外配置 Secrets `SENDER`、`RECEIVER`、`SENDER_PASSWORD` 和 Variables `SMTP_SERVER`、`SMTP_PORT`。
 4. 在 **Settings → Pages → Source** 选择 **GitHub Actions**，启用工作流。
-5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的统一回溯窗口；留空沿用各平台配置。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
+5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的统一回溯窗口；留空沿用各平台配置。可选 `recipient` 为本次运行指定一个收件邮箱，优先于 `CUSTOM_CONFIG` 和 `RECEIVER`；留空保留原配置，不修改长期收件人。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
 6. 完成 Pages 部署后，在 Zotero Feed 中订阅 `https://<用户名>.github.io/<仓库名>/feed.xml`。以实际 Pages 地址为准。
 
 可用 `CUSTOM_CONFIG` 同时选择期刊和预印本，并限定学科，例如：
@@ -308,7 +308,7 @@ source:
     presets: [jacs, jctc, jpcl]
   arxiv:
     category: [physics.chem-ph, cond-mat.mtrl-sci]
-    window_days: 2
+    window_days: 7
   researchsquare:
     window_days: 2
 ```
@@ -319,7 +319,7 @@ source:
 
 工作流将推荐历史保存到独立的 **`paper-state` 数据分支**，无需切换开发分支。它需要 `contents: write` 权限；组织策略/分支规则必须允许该分支的更新。数据包含已选推荐及投递状态，不包含 Zotero 文库原始数据、凭据或全文。Pages 只发布 `public/` 中的 RSS；其中的文献选择和相关性分数可被公开访问。
 
-邮件、RSS 独立记录结果：邮件失败时仍生成并发布有效 RSS，工作流同时报告错误；下次运行重试未成功的邮件，单次最多发送 `max_paper_num` 条。某一期刊失败会留下告警并使任务最终失败，其他来源的推荐仍可输出。当没有新结果时保留 RSS 历史。邮件投递与状态持久化之间发生进程退出时，重试仍可能重复发邮件，SMTP 无法提供严格的“恰好一次”保证。网络/进程中断后应检查 Actions 日志。
+邮件、RSS 独立记录结果：邮件失败时仍生成并发布有效 RSS，工作流同时报告错误；下次运行重试未成功的邮件，单次最多发送 `max_paper_num` 条。新的 Zotero 读取或排序失败时，仍会处理已保存的待投递记录，并明确报告本次失败。某一期刊失败会留下告警并使任务最终失败，其他来源的推荐仍可输出；异常元数据按条隔离，不丢弃同一期刊的正常记录。当没有新结果时保留 RSS 历史。邮件投递与状态持久化之间发生进程退出时，重试仍可能重复发邮件，SMTP 无法提供严格的“恰好一次”保证。网络/进程中断后应检查 Actions 日志。
 
 本地运行需保留 `data/recommendations.json`、`data/journal_catalog.json`；本地多进程请勿同时写同一状态路径。GitHub 工作流已使用统一并发组避免冲突。状态默认保留 90 天，RSS 保留期应不超过状态保留期；超过状态保留期的文章重新回溯时可能再次推送。只需重新发布已有 RSS 时可手动重跑工作流。
 

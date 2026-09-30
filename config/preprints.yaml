@@ -5,7 +5,7 @@ defaults:
 source:
   arxiv:
     category: ["*"]
-    window_days: 1
+    window_days: 7 # Include submissions announced after moderation/weekend delays.
   biorxiv:
     category: ["*"]
     window_days: 1

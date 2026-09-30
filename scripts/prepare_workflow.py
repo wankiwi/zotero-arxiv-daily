@@ -24,6 +24,12 @@ def prepare(root: Path, environ=os.environ):
     if channel != 'configured':
         config = OmegaConf.merge(config, {'output': {'email': {'enabled': channel in ('email', 'both')},
                                                    'rss': {'enabled': channel in ('rss', 'both')}}})
+    recipient = environ.get('RECEIVER_OVERRIDE', '').strip()
+    if recipient:
+        if not re.fullmatch(r'[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+', recipient) or '${' in recipient:
+            raise ValueError('recipient must be one plain email address')
+        # An explicit per-run destination takes precedence over CUSTOM_CONFIG.
+        config = OmegaConf.merge(config, {'email': {'receiver': recipient}})
     days = environ.get('WINDOW_DAYS', '')
     if days:
         if not days.isdigit() or not 1 <= int(days) <= 90:

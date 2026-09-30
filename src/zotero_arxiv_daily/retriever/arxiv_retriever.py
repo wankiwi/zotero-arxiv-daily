@@ -122,7 +122,8 @@ class ArxivRetriever(BaseRetriever):
         categories = list(self.retriever_config.category)
         days = self.retriever_config.get('window_days')
         if '*' in categories or days is not None:
-            days = int(days if days is not None else 1)
+            # Submission dates precede public announcements, especially over weekends.
+            days = int(days if days is not None else 7)
             if not 1 <= days <= 90:
                 raise ValueError('arxiv window_days must be between 1 and 90')
             until = datetime.now(timezone.utc)

@@ -9,6 +9,7 @@ concurrency:
 jobs:
   calculate-and-send:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -39,3 +40,10 @@ jobs:
           export DEBUG=true
           uv run --frozen python scripts/prepare_workflow.py
           uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime executor.debug=true state.enabled=false
+      - name: Preserve generated RSS for inspection
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-rss
+          path: public/feed.xml
+          if-no-files-found: ignore

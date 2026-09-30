@@ -4,10 +4,11 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from html import unescape
 import json
+import math
 from pathlib import Path
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import feedparser
 from loguru import logger
@@ -48,7 +49,20 @@ class JournalRetriever(BaseRetriever):
     def _catalog(self):
         cached = {}
         if self.cache_path.exists():
-            cached = json.loads(self.cache_path.read_text())
+            try:
+                cached = json.loads(self.cache_path.read_text())
+                if not isinstance(cached, dict):
+                    raise ValueError('catalogue must be an object')
+                updated = cached.get('updated', 0)
+                if not isinstance(updated, (int, float)) or not math.isfinite(updated):
+                    raise ValueError('invalid catalogue timestamp')
+                for key, value in cached.get('nature', {}).items():
+                    Journal(value['id'], value['title'], tuple(value.get('issns', [])), value.get('rss'))
+                for key, value in cached.get('issns', {}).items():
+                    Journal(key, key, tuple(value))
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                logger.warning(f'Ignoring invalid journal catalogue cache; rebuilding: {exc}')
+                cached = {}
         discovered = {k: Journal(v['id'], v['title'], tuple(v.get('issns', [])), v.get('rss'))
                       for k, v in cached.get('nature', {}).items()}
         needs_nature = 'nature_family' in self.retriever_config.get('presets', [])
@@ -68,7 +82,8 @@ class JournalRetriever(BaseRetriever):
         if not journals:
             raise ValueError('At least one journal preset or custom journal must be selected')
         self.cache = cached
-        return [replace(j, issns=tuple(cached.get('issns', {}).get(j.id, j.issns))) for j in journals]
+        # Explicit preset/custom ISSNs outrank discoveries cached for an old config.
+        return [replace(j, issns=j.issns or tuple(cached.get('issns', {}).get(j.id, ()))) for j in journals]
 
     def _resolve_issns(self, journal, client):
         if journal.issns:
@@ -99,24 +114,28 @@ class JournalRetriever(BaseRetriever):
                 if not items:
                     break
                 for item in items:
-                    if not set(item.get('ISSN', [])) & set(journal.issns):
-                        continue
-                    if item.get('subtype') in ('editorial', 'correction', 'retraction', 'news'):
-                        continue
-                    title = clean_text((item.get('title') or [''])[0])
-                    doi = normalize_doi(item.get('DOI'))
-                    published = crossref_date(item)
-                    if not title or not doi or not published or not since <= published <= until:
-                        continue
-                    if re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
-                        continue
-                    links = [l.get('URL') for l in item.get('link', []) if l.get('content-type') == 'application/pdf']
-                    results.append(Paper(source='journals', title=title,
-                        authors=[clean_text(' '.join(filter(None, [a.get('given'), a.get('family')]))) for a in item.get('author', [])],
-                        abstract=clean_text(item.get('abstract')), url=f'https://doi.org/{doi}',
-                        pdf_url=links[0] if links else None, doi=doi, journal=journal.title,
-                        issns=list(journal.issns), published=published,
-                        affiliations=list(dict.fromkeys(clean_text(a.get('name')) for person in item.get('author', []) for a in person.get('affiliation', []) if a.get('name'))) or None))
+                    try:
+                        if not set(item.get('ISSN', [])) & set(journal.issns):
+                            continue
+                        if item.get('subtype') in ('editorial', 'correction', 'retraction', 'news'):
+                            continue
+                        title = clean_text((item.get('title') or [''])[0])
+                        doi = normalize_doi(item.get('DOI'))
+                        published = crossref_date(item)
+                        if not title or not doi or not published or not since <= published <= until:
+                            continue
+                        if re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
+                            continue
+                        links = [l.get('URL') for l in item.get('link', []) if l.get('content-type') == 'application/pdf']
+                        results.append(Paper(source='journals', title=title,
+                            authors=[clean_text(' '.join(filter(None, [a.get('given'), a.get('family')]))) for a in item.get('author', [])],
+                            abstract=clean_text(item.get('abstract')), url=f'https://doi.org/{doi}',
+                            pdf_url=links[0] if links else None, doi=doi, journal=journal.title,
+                            issns=list(journal.issns), published=published,
+                            affiliations=list(dict.fromkeys(clean_text(a.get('name')) for person in item.get('author', []) for a in person.get('affiliation', []) if a.get('name'))) or None))
+                    except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
+                        self.failures.append(journal.title)
+                        logger.warning(f'{journal.title}: skipping malformed Crossref record: {exc}')
                 next_cursor = message.get('next-cursor')
                 if not next_cursor or next_cursor == cursor or next_cursor in seen_cursors:
                     if len(items) >= 200:
@@ -140,23 +159,31 @@ class JournalRetriever(BaseRetriever):
             raise ValueError(f'Not an RSS/Atom feed: {journal.title}')
         results = []
         for entry in feed.entries:
-            title = clean_text(entry.get('title'))
-            if not title or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
-                continue
-            parsed = entry.get('published_parsed') or entry.get('updated_parsed')
-            if not parsed:
-                continue  # Crossref can recover entries without publication timestamps.
-            published = datetime(*parsed[:6], tzinfo=timezone.utc)
-            if not since <= published <= until:
-                continue
-            doi = normalize_doi(entry.get('prism_doi') or entry.get('dc_identifier') or entry.get('id') or entry.get('link'))
-            url = entry.get('link') or (f'https://doi.org/{doi}' if doi else '')
-            if not url:
-                continue
-            authors = [a.get('name', '') for a in entry.get('authors', []) if a.get('name')]
-            results.append(Paper(source='journals', title=title, authors=authors,
-                abstract=clean_text(entry.get('summary') or entry.get('description')),
-                url=url, doi=doi, journal=journal.title, issns=list(journal.issns), published=published))
+            try:
+                title = clean_text(entry.get('title'))
+                if not title or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
+                    continue
+                parsed = entry.get('published_parsed') or entry.get('updated_parsed')
+                if not parsed:
+                    continue  # Crossref can recover entries without publication timestamps.
+                published = datetime(*parsed[:6], tzinfo=timezone.utc)
+                if not since <= published <= until:
+                    continue
+                doi = next((doi for field in ('prism_doi', 'dc_identifier', 'id', 'link')
+                            if (doi := normalize_doi(entry.get(field)))), None)
+                url = entry.get('link') or (f'https://doi.org/{doi}' if doi else '')
+                if not url:
+                    continue
+                parts = urlsplit(url)
+                if parts.scheme not in ('http', 'https') or not parts.hostname:
+                    raise ValueError('article link must be an absolute HTTP(S) URL')
+                authors = [a.get('name', '') for a in entry.get('authors', []) if a.get('name')]
+                results.append(Paper(source='journals', title=title, authors=authors,
+                    abstract=clean_text(entry.get('summary') or entry.get('description')),
+                    url=url, doi=doi, journal=journal.title, issns=list(journal.issns), published=published))
+            except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
+                self.failures.append(journal.title)
+                logger.warning(f'{journal.title}: skipping malformed RSS entry: {exc}')
         return results
 
     def _journal(self, journal, since, until):
@@ -177,7 +204,7 @@ class JournalRetriever(BaseRetriever):
         if errors:
             logger.warning(f'{journal.title}: ' + '; '.join(errors))
         # A feed only covers its current issue. Report degraded/incomplete coverage.
-        failed = not crossref_ok
+        failed = not crossref_ok or journal.title in self.failures
         return journal, deduplicate(papers), failed
 
     def _retrieve_raw_papers(self):
@@ -199,6 +226,7 @@ class JournalRetriever(BaseRetriever):
                 self.cache.setdefault('issns', {})[journal.id] = journal.issns
                 results.extend(papers)
                 logger.info(f'{journal.title}: {len(papers)} candidates')
+        self.failures = sorted(set(self.failures))
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.cache_path.with_suffix('.tmp')
         temporary.write_text(json.dumps(self.cache, ensure_ascii=False))

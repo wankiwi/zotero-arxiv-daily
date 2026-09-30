@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
-from .identity import paper_id, title_key, normalize_doi
+from .identity import paper_doi, paper_id, title_key
 from .protocol import Paper
 
 
@@ -39,14 +39,25 @@ class State:
             if data.get('version') != 1 or not isinstance(data.get('records'), dict):
                 raise ValueError('Unsupported or corrupt recommendation state; preserve file and investigate')
             cutoff = utcnow() - timedelta(days=retention_days)
-            self.records = {k: v for k, v in data['records'].items() if datetime.fromisoformat(v['added']) >= cutoff}
+            for record in data['records'].values():
+                if datetime.fromisoformat(record['added']) < cutoff:
+                    continue
+                # Rebuild keys when identity normalization changes. Pending deliveries
+                # must still be markable without resending already delivered records.
+                key = paper_id(load_paper(record['paper']))
+                if key in self.records:
+                    channels = self.records[key].setdefault('channels', {})
+                    for channel, delivered in record.get('channels', {}).items():
+                        channels[channel] = channels.get(channel, False) or delivered
+                else:
+                    self.records[key] = record
 
         self.titles = {}
         for record in self.records.values():
-            self.titles.setdefault(title_key(record['paper']['title']), set()).add(normalize_doi(record['paper'].get('doi')))
+            self.titles.setdefault(title_key(record['paper']['title']), set()).add(paper_doi(load_paper(record['paper'])))
 
     def has(self, paper):
-        doi = normalize_doi(paper.doi)
+        doi = paper_doi(paper)
         matches = self.titles.get(title_key(paper.title), set())
         return paper_id(paper) in self.records or bool(matches and (not doi or None in matches or doi in matches))
 
@@ -55,7 +66,7 @@ class State:
 
     def add(self, papers):
         for paper in papers:
-            self.titles.setdefault(title_key(paper.title), set()).add(normalize_doi(paper.doi))
+            self.titles.setdefault(title_key(paper.title), set()).add(paper_doi(paper))
             self.records.setdefault(paper_id(paper), {'added': utcnow().isoformat(), 'paper': paper_dict(paper), 'channels': {}})
 
     def mark(self, papers, channel):

@@ -91,7 +91,7 @@ def test_preprint_configuration_selection(tmp_path, name, sources):
         config = compose(config_name='runtime')
     assert list(config.executor.source) == sources
     assert list(config.source.arxiv.category) == ['*']
-    assert config.source.arxiv.window_days == 1
+    assert config.source.arxiv.window_days == 7
     assert config.source.journals.window_days == 7
     assert config.output.rss.enabled
 
@@ -105,3 +105,21 @@ def test_mixed_source_customization_and_common_window(tmp_path):
     assert list(config.executor.source) == ['journals', 'arxiv', 'researchsquare']
     assert list(config.source.arxiv.category) == ['physics.chem-ph']
     assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare'])
+
+
+def test_explicit_run_recipient_overrides_custom_config(tmp_path):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    prepare(tmp_path, {'PAPER_CONFIG': 'all', 'OUTPUT_CHANNEL': 'both',
+                       'CUSTOM_CONFIG': 'email:\n  receiver: old@example.org\n',
+                       'RECEIVER_OVERRIDE': 'verified@example.com'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.email.receiver == 'verified@example.com'
+    assert config.output.email.enabled and config.output.rss.enabled
+
+
+@pytest.mark.parametrize('recipient', ['a@example.com,b@example.com', 'a@example.com\r\nBcc: b@example.com', '${oc.env:RECEIVER}', 'bad-address'])
+def test_invalid_explicit_recipient_rejected(tmp_path, recipient):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    with pytest.raises(ValueError, match='recipient'):
+        prepare(tmp_path, {'RECEIVER_OVERRIDE': recipient})

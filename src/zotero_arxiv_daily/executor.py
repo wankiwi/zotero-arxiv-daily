@@ -6,7 +6,7 @@ from .retriever import get_retriever_cls
 from .protocol import CorpusPaper
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
-from .identity import normalize_doi, title_key, deduplicate
+from .identity import canonical_doi, paper_doi, title_key, deduplicate
 from .state import State
 from .output import write_rss
 from .reranker import get_reranker_cls
@@ -67,7 +67,7 @@ class Executor:
         for item in items:
             data = item.get('data', {})
             title = data.get('title', '')
-            doi = normalize_doi(data.get('DOI'))
+            doi = canonical_doi(data.get('DOI')) or canonical_doi(data.get('url'))
             if doi:
                 self.library_dois.add(doi)
             if title_key(title):
@@ -121,10 +121,53 @@ class Executor:
         state = State(state_cfg.get('path', 'data/recommendations.json'),
                       enabled=state_cfg.get('enabled', False) or rss_enabled,
                       retention_days=int(state_cfg.get('retention_days', 90)))
+        maximum = int(self.config.executor.max_paper_num)
+        workers = int(self.config.executor.get('enrichment_workers', 1))
+        if maximum < 1 or not 1 <= workers <= 8:
+            raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
+        errors = []
+        try:
+            ranked = self._recommend(state, errors, maximum, workers)
+        except Exception as exc:
+            logger.error(f'Cannot prepare new recommendations: {exc}')
+            errors.append(f'recommendations: {exc}')
+            ranked = []
+        finally:
+            if self.openai_client is not None and hasattr(self.openai_client, 'close'):
+                try:
+                    self.openai_client.close()
+                except Exception as exc:
+                    logger.warning(f'Cannot close LLM client: {exc}')
+                self.openai_client = None
+        state.add(ranked)
+        state.save()  # Preserve pending deliveries before contacting transports.
+        if email_enabled:
+            pending = state.pending('email')[:maximum]
+            if pending or (self.config.executor.send_empty and not errors):
+                try:
+                    send_email(self.config, render_email(pending))
+                    logger.info(f'SMTP accepted {len(pending)} recommendations')
+                    state.mark(pending, 'email')
+                    state.save()
+                except Exception as exc:
+                    errors.append(f'email: {exc}')
+        if rss_enabled:
+            try:
+                path, emitted = write_rss(state, rss_cfg)
+                logger.info(f'RSS wrote {len(emitted)} items to {path}')
+                state.mark(emitted, 'rss')
+                state.save()
+            except Exception as exc:
+                errors.append(f'rss: {exc}')
+        if errors:
+            raise RuntimeError('Pipeline completed with failures: ' + '; '.join(errors))
+        logger.info('Recommendation outputs completed')
+
+    def _recommend(self, state, errors, maximum, workers):
         corpus = self.filter_corpus(self.fetch_zotero_corpus())
         if not corpus:
             raise ValueError('No Zotero papers with abstracts matched the configured interest profile')
-        candidates, errors = [], []
+        candidates = []
         for source, retriever in self.retrievers.items():
             try:
                 candidates.extend(retriever.retrieve_papers())
@@ -135,16 +178,12 @@ class Executor:
                 errors.append(f'{source}: {exc}')
         unique = deduplicate(candidates)
         if self.config.executor.get('exclude_existing', True):
-            unique = [p for p in unique if normalize_doi(p.doi) not in self.library_dois
-                      and title_key(p.title) not in (self.library_titles_without_doi if normalize_doi(p.doi) else self.library_titles)]
+            unique = [p for p in unique if paper_doi(p) not in self.library_dois
+                      and title_key(p.title) not in (self.library_titles_without_doi if paper_doi(p) else self.library_titles)]
         unique = [p for p in unique if not state.has(p)]
         logger.info(f'{len(candidates)} candidates, {len(unique)} new papers after deduplication')
         ranked = self.reranker.rerank(unique, corpus) if unique else []
         minimum = float(self.config.executor.get('min_score', -10))
-        maximum = int(self.config.executor.max_paper_num)
-        workers = int(self.config.executor.get('enrichment_workers', 1))
-        if maximum < 1 or not 1 <= workers <= 8:
-            raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
         ranked = [p for p in ranked if p.score >= minimum][:maximum]
         if ranked and self.config.llm.get('enabled', True):
             self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url)
@@ -154,26 +193,4 @@ class Executor:
                 ranked = list(pool.map(self._enrich, ranked))
         else:
             ranked = [self._enrich(p) for p in ranked]
-        state.add(ranked)
-        state.save()  # Preserve pending deliveries before contacting transports.
-        if email_enabled:
-            pending = state.pending('email')[:maximum]
-            if pending or (self.config.executor.send_empty and not errors):
-                try:
-                    send_email(self.config, render_email(pending))
-                    state.mark(pending, 'email')
-                    state.save()
-                except Exception as exc:
-                    errors.append(f'email: {exc}')
-        if rss_enabled:
-            try:
-                _, emitted = write_rss(state, rss_cfg)
-                state.mark(emitted, 'rss')
-                state.save()
-            except Exception as exc:
-                errors.append(f'rss: {exc}')
-        if self.openai_client is not None and hasattr(self.openai_client, 'close'):
-            self.openai_client.close()
-        if errors:
-            raise RuntimeError('Pipeline completed with failures: ' + '; '.join(errors))
-        logger.info('Recommendation outputs completed')
+        return ranked
