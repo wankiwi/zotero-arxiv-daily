@@ -181,3 +181,46 @@ def test_stale_rss_config_and_dispatch_cannot_reenable_publishing(tmp_path, chan
         config = compose(config_name='runtime')
     assert config.output.email.enabled and not config.output.rss.enabled
     assert not (tmp_path / 'public/feed.xml').exists()
+
+
+def test_schedule_uses_confirmed_profile_over_stale_overrides(tmp_path, monkeypatch):
+    from omegaconf import OmegaConf
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    monkeypatch.setenv('RECEIVER', 'daily@example.org')
+    prepare(tmp_path, {'GITHUB_EVENT_NAME': 'schedule', 'PAPER_CONFIG': 'arxiv',
+                      'SOURCE_MODE': 'configured', 'PREPRINT_PROFILE': 'configured', 'LLM_MODE': 'configured',
+                      'RECEIVER_OVERRIDE': 'stale-dispatch@example.org', 'CUSTOM_CONFIG': '''
+executor:
+  source: [arxiv, biorxiv]
+  max_paper_num: 50
+llm:
+  enabled: true
+email:
+  receiver: stale-custom@example.org
+  smtp_server: mail.cstnet.cn
+  smtp_port: 994
+output:
+  rss: {enabled: true}
+preprint_interests:
+  medrxiv: {enabled: true}
+  researchsquare:
+    source_ids: [S4306402450]
+'''})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert list(config.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare']
+    assert not config.llm.enabled and config.output.email.enabled and not config.output.rss.enabled
+    assert config.email.receiver == 'daily@example.org'
+    assert config.email.smtp_server == 'mail.cstnet.cn' and config.email.smtp_port == 994
+    assert config.executor.max_paper_num == 50 and config.state.enabled
+    assert config.state.path == 'data/recommendations.json'
+    assert list(config.preprint_interests.arxiv.categories) == ['physics.chem-ph', 'physics.comp-ph', 'cond-mat.mtrl-sci', 'cond-mat.soft', 'cs.LG', 'cs.AI']
+    assert list(config.preprint_interests.biorxiv.categories) == ['biophysics', 'biochemistry']
+    assert not config.preprint_interests.medrxiv.enabled
+    assert list(config.preprint_interests.researchsquare.source_ids) == ['S4306525896']
+    assert len(config.preprint_interests.researchsquare.subfield) == 7
+    assert {'pnas', 'acs_catalysis', 'npjcompumats', 'angew', 'chemical_science', 'mlst'} <= set(config.source.journals.presets)
+    assert config.source.arxiv.window_days == config.source.journals.window_days == 7
+    assert config.source.biorxiv.window_days == config.source.researchsquare.window_days == 1
+    assert 'daily@example.org' not in (tmp_path / 'config/runtime.yaml').read_text()
+    assert OmegaConf.to_container(config.email, resolve=False)['receiver'] == '${oc.env:RECEIVER}'

@@ -37,7 +37,7 @@ output:
 
 账户与密钥由环境变量读取，不要直接写进 YAML 或提交仓库。关闭 LLM 时不需要调用收费摘要 API；邮件显示原摘要。若另行启用 LLM，需自行确认提供商、模型和费用。
 
-到 **Actions → Send emails daily → Run workflow**，选择所需分支，设置 `sources=all`、`preprint_profile=interests`、`llm_mode=disabled`、`output=email`。收件人留空使用 `RECEIVER`，或填写本次收件人；`window_days` 留空保留各来源窗口。定时任务每天 UTC 22:00（北京时间次日 06:00），GitHub 只运行默认分支上的定时工作流，且可能延迟。
+到 **Actions → Send emails daily → Run workflow**，选择所需分支，设置 `sources=all`、`preprint_profile=interests`、`llm_mode=disabled`、`output=email`。收件人留空使用 `RECEIVER`，或填写本次收件人；`window_days` 留空保留各来源窗口。定时运行固定使用 `interests`、全部允许来源、关闭 LLM、仅邮件；旧 `CUSTOM_CONFIG` 不能覆盖这些选择，收件人始终来自现有 `RECEIVER` secret。定时任务每天 UTC 22:00（北京时间次日 06:00），GitHub 只运行默认分支上的定时工作流，且可能延迟。
 
 兴趣列表在 [config/interests.yaml](config/interests.yaml)：arXiv 按原生分类、bioRxiv 按原生分类筛选；Research Square 使用 `S4306525896` 来源和指定 OpenAlex subfield，在所有主题中匹配。同名 subfield 在不同父领域下的精确匹配取并集，不猜测或固定 ID。不要恢复已失效的 `S4306402450`。`enabled: false` 优先禁用平台，`categories: null` 继承旧分类，空列表无效。
 

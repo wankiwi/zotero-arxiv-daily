@@ -9,7 +9,8 @@ from zotero_arxiv_daily.preprint_interests import enabled_sources
 
 
 def prepare(root: Path, environ=os.environ):
-    name = environ.get('PAPER_CONFIG', '').strip() or 'all'
+    scheduled = environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    name = 'interests' if scheduled else (environ.get('PAPER_CONFIG', '').strip() or 'all')
     if not re.fullmatch(r'[a-zA-Z0-9_-]+', name) or not (root / 'config' / f'{name}.yaml').is_file():
         raise ValueError('PAPER_CONFIG must name an existing configuration under config/')
     config = OmegaConf.create({'defaults': [name, '_self_']})
@@ -19,19 +20,19 @@ def prepare(root: Path, environ=os.environ):
         if not OmegaConf.is_dict(supplied) or 'defaults' in supplied:
             raise ValueError('CUSTOM_CONFIG must be a YAML mapping without defaults')
         config = OmegaConf.merge(config, supplied)
-    profile = environ.get('PREPRINT_PROFILE', 'configured')
+    profile = 'interests' if scheduled else environ.get('PREPRINT_PROFILE', 'configured')
     if profile not in ('configured', 'interests'):
         raise ValueError('Invalid preprint profile')
     if profile == 'interests':
         preferences = OmegaConf.load(root / 'config' / 'interests.yaml').preprint_interests
         config.preprint_interests = preferences  # Replace legacy keyword approximations too.
-    sources = environ.get('SOURCE_MODE', 'configured')
+    sources = 'all' if scheduled else environ.get('SOURCE_MODE', 'configured')
     if sources not in ('configured', 'all', 'journals'):
         raise ValueError('Invalid sources mode')
     if sources != 'configured':
         selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']
         config = OmegaConf.merge(config, {'executor': {'source': selected}})
-    llm_mode = environ.get('LLM_MODE', 'configured')
+    llm_mode = 'disabled' if scheduled else environ.get('LLM_MODE', 'configured')
     if llm_mode not in ('configured', 'disabled'):
         raise ValueError('Invalid llm_mode')
     if llm_mode == 'disabled':
@@ -43,7 +44,11 @@ def prepare(root: Path, environ=os.environ):
     # RSS remains available to explicit local callers, not these email workflows.
     config = OmegaConf.merge(config, {'output': {'email': {'enabled': True},
                                                'rss': {'enabled': False}}})
-    recipient = environ.get('RECEIVER_OVERRIDE', '').strip()
+    if scheduled:
+        # Keep the daily destination in the existing secret, never in public code
+        # or a stale CUSTOM_CONFIG receiver. Resolution happens only at delivery.
+        config = OmegaConf.merge(config, {'email': {'receiver': '${oc.env:RECEIVER}'}})
+    recipient = '' if scheduled else environ.get('RECEIVER_OVERRIDE', '').strip()
     if recipient:
         if not re.fullmatch(r'[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+', recipient) or '${' in recipient:
             raise ValueError('recipient must be one plain email address')
