@@ -8,7 +8,7 @@ from hydra import compose, initialize_config_dir
 
 
 def prepare(root: Path, environ=os.environ):
-    name = environ.get('PAPER_CONFIG') or 'default'
+    name = environ.get('PAPER_CONFIG', '').strip() or 'all'
     if not re.fullmatch(r'[a-zA-Z0-9_-]+', name) or not (root / 'config' / f'{name}.yaml').is_file():
         raise ValueError('PAPER_CONFIG must name an existing configuration under config/')
     config = OmegaConf.create({'defaults': [name, '_self_']})
@@ -28,7 +28,8 @@ def prepare(root: Path, environ=os.environ):
     if days:
         if not days.isdigit() or not 1 <= int(days) <= 90:
             raise ValueError('window_days must be between 1 and 90')
-        config = OmegaConf.merge(config, {'source': {'journals': {'window_days': int(days)}}})
+        config = OmegaConf.merge(config, {'source': {name: {'window_days': int(days)}
+                                                   for name in ('journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare')}})
     # Workflow history lives in paper-state; never rely on an immutable cache key.
     config = OmegaConf.merge(config, {'state': {'enabled': True, 'path': 'data/recommendations.json'}})
     config = OmegaConf.merge(config, {'output': {'rss': {'path': 'public/feed.xml'}}})

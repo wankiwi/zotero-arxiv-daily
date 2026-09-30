@@ -45,3 +45,21 @@ The smoke check used no LLM API, personal library or SMTP account. Its outputs a
 - GitHub Actions execution and Pages deployment: `GH_TOKEN` and native Git read/write access were available, but GitHub API requests were denied by the proxy. `api.github.com` was added to the environment draft. Existing GitHub Actions Secrets could not be inspected, and no online workflow/deployment was triggered.
 
 Resume blocked checks after the runtime network settings and required secure credentials are supplied. Do not treat mock transport tests or this synthetic interest profile as personal end-to-end validation.
+
+
+## All-source default and Research Square update
+
+The latest regression suite passed **141 tests**, with 1 unchanged slow model test deselected. Actionlint and Ruff checks also passed. Tests cover missing/empty `PAPER_CONFIG`, the `all`/`default` aliases, preprint-only and individual-platform configurations, mixed-source overrides, common lookback overrides, all-category date queries, pagination guards, date/type filtering, primary versus cross-listed arXiv categories, and Research Square version/state identity. The former arXiv/email defaults remain available as `legacy`.
+
+Live public API checks on 2026-09-30 succeeded:
+
+| Source | Retrieved candidates | Scope |
+| --- | ---: | --- |
+| Research Square | 720 | Complete paginated Crossref query, date window 2026-09-29 through 2026-09-30, after version deduplication and withdrawal filtering |
+| bioRxiv | 322 | Complete paginated API date window 2026-09-29 through 2026-09-30, all categories |
+| medRxiv | 97 | Complete API date window 2026-09-29 through 2026-09-30, all categories |
+| arXiv | 10 | Debug limit, all-category submitted-date API query over the preceding 24 hours |
+
+Research Square returned a publicly marked `WITHDRAWN` record. The retriever now suppresses explicitly labelled withdrawn/retracted records, selecting the newest available version before conversion so an older version is not substituted within the fetched window. The DOI link keeps its actual version while recommendation/state/RSS identifiers ignore `/vN`. Newer versions of already recommended papers do not generate a second recommendation.
+
+These public metadata checks do not establish personal Zotero ingestion, LLM/SMTP delivery, complete live Nature catalogue coverage or online Actions/Pages deployment; the limitations above still apply. The live reports are stored outside application state in `/workspace/.setup/validation/preprints-*.json`.

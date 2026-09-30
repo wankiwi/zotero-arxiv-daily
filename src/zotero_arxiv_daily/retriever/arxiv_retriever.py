@@ -1,5 +1,6 @@
 from .base import BaseRetriever, register_retriever
 import arxiv
+from datetime import datetime, timedelta, timezone
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
 from ..identity import normalize_doi
@@ -118,7 +119,26 @@ class ArxivRetriever(BaseRetriever):
             raise ValueError("category must be specified for arxiv.")
 
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
-        client = arxiv.Client(num_retries=10, delay_seconds=10)
+        categories = list(self.retriever_config.category)
+        days = self.retriever_config.get('window_days')
+        if '*' in categories or days is not None:
+            days = int(days if days is not None else 1)
+            if not 1 <= days <= 90:
+                raise ValueError('arxiv window_days must be between 1 and 90')
+            until = datetime.now(timezone.utc)
+            since = until - timedelta(days=days)
+            query = f'submittedDate:[{since:%Y%m%d%H%M} TO {until:%Y%m%d%H%M}]'
+            if '*' not in categories:
+                query += ' AND (' + ' OR '.join(f'cat:{category}' for category in categories) + ')'
+            search = arxiv.Search(query=query, max_results=10 if self.config.executor.debug else None,
+                                  sort_by=arxiv.SortCriterion.SubmittedDate,
+                                  sort_order=arxiv.SortOrder.Descending)
+            client = arxiv.Client(page_size=500, num_retries=3, delay_seconds=3)
+            results = list(client.results(search))
+            if '*' not in categories and not self.retriever_config.get('include_cross_list', False):
+                results = [paper for paper in results if paper.primary_category in categories]
+            return results
+        client = arxiv.Client(num_retries=3, delay_seconds=3)
         query = '+'.join(self.config.source.arxiv.category)
         include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed

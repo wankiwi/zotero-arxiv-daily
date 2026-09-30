@@ -1,6 +1,7 @@
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from ..identity import normalize_doi
+from ..http import session
 from .base import BaseRetriever, register_retriever
 from ..protocol import Paper
 from loguru import logger
@@ -17,6 +18,9 @@ class BiorxivRetriever(BaseRetriever):
             raise ValueError(f"category must be specified for {self.name}")
 
     def _retrieve_raw_papers(self) -> list[dict[str, Any]]:
+        days = self.retriever_config.get('window_days')
+        if days is not None or '*' in self.retriever_config.category:
+            return self._retrieve_window(int(days if days is not None else 1))
         api_url = f"https://api.biorxiv.org/details/{self.server}/2d"
         retry_num = 10
         delay_time = 10
@@ -45,6 +49,47 @@ class BiorxivRetriever(BaseRetriever):
             collection = collection[:10]
         return collection
 
+
+    def _retrieve_window(self, days):
+        max_pages = int(self.retriever_config.get('max_pages', 100))
+        if not 1 <= days <= 90 or max_pages < 1:
+            raise ValueError(f'{self.name} requires window_days 1–90 and positive max_pages')
+        until = datetime.now(timezone.utc).date()
+        since = until - timedelta(days=days)
+        categories = {category.lower() for category in self.retriever_config.category}
+        records, cursor = [], 0
+        with session() as client:
+            for _ in range(max_pages):
+                response = client.get(f'https://api.biorxiv.org/details/{self.server}/{since}/{until}/{cursor}',
+                                      timeout=(10, 30))
+                response.raise_for_status()
+                result = response.json()
+                messages = result.get('messages', [])
+                if messages and messages[0].get('status') not in (None, 'ok'):
+                    raise RuntimeError(f'{self.name} API returned: {messages}')
+                collection = result['collection']
+                for item in collection:
+                    if since.isoformat() <= item.get('date', '') <= until.isoformat():
+                        if '*' in categories or item.get('category', '').lower() in categories:
+                            records.append(item)
+                cursor += len(collection)
+                total = messages[0].get('total') if messages else None
+                if total is not None and cursor >= int(total):
+                    break
+                if not collection:
+                    if total is not None:
+                        raise RuntimeError(f'{self.name} API pagination returned an incomplete collection')
+                    break
+            else:
+                raise RuntimeError(f'{self.name} max_pages reached; narrow window_days or increase max_pages')
+        # bioRxiv and medRxiv use the same DOI for all versions.
+        newest = {}
+        for item in records:
+            doi = normalize_doi(item.get('doi'))
+            if doi and (doi not in newest or int(item.get('version', 0)) > int(newest[doi].get('version', 0))):
+                newest[doi] = item
+        records = list(newest.values())
+        return records[:10] if self.config.executor.debug else records
 
     def convert_to_paper(self, raw_paper:dict[str, Any]) -> Paper | None:
         title = raw_paper['title']

@@ -8,9 +8,9 @@ on:
         options: [configured, email, rss, both]
         default: configured
       window_days:
-        description: Journal lookback in days (1-90)
+        description: Lookback in days (1-90); blank uses preset windows
         type: string
-        default: '7'
+        default: ''
   schedule:
     - cron: '0 22 * * *' # 06:00 Asia/Shanghai; GitHub schedules may be delayed.
 concurrency:
@@ -37,10 +37,10 @@ jobs:
         run: uv run --frozen python scripts/workflow_state.py restore
       - name: Prepare runtime configuration
         env:
-          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'default' }}
+          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'all' }}
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
           OUTPUT_CHANNEL: ${{ inputs.output || 'configured' }}
-          WINDOW_DAYS: ${{ inputs.window_days || '7' }}
+          WINDOW_DAYS: ${{ inputs.window_days || '' }}
         run: uv run --frozen python scripts/prepare_workflow.py
       - name: Retrieve, rank and deliver
         env:

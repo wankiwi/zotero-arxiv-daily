@@ -28,7 +28,12 @@ jobs:
           RECEIVER: ${{ secrets.RECEIVER }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
+          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE || secrets.OPENAI_API_BASE || 'https://api.openai.com/v1' }}
+          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'all' }}
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+          RSS_SITE_URL: ${{ vars.RSS_SITE_URL }}
+          SMTP_SERVER: ${{ vars.SMTP_SERVER || 'smtp.qq.com' }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '465' }}
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
         run: |
           export DEBUG=true

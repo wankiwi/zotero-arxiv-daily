@@ -72,3 +72,36 @@ def test_state_branch_roundtrip_preserves_working_branch_and_user_index(tmp_path
     assert git('branch', '--show-current', cwd=checkout) == b'main'
     assert git('write-tree', cwd=checkout) == index
     assert (checkout / 'README').read_text() == 'User change'
+
+
+@pytest.mark.parametrize('name, sources', [
+    (None, ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('  ', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('default', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('preprints', ['arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('researchsquare', ['researchsquare']), ('arxiv', ['arxiv']),
+    ('biorxiv', ['biorxiv']), ('medrxiv', ['medrxiv']),
+])
+def test_preprint_configuration_selection(tmp_path, name, sources):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    environ = {} if name is None else {'PAPER_CONFIG': name}
+    prepare(tmp_path, environ)
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert list(config.executor.source) == sources
+    assert list(config.source.arxiv.category) == ['*']
+    assert config.source.arxiv.window_days == 1
+    assert config.source.journals.window_days == 7
+    assert config.output.rss.enabled
+
+
+def test_mixed_source_customization_and_common_window(tmp_path):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    prepare(tmp_path, {'PAPER_CONFIG': 'all', 'WINDOW_DAYS': '3', 'CUSTOM_CONFIG':
+                      'executor:\n  source: [journals, arxiv, researchsquare]\nsource:\n  arxiv:\n    category: [physics.chem-ph]\n'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert list(config.executor.source) == ['journals', 'arxiv', 'researchsquare']
+    assert list(config.source.arxiv.category) == ['physics.chem-ph']
+    assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare'])

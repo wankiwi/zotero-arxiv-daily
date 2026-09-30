@@ -6,9 +6,12 @@ zotero:
 
 source:
   arxiv:
+    window_days: null # null preserves the latest category RSS announcement.
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
     include_cross_list: false # Whether to include arXiv cross-list papers in subscribed categories. Example: true
   biorxiv:
+    window_days: null # Set days for paginated date-window retrieval.
+    max_pages: 100
     category: null # The categories of target biorxiv papers. Find categories from [here](https://www.biorxiv.org/). Example: ["biochemistry","animal behavior and cognition"]
   journals:
     presets: [jacs, jctc, prl, nature_family, science, science_advances, jcp, jpcl]
@@ -21,7 +24,13 @@ source:
     require_live_catalog: false
     catalog_cache: data/journal_catalog.json
     mailto: null
+  researchsquare:
+    window_days: 1
+    max_pages: 100
+    mailto: null
   medrxiv:
+    window_days: null
+    max_pages: 100
     category: null # The categories of target medrxiv papers. Find categories from [here](https://www.medrxiv.org/) Example: ["psychiatry and clinical psychology", "neurology"]
 
 email:

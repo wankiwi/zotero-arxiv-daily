@@ -49,6 +49,8 @@
 ![screenshot](./assets/screenshot.png)
 
 ## 🚀 Usage
+
+当前版本不设置 `PAPER_CONFIG` 时默认订阅全部指定期刊和四个预印本平台，输出 RSS。配置方法见下方“指定期刊推荐、RSS 与 GitHub Pages”。下方旧 arXiv 邮件教程请配合 `PAPER_CONFIG=legacy` 使用；本地对应 `--config-name=legacy`。
 ### Quick Start
 1. Fork (and star😘) this repo.
 ![fork](./assets/fork.png)
@@ -101,7 +103,7 @@ executor:
   debug: ${oc.env:DEBUG,null}
   source: ['arxiv']
 ```
-Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included.
+Set `source.arxiv.include_cross_list: true` if you want cross-listed papers included in selected arXiv categories.
 >[!NOTE]
 > `${oc.env:XXX,yyy}` means the value of the environment variable `XXX`. If the variable is not set, the default value `yyy` will be used.
 
@@ -163,7 +165,7 @@ That's all! Now you can test the workflow by manually triggering it:
 ![test](./assets/test.png)
 
 > [!NOTE]
-> The Test-Workflow Action is the debug version of the main workflow (Send-emails-daily), which always retrieve 5 arxiv papers regardless of the date. While the main workflow will be automatically triggered everyday and retrieve new papers released yesterday. There is no new arxiv paper at weekends and holiday, in which case you may see "No new papers found" in the log of main workflow.
+> The Test workflow uses the selected PAPER_CONFIG with debug mode and disabled delivery history, retaining up to 10 papers per preprint platform. It uses real configured output channels and credentials. The main workflow runs daily within each source’s configured date window; weekends and holidays may have no new arXiv submissions.
 
 Then check the log and the receiver email after it finishes.
 
@@ -280,11 +282,38 @@ source:
 ### GitHub Actions 发布
 
 1. Fork/更新仓库，在 Actions Secrets 中配置 `ZOTERO_ID`、`ZOTERO_KEY`；使用 LLM 时配置 `OPENAI_API_KEY`。
-2. 在 Actions Variables 设置 `PAPER_CONFIG=journals`。不设置时保留原来的 `default` 预印本邮件配置。
+2. `PAPER_CONFIG` 不设置或留空时，默认使用 `all`：上述全部指定期刊，以及 arXiv、bioRxiv、medRxiv、Research Square 的全部学科预印本。可在 Actions Variables 选择以下配置：
+
+   | `PAPER_CONFIG` | 候选来源 |
+   | --- | --- |
+   | `all` / `default` / 不设置 | 全部指定期刊 + 全部预印本平台 |
+   | `journals` | 全部指定期刊 |
+   | `preprints` | arXiv、bioRxiv、medRxiv、Research Square |
+   | `arxiv` / `biorxiv` / `medrxiv` / `researchsquare` | 单个预印本平台 |
+   | `legacy` | 原有 arXiv 分类和邮件配置 |
+
+   新配置默认生成 RSS。`all`、`preprints` 及各平台配置默认预印本回溯 1 天，期刊回溯 7 天；`category: ["*"]` 表示全部学科。arXiv 使用提交日期 API 查询，bioRxiv/medRxiv 使用分页日期 API，Research Square 使用 Crossref 的 `10.21203` 前缀及预印本类型查询。日期精度只有天的平台包含窗口边界日，因此会有重叠；持久状态避免重复推荐。Research Square 缺少摘要时按标题评分，同一论文的 `/v1`、`/v2` 等版本只推荐一次。
 3. 可选 Variables：`OPENAI_API_BASE`、`LLM_MODEL`、`RSS_SITE_URL`；邮件需要额外配置 Secrets `SENDER`、`RECEIVER`、`SENDER_PASSWORD` 和 Variables `SMTP_SERVER`、`SMTP_PORT`。
 4. 在 **Settings → Pages → Source** 选择 **GitHub Actions**，启用工作流。
-5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的期刊回溯窗口。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
+5. 运行 **Daily papers and RSS**。手动触发可选择 `configured`、`email`、`rss`、`both`，以及 1–90 天的统一回溯窗口；留空沿用各平台配置。定时触发为北京时间每天 06:00，GitHub 调度可能延迟。
 6. 完成 Pages 部署后，在 Zotero Feed 中订阅 `https://<用户名>.github.io/<仓库名>/feed.xml`。以实际 Pages 地址为准。
+
+可用 `CUSTOM_CONFIG` 同时选择期刊和预印本，并限定学科，例如：
+
+```yaml
+executor:
+  source: [journals, arxiv, researchsquare]
+source:
+  journals:
+    presets: [jacs, jctc, jpcl]
+  arxiv:
+    category: [physics.chem-ph, cond-mat.mtrl-sci]
+    window_days: 2
+  researchsquare:
+    window_days: 2
+```
+
+`PAPER_CONFIG` 仍为 `config/` 下的 YAML 文件名，不含 `.yaml`；本地使用 `--config-name=all`、`--config-name=preprints` 或 `--config-name=researchsquare`，省略参数也默认全部来源。全部学科的候选数量和模型计算量较大，可用上述配置缩小范围。分页达到 `max_pages` 限制时会明确报错，避免把部分结果误当作完整结果。
 
 `CUSTOM_CONFIG` 仍可作为 YAML 配置覆盖使用，工作流生成忽略的 `config/runtime.yaml`，不会覆盖版本库的 `config/custom.yaml` 或打印配置内容。`vars.REPOSITORY` / `vars.REF` 的旧跨仓库执行选项已移除，工作流始终运行当前仓库的触发版本。CI 使用冻结锁文件。
 

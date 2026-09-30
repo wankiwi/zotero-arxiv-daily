@@ -1,0 +1,16 @@
+# All supported preprint platforms; "*" includes every subject category.
+defaults:
+  - journals
+  - _self_
+source:
+  arxiv:
+    category: ["*"]
+    window_days: 1
+  biorxiv:
+    category: ["*"]
+    window_days: 1
+  medrxiv:
+    category: ["*"]
+    window_days: 1
+executor:
+  source: [arxiv, biorxiv, medrxiv, researchsquare]

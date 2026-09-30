@@ -22,6 +22,9 @@ def title_key(title: str) -> str:
 def paper_id(paper) -> str:
     doi = normalize_doi(paper.doi)
     if doi:
+        # Research Square versions share one recommendation identity.
+        if doi.startswith('10.21203/rs.'):
+            doi = re.sub(r'/v\d+$', '', doi)
         return 'doi:' + doi
     url = paper.url.strip()
     if 'arxiv.org/' in url:
