@@ -1,0 +1,85 @@
+ZOTERO · RESEARCH DIGEST
+
+Daily Papers
+
+4 recommendations · Ranked by relevance to your Zotero library
+
+Relevance uses text similarity weighted by when papers were added to your library. Higher scores mean a closer match, not a probability. Scores are shown to one decimal place.
+
+Example Materials Journal · 2026-09-30 · Source: journals
+
+1. Learning molecular interactions across scales: a reproducible route to soft materials design
+
+Ada Example, Lin Chen, Sam Rivera
+
+Example Institute of Materials
+
+Relevance: 7.5
+
+Scored using abstract similarity to your library.
+
+Original abstract (AI summary not generated)
+
+Fictional preview. We investigate how molecular interactions shape the response of soft materials. A combined simulation and measurement workflow connects local structure to macroscopic transport.
+
+The complete abstract remains readable without hidden text or an external service.
+
+PDF (https://example.org/paper/1.pdf)Article (https://example.org/paper/1)
+
+DOI: 10.0000/preview.1 (https://doi.org/10.0000/preview.1)
+
+arxiv · Date unavailable · Source: arxiv
+
+2. 面向复杂催化界面的机器学习：跨尺度建模与可解释性 / Machine learning at catalytic interfaces
+
+Researcher 1, Researcher 2, Researcher 3, ..., Researcher 10, Researcher 11
+
+Fictional Chemistry Laboratory
+
+Relevance: -0.1
+
+Scored using abstract similarity to your library.
+
+Original abstract (AI summary unavailable)
+
+虚构预览：保留完整的多语言摘要，展示低相关性分数以及摘要服务不可用时的真实状态。界面结构、反应路径与预测误差在统一框架下进行比较。
+
+Article (https://example.org/paper/2)
+
+biorxiv · Date unavailable · Source: biorxiv
+
+3. A fictional protein dynamics study
+
+Noor Example
+
+Unknown Affiliation
+
+Relevance: 6.3
+
+Scored using abstract similarity to your library.
+
+AI summary
+
+Fictional AI summary example; no AI service was called to create this preview.
+
+Article (https://example.org/paper/3)
+
+researchsquare · Date unavailable · Source: researchsquare
+
+4. A preview with missing metadata
+
+Authors unavailable
+
+Unknown Affiliation
+
+Relevance: Unknown
+
+Scored using title only similarity to your library.
+
+AI summary not generated
+
+No abstract available
+
+Article (https://example.org/paper/4)
+
+Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.

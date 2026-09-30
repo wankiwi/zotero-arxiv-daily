@@ -4,6 +4,8 @@ import glob
 import smtplib
 from email.header import Header
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from .construct_email import email_plain_text
 from email.utils import parseaddr, formataddr
 from loguru import logger
 import datetime
@@ -75,7 +77,9 @@ def send_email(config:DictConfig, html:str):
         name, addr = parseaddr(s)
         return formataddr((Header(name, 'utf-8').encode(), addr))
 
-    msg = MIMEText(html, 'html', 'utf-8')
+    msg = MIMEMultipart('alternative')
+    msg.attach(MIMEText(email_plain_text(html), 'plain', 'utf-8'))
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
     msg['From'] = _format_addr('Github Action <%s>' % sender)
     msg['To'] = _format_addr('You <%s>' % receiver)
     today = datetime.datetime.now().strftime('%Y/%m/%d')

@@ -234,3 +234,17 @@ def test_extract_tex_resolves_nested_includes_relative_to_main(make_tar):
 def test_extract_tex_cycle_does_not_recurse_forever(make_tar):
     path = make_tar({'main.tex': r'\begin{document}\input{main}\end{document}'})
     assert extract_tex_code_from_tar(path, 'cyclic')['all']
+
+
+def test_email_has_matching_plain_and_html_alternatives(config, monkeypatch):
+    from email import message_from_string
+    from zotero_arxiv_daily.construct_email import render_email
+    from tests.canned_responses import make_sample_paper
+    sent = []
+    monkeypatch.setattr(smtplib, 'SMTP', make_stub_smtp(sent))
+    send_email(config, render_email([make_sample_paper(title='中文 Paper', score=7.5)]))
+    message = message_from_string(sent[0][2])
+    assert message.get_content_type() == 'multipart/alternative'
+    parts = message.get_payload()
+    assert [p.get_content_type() for p in parts] == ['text/plain', 'text/html']
+    assert all('1. 中文 Paper' in p.get_payload(decode=True).decode('utf-8') for p in parts)

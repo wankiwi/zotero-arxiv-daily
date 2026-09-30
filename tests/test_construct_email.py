@@ -14,7 +14,7 @@ def test_render_email_with_papers():
 
 def test_render_email_empty_list():
     html = render_email([])
-    assert "No Papers Today" in html
+    assert "No new recommendations" in html
 
 
 def test_render_email_author_truncation():
@@ -75,4 +75,32 @@ def test_get_block_html_contains_all_fields():
 
 def test_get_empty_html():
     html = get_empty_html()
-    assert "No Papers Today" in html
+    assert "No new recommendations" in html
+
+
+def test_numbering_scores_links_and_plain_text():
+    from zotero_arxiv_daily.construct_email import email_plain_text
+    papers = [make_sample_paper(title=f'Paper {i}', score=-0.15, doi=f'10.1000/example{i}',
+                              tldr=None, abstract='原文 & abstract', tldr_status='not_generated') for i in range(50)]
+    html = render_email(papers)
+    plain = email_plain_text(html)
+    for i in range(1, 51):
+        assert f'{i}. Paper {i-1}' in html and f'{i}. Paper {i-1}' in plain
+    assert 'Relevance: -0.1' in plain
+    assert 'Original abstract (AI summary not generated)' in plain
+    assert 'https://doi.org/10.1000/example0' in html and 'https://doi.org/10.1000/example0' in plain
+    assert '<style' not in plain and 'font-size' not in plain
+    assert '1.' not in email_plain_text(render_email([]))
+
+
+def test_email_rejects_unsafe_links_and_escapes_untrusted_fields():
+    from zotero_arxiv_daily.construct_email import email_plain_text
+    paper = make_sample_paper(title='<img src=x onerror=alert(1)>', pdf_url='javascript:alert(1)',
+                              url='https://[broken', score=None, authors=[], tldr='<b>text</b>',
+                              tldr_status='generated', doi='10.1000/a" onclick="bad')
+    html = render_email([paper])
+    assert '<img' not in html and 'javascript:' not in html
+    assert 'href="https://[broken' not in html
+    assert 'Relevance: Unknown' in html and 'Authors unavailable' in html
+    assert 'AI summary' in html and '&lt;b&gt;text&lt;/b&gt;' in html
+    assert 'AI summary' in email_plain_text(html)
