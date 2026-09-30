@@ -218,3 +218,30 @@ def test_rss_recovery_is_not_reported_as_complete_window(config, monkeypatch):
     monkeypatch.setattr(retriever,'_crossref',lambda *args:(_ for _ in ()).throw(RuntimeError('429 exhausted')))
     _, papers, failed = retriever._journal(CORE['jacs'], None, None)
     assert papers == [paper] and failed
+
+
+@pytest.mark.parametrize('indexed_error', ['404', 'unmatched'])
+@pytest.mark.parametrize('rss_available', [True, False])
+def test_unindexed_journal_rss_fallback_is_explicit(config, monkeypatch, indexed_error, rss_available):
+    from contextlib import nullcontext
+    import requests
+    retriever = JournalRetriever(config)
+    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
+    def rss(*args):
+        if not rss_available:
+            raise ValueError('invalid feed')
+        return []  # A valid empty feed is not evidence of published articles.
+    monkeypatch.setattr(retriever, '_rss', rss)
+    def crossref(*args):
+        if indexed_error == 'unmatched':
+            raise ValueError('No exact Crossref ISSN match for new journal')
+        response = requests.Response()
+        response.status_code = 404
+        raise requests.HTTPError('Not indexed', response=response)
+    monkeypatch.setattr(retriever, '_crossref', crossref)
+    warnings = []
+    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.logger.warning', warnings.append)
+    _, papers, failed = retriever._journal(CORE['jacs'], None, None)
+    assert papers == [] and failed == (not rss_available)
+    if rss_available:
+        assert any('RSS-only fallback (0 items' in message and 'not verified' in message for message in warnings)

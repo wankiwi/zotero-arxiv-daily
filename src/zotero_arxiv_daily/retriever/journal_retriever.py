@@ -204,10 +204,12 @@ class JournalRetriever(BaseRetriever):
 
     def _journal(self, journal, since, until):
         papers, errors = [], []
+        rss_ok, unsupported = False, False
         with session(self.retriever_config.get('mailto')) as client:
             if journal.rss and self.retriever_config.get('use_rss', True):
                 try:
                     papers.extend(self._rss(journal, client, since, until))
+                    rss_ok = True
                 except Exception as exc:
                     errors.append(f'RSS: {exc}')
             crossref_ok = False
@@ -217,12 +219,18 @@ class JournalRetriever(BaseRetriever):
                 crossref_ok = True
             except Exception as exc:
                 errors.append(f'Crossref: {exc}')
-        if not crossref_ok and papers:
+                unsupported = (getattr(getattr(exc, 'response', None), 'status_code', None) == 404
+                               or isinstance(exc, ValueError) and str(exc).startswith('No exact Crossref ISSN match'))
+        if not crossref_ok and rss_ok and unsupported:
+            logger.warning(f'{journal.title}: Crossref index unavailable; publisher RSS-only fallback '
+                           f'({len(papers)} items in window). Historical window coverage is not verified.')
+        elif not crossref_ok and papers:
             logger.warning(f'{journal.title}: RSS recovered {len(papers)} papers, but complete date-window coverage is unverified')
         if errors:
             logger.warning(f'{journal.title}: ' + '; '.join(errors))
-        # A feed only covers its current issue. Report degraded/incomplete coverage.
-        failed = not crossref_ok or journal.title in self.failures
+        # Unindexed journals can use a valid publisher feed with an explicit
+        # warning. Rate limits, server errors and invalid feeds remain failures.
+        failed = (not crossref_ok and not (rss_ok and unsupported)) or journal.title in self.failures
         return journal, deduplicate(papers), failed
 
     def _retrieve_raw_papers(self):

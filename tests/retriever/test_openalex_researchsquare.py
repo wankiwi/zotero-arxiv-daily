@@ -104,7 +104,7 @@ def test_wrong_source_identity(config, monkeypatch):
 
 def test_missing_subfield(config, monkeypatch):
     retriever, calls = setup(config, monkeypatch, [], catalog=[])
-    with pytest.raises(ValueError, match='missing or ambiguous'): retriever.retrieve_papers()
+    with pytest.raises(ValueError, match='missing from complete catalog'): retriever.retrieve_papers()
     assert not any(url.endswith('/works') for url, _ in calls)
 
 
@@ -135,12 +135,14 @@ def test_subfield_catalog_pagination_and_exact_names(config, monkeypatch):
     assert len([url for url, _ in calls if '/sources/' in url]) == 2
 
 
-def test_ambiguous_subfield_is_not_guessed(config, monkeypatch):
+def test_same_name_subfields_are_unioned_without_guessing(config, monkeypatch):
     names = list(_profile().preprint_interests.researchsquare.subfield)
     catalog = [{'id': f'https://openalex.org/subfields/{1000+i}', 'display_name': n} for i, n in enumerate(names)]
     catalog.append({'id': 'https://openalex.org/subfields/8888', 'display_name': names[0]})
-    retriever, _ = setup(config, monkeypatch, [], catalog=catalog)
-    with pytest.raises(ValueError, match='ambiguous'): retriever.retrieve_papers()
+    retriever, calls = setup(config, monkeypatch, [page([])], catalog=catalog)
+    assert retriever.retrieve_papers() == []
+    filters = next(params['filter'] for url, params in calls if url.endswith('/works'))
+    assert '1000' in filters and '8888' in filters
 
 
 def test_zero_results_is_success(config, monkeypatch):

@@ -5,7 +5,6 @@ import subprocess
 import sys
 
 from hydra import compose, initialize_config_dir
-from omegaconf import OmegaConf
 import pytest
 
 from scripts.prepare_workflow import prepare
@@ -13,13 +12,13 @@ from scripts.prepare_workflow import prepare
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_runtime_configuration_supports_rss_without_resolving_secrets(tmp_path):
+def test_runtime_configuration_forces_email_without_resolving_secrets(tmp_path):
     shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
     prepare(tmp_path, {'PAPER_CONFIG': 'journals', 'OUTPUT_CHANNEL': 'rss', 'WINDOW_DAYS': '14', 'CUSTOM_CONFIG': 'llm:\n  enabled: false\n'})
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         config = compose(config_name='runtime')
     assert config.source.journals.window_days == 14
-    assert config.output.rss.enabled and not config.output.email.enabled
+    assert not config.output.rss.enabled and config.output.email.enabled
     assert not config.llm.enabled and config.state.enabled
     assert config.executor.source == ['journals']
 
@@ -93,7 +92,7 @@ def test_preprint_configuration_selection(tmp_path, name, sources):
     assert list(config.source.arxiv.category) == ['*']
     assert config.source.arxiv.window_days == 7
     assert config.source.journals.window_days == 7
-    assert config.output.rss.enabled
+    assert not config.output.rss.enabled
 
 
 def test_mixed_source_customization_and_common_window(tmp_path):
@@ -115,7 +114,7 @@ def test_explicit_run_recipient_overrides_custom_config(tmp_path):
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         config = compose(config_name='runtime')
     assert config.email.receiver == 'verified@example.com'
-    assert config.output.email.enabled and config.output.rss.enabled
+    assert config.output.email.enabled and not config.output.rss.enabled
 
 
 @pytest.mark.parametrize('recipient', ['a@example.com,b@example.com', 'a@example.com\r\nBcc: b@example.com', '${oc.env:RECEIVER}', 'bad-address'])
@@ -169,3 +168,16 @@ def test_invalid_run_modes_are_rejected(tmp_path, overrides):
     shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
     with pytest.raises(ValueError, match='Invalid'):
         prepare(tmp_path, overrides)
+
+
+@pytest.mark.parametrize('channel', ['configured', 'both', 'rss', 'email'])
+def test_stale_rss_config_and_dispatch_cannot_reenable_publishing(tmp_path, channel):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    (tmp_path / 'public').mkdir()
+    (tmp_path / 'public/feed.xml').write_text('historical feed')
+    prepare(tmp_path, {'OUTPUT_CHANNEL': channel, 'CUSTOM_CONFIG':
+                      'output: {email: {enabled: false}, rss: {enabled: true}}'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.output.email.enabled and not config.output.rss.enabled
+    assert not (tmp_path / 'public/feed.xml').exists()

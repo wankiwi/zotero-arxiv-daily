@@ -104,12 +104,14 @@ class OpenAlexResearchSquare:
                 raise RuntimeError('OpenAlex subfield catalog pagination incomplete')
         else:
             raise RuntimeError('OpenAlex subfield catalog exceeds safety page limit')
-        bad = [name for name, ids in matches.items() if len(ids) != 1]
+        bad = [name for name, ids in matches.items() if not ids]
         if bad:
-            raise ValueError(f'OpenAlex subfields missing or ambiguous: {bad}')
-        resolved = {name: next(iter(ids)) for name, ids in matches.items()}
+            raise ValueError(f'OpenAlex subfields missing from complete catalog: {bad}')
+        # Names can recur under different parent fields. Include every exact
+        # match, rather than guessing which ID the user meant.
+        resolved = {name: sorted(ids) for name, ids in matches.items()}
         logger.info(f'OpenAlex verified subfields: {resolved}')
-        return set(resolved.values())
+        return {identity for identities in resolved.values() for identity in identities}
 
     def retrieve(self):
         days, max_pages = int(self.config.get('window_days', 1)), int(self.config.get('max_pages', 100))

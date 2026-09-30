@@ -1,49 +1,16 @@
 name: Test
 on:
   workflow_dispatch:
-
-concurrency:
-  group: daily-papers
-  cancel-in-progress: false
-
+permissions:
+  contents: read
 jobs:
-  calculate-and-send:
+  isolated-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      #  with:
-      #    repository: ${{ vars.REPOSITORY }}
-      #    ref: ${{ vars.REF }}
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7.1.4
-
-
-      - name: Run script
-        env:
-          ZOTERO_ID: ${{ secrets.ZOTERO_ID }}
-          ZOTERO_KEY: ${{ secrets.ZOTERO_KEY }}
-          SENDER: ${{ secrets.SENDER }}
-          RECEIVER: ${{ secrets.RECEIVER }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE || secrets.OPENAI_API_BASE || 'https://api.openai.com/v1' }}
-          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'all' }}
-          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
-          RSS_SITE_URL: ${{ vars.RSS_SITE_URL }}
-          SMTP_SERVER: ${{ vars.SMTP_SERVER || 'smtp.qq.com' }}
-          SMTP_PORT: ${{ vars.SMTP_PORT || '465' }}
-          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
-        run: |
-          export DEBUG=true
-          uv run --frozen python scripts/prepare_workflow.py
-          uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime executor.debug=true state.enabled=false
-      - name: Preserve generated RSS for inspection
-        if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-rss
-          path: public/feed.xml
-          if-no-files-found: ignore
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Run isolated tests without delivery credentials
+        run: uv run --frozen pytest

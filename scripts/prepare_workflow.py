@@ -39,9 +39,10 @@ def prepare(root: Path, environ=os.environ):
     channel = environ.get('OUTPUT_CHANNEL', 'configured')
     if channel not in ('configured', 'email', 'rss', 'both'):
         raise ValueError('Invalid output channel')
-    if channel != 'configured':
-        config = OmegaConf.merge(config, {'output': {'email': {'enabled': channel in ('email', 'both')},
-                                                   'rss': {'enabled': channel in ('rss', 'both')}}})
+    # Repository delivery policy overrides stale CUSTOM_CONFIG and dispatch inputs.
+    # RSS remains available to explicit local callers, not these email workflows.
+    config = OmegaConf.merge(config, {'output': {'email': {'enabled': True},
+                                               'rss': {'enabled': False}}})
     recipient = environ.get('RECEIVER_OVERRIDE', '').strip()
     if recipient:
         if not re.fullmatch(r'[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+', recipient) or '${' in recipient:

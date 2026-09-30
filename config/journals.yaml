@@ -1,4 +1,4 @@
-# Ready-to-customize configuration for all requested journals and Pages RSS.
+# Ready-to-customize configuration for all requested journals and email delivery.
 defaults:
   - base
   - _self_
@@ -28,9 +28,9 @@ executor:
   enrichment_workers: 4
 output:
   email:
-    enabled: false
-  rss:
     enabled: true
+  rss:
+    enabled: false
     site_url: ${oc.env:RSS_SITE_URL,''}
 state:
   enabled: true
