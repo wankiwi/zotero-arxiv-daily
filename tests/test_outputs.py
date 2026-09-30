@@ -137,3 +137,29 @@ def test_doi_links_protect_identical_titles_from_false_deduplication(tmp_path):
     state.add([first])
     state.save()
     assert not State(state.path).has(second)
+
+
+def test_rss_page_displays_saved_scores_without_changing_delivery_state(tmp_path):
+    state = State(tmp_path / 'state.json')
+    papers = [make_sample_paper(title='A <script> & B', doi='10.1000/scored',
+                               url='https://example.org/paper?a=1&b=2', score=7.125,
+                               abstract='<script>private script</script>'),
+              make_sample_paper(title='Unknown score', doi='10.1000/unknown',
+                                url='javascript:alert(1)', score=None)]
+    state.add(papers)
+    state.mark(papers, 'email')
+    state.mark(papers, 'rss')
+    before = json.dumps(state.records, sort_keys=True)
+    state.save()
+    restored = State(state.path)
+    path, _ = write_rss(restored, {'path': str(tmp_path / 'feed.xml')})
+    html = path.with_name('index.html').read_text()
+    assert 'Relevance: <strong>7.12</strong>' in html
+    assert 'Relevance: <strong>Unknown</strong>' in html
+    assert 'A &lt;script&gt; &amp; B' in html and '<script>' not in html
+    assert 'href="https://example.org/paper?a=1&amp;b=2"' in html
+    assert 'javascript:' not in html and 'href="feed.xml"' in html
+    assert any(
+        'Relevance: 7.12' in i.findtext('description') for i in ET.parse(path).findall('./channel/item'))
+    assert json.dumps(restored.records, sort_keys=True) == before
+    assert not restored.pending('email') and not restored.pending('rss')
