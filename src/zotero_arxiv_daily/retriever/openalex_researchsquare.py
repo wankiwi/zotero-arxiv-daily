@@ -13,6 +13,10 @@ from .journal_retriever import clean_text
 API = 'https://api.openalex.org'
 
 
+class MissingOpenAlexRecord(RuntimeError):
+    pass
+
+
 def string_list(value, field):
     if not isinstance(value, (list, ListConfig)) or not value or any(not isinstance(v, str) or not v.strip() for v in value):
         raise ValueError(f'Research Square {field} requires a non-empty string list')
@@ -21,6 +25,8 @@ def string_list(value, field):
 
 def get_json(client, path, params=None):
     response = client.get(API + path, params=params, timeout=(10, 30))
+    if response.status_code == 404:
+        raise MissingOpenAlexRecord('OpenAlex record returned HTTP 404')
     if response.status_code in (401, 403, 429):
         raise RuntimeError(f'OpenAlex access/budget error HTTP {response.status_code}; check access or free quota; no paid fallback')
     response.raise_for_status()
@@ -51,6 +57,7 @@ def publication_date(item):
 class OpenAlexResearchSquare:
     def __init__(self, config):
         self.config = config
+        self.failures = []
         self.sources = string_list(config.get('source_ids'), 'source_ids')
         if len(self.sources) > 100 or any(not re.fullmatch(r'S\d+', s) for s in self.sources):
             raise ValueError('Research Square source_ids must contain at most 100 OpenAlex S IDs')
@@ -62,11 +69,22 @@ class OpenAlexResearchSquare:
             raise ValueError('Research Square supports at most 100 subfields')
 
     def verify_sources(self, client):
+        self.failures.clear()
+        verified = []
         for source_id in self.sources:
-            item = get_json(client, '/sources/' + source_id)
+            try:
+                item = get_json(client, '/sources/' + source_id)
+            except MissingOpenAlexRecord:
+                self.failures.append(f'{source_id}: OpenAlex source HTTP 404')
+                logger.warning(f'OpenAlex source {source_id} returned 404; continuing verified sources with incomplete coverage')
+                continue
             name = re.sub(r'[^a-z]', '', str(item.get('display_name', '')).lower())
             if item.get('id') != 'https://openalex.org/' + source_id or name not in ('researchsquare', 'researchsquareresearchsquare'):
                 raise ValueError(f'OpenAlex source {source_id} is not a verified Research Square record')
+            verified.append(source_id)
+        if not verified:
+            raise ValueError('No verified Research Square sources remain; configured sources are unavailable')
+        return verified
 
     def resolve_subfields(self, client):
         # Resolve exact names against the live official catalog, never guess IDs.
@@ -100,9 +118,9 @@ class OpenAlexResearchSquare:
         until = datetime.now(timezone.utc).date()
         since = until - timedelta(days=days)
         with session() as client:
-            self.verify_sources(client)
+            verified_sources = self.verify_sources(client)
             subfields = self.resolve_subfields(client)
-            filters = ','.join(['locations.source.id:' + '|'.join(self.sources), 'type:preprint',
+            filters = ','.join(['locations.source.id:' + '|'.join(verified_sources), 'type:preprint',
                 'topics.subfield.id:' + '|'.join(sorted(subfields)),
                 f'from_publication_date:{since}', f'to_publication_date:{until}'])
             cursor, seen, records, received = '*', set(), [], 0
@@ -128,7 +146,7 @@ class OpenAlexResearchSquare:
                 sources = {(loc.get('source') or {}).get('id', '').rsplit('/', 1)[-1] for loc in item.get('locations', [])}
                 fields = {(topic.get('subfield') or {}).get('id', '').rsplit('/', 1)[-1] for topic in item.get('topics', [])}
                 date = publication_date(item)
-                if item.get('type') == 'preprint' and sources.intersection(self.sources) and fields.intersection(subfields) and date and since <= date.date() <= until:
+                if item.get('type') == 'preprint' and sources.intersection(verified_sources) and fields.intersection(subfields) and date and since <= date.date() <= until:
                     scoped.append(item)
             except (AttributeError, TypeError):
                 logger.warning('Skipping malformed OpenAlex work scope metadata')

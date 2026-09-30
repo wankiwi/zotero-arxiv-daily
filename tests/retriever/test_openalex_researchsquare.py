@@ -144,3 +144,27 @@ def test_ambiguous_subfield_is_not_guessed(config, monkeypatch):
 def test_zero_results_is_success(config, monkeypatch):
     retriever, _ = setup(config, monkeypatch, [page([])])
     assert retriever.retrieve_papers() == []
+
+
+def test_one_missing_source_preserves_other_and_reports_failure(config, monkeypatch):
+    from zotero_arxiv_daily.retriever.openalex_researchsquare import MissingOpenAlexRecord
+    import zotero_arxiv_daily.retriever.openalex_researchsquare as module
+    retriever,calls=setup(config, monkeypatch, [page([item()])])
+    original=module.get_json
+    def get(client,path,params=None):
+        if path.endswith(SOURCES[1]):raise MissingOpenAlexRecord('404')
+        return original(client,path,params)
+    monkeypatch.setattr(module,'get_json',get)
+    assert len(retriever.retrieve_papers())==1
+    assert retriever.failures == [f'{SOURCES[1]}: OpenAlex source HTTP 404']
+    params=[p for url,p in calls if url.endswith('/works')][0]
+    assert f'locations.source.id:{SOURCES[0]},' in params['filter']
+    assert SOURCES[1] not in params['filter']
+
+
+def test_all_missing_sources_do_not_query_works(config, monkeypatch):
+    retriever,calls=setup(config, monkeypatch, [], status=404)
+    with pytest.raises(ValueError, match='No verified'):
+        retriever.retrieve_papers()
+    assert len(retriever.failures)==2
+    assert not any(url.endswith('/works') for url,_ in calls)

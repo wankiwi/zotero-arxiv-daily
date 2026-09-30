@@ -6,15 +6,15 @@ zotero:
   user_id: ${oc.env:ZOTERO_ID}
   api_key: ${oc.env:ZOTERO_KEY}
 email:
-  sender: ${oc.env:SENDER,}
-  receiver: ${oc.env:RECEIVER,}
+  sender: ${oc.env:SENDER,''}
+  receiver: ${oc.env:RECEIVER,''}
   smtp_server: ${oc.env:SMTP_SERVER,smtp.qq.com}
   smtp_port: ${oc.env:SMTP_PORT,465}
-  sender_password: ${oc.env:SENDER_PASSWORD,}
+  sender_password: ${oc.env:SENDER_PASSWORD,''}
 llm:
   # Disable with llm.enabled=false to use abstracts without LLM calls.
   api:
-    key: ${oc.env:OPENAI_API_KEY,}
+    key: ${oc.env:OPENAI_API_KEY,''}
     base_url: ${oc.env:OPENAI_API_BASE,https://api.openai.com/v1}
   generation_kwargs:
     model: ${oc.env:LLM_MODEL,gpt-4o-mini}
@@ -31,6 +31,6 @@ output:
     enabled: false
   rss:
     enabled: true
-    site_url: ${oc.env:RSS_SITE_URL,}
+    site_url: ${oc.env:RSS_SITE_URL,''}
 state:
   enabled: true

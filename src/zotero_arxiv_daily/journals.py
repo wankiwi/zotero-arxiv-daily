@@ -21,6 +21,12 @@ class Journal:
 
 
 CORE = {
+    'pnas': Journal('pnas', 'Proceedings of the National Academy of Sciences of the United States of America', ('0027-8424', '1091-6490'), None),
+    'acs_catalysis': Journal('acs_catalysis', 'ACS Catalysis', ('2155-5435',), None),
+    'npjcompumats': Journal('npjcompumats', 'npj Computational Materials', ('2057-3960',), None),
+    'angew': Journal('angew', 'Angewandte Chemie International Edition', ('1433-7851', '1521-3773'), None),
+    'chemical_science': Journal('chemical_science', 'Chemical Science', ('2041-6520', '2041-6539'), None),
+    'mlst': Journal('mlst', 'Machine Learning: Science and Technology', ('2632-2153',), None),
     'jacs': Journal('jacs', 'Journal of the American Chemical Society', ('0002-7863', '1520-5126'), 'https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jacsat'),
     'jctc': Journal('jctc', 'Journal of Chemical Theory and Computation', ('1549-9618', '1549-9626'), 'https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jctcce'),
     'prl': Journal('prl', 'Physical Review Letters', ('0031-9007', '1079-7114'), 'https://journals.aps.org/rss/recent/prl.xml'),
@@ -102,11 +108,11 @@ def discover_nature(html: str) -> dict[str, Journal]:
 
 
 def selected_journals(config, discovered=None) -> list[Journal]:
-    available = {**CORE, **NATURE, **(discovered or {})}
+    available = {**NATURE, **(discovered or {}), **CORE}
     selected = []
     for key in config.get('presets', []):
         if key == 'nature_family':
-            selected.extend({**NATURE, **(discovered or {})}.values())
+            selected.extend(available[key] for key in {**NATURE, **(discovered or {})})
         elif key in available:
             selected.append(available[key])
         else:

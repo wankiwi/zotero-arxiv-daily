@@ -23,6 +23,7 @@ class ResearchSquareRetriever(BaseRetriever):
         if backend not in ('crossref', 'openalex'):
             raise ValueError('Research Square backend must be crossref or openalex')
         self.openalex = OpenAlexResearchSquare(options) if backend == 'openalex' and self.interests.get('enabled', True) else None
+        self.failures = self.openalex.failures if self.openalex else []
         if self.openalex:
             # OpenAlex subfields replace the legacy keyword approximation.
             self.interests = {key: value for key, value in self.interests.items() if key != 'keywords'}

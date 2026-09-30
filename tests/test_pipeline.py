@@ -168,3 +168,19 @@ def test_existing_research_square_version_is_not_recommended_again(pipeline, mon
     monkeypatch.setattr(executor.reranker, 'rerank', lambda *a: pytest.fail('Existing DOI identity must be excluded'))
     executor.run()
     assert not ET.parse(pipeline.output.rss.path).findall('./channel/item')
+
+
+def test_partial_researchsquare_results_save_delivery_without_repeat(pipeline, monkeypatch):
+    pipeline.output.email.enabled = True
+    pipeline.executor.send_empty = False
+    sent=[]
+    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email',lambda *args:sent.append(args))
+    paper=make_sample_paper(source='researchsquare')
+    for _ in range(2):
+        executor=Executor(pipeline)
+        executor.retrievers={'researchsquare':SimpleNamespace(retrieve_papers=lambda:[paper], failures=['S4306402450: OpenAlex source HTTP 404'])}
+        with pytest.raises(RuntimeError, match='researchsquare: incomplete retrieval'):
+            executor.run()
+    assert len(sent)==1
+    state=State(pipeline.state.path)
+    assert not state.pending('email') and not state.pending('rss')

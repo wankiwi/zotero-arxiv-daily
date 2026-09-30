@@ -229,10 +229,16 @@ If you find this project helpful, welcome to sponsor me via WeChat or via [ko-fi
 | `science_advances` | Science Advances |
 | `jcp` | The Journal of Chemical Physics |
 | `jpcl` | The Journal of Physical Chemistry Letters |
+| `pnas` | Proceedings of the National Academy of Sciences of the United States of America |
+| `acs_catalysis` | ACS Catalysis |
+| `npjcompumats` | npj Computational Materials |
+| `angew` | Angewandte Chemie International Edition |
+| `chemical_science` | Chemical Science |
+| `mlst` | Machine Learning: Science and Technology |
 
 期刊候选来自官方 RSS 和 Crossref 的 ISSN 精确查询。Crossref 按发表时间窗口查询并完整分页，读取实际线上/纸本发表日期，避免将 DOI 创建时间当作发表时间。默认回溯最近 7 天，每次重叠抓取，通过持久状态去重。更晚入库的文献可以用较大的 `window_days` 回补；这不能保证发现任意延迟入库或抓取窗口之外的文章。
 
-`nature_family` 启用时，每周从 Nature 官方 `https://www.nature.com/siteindex` 更新以 Nature 命名的期刊清单，包含 Reviews，新增期刊自动加入。Crossref 按正式刊名解析 ISSN 并缓存。内置清单用于离线启动参考，**未经当前在线核验**。推荐配置 `config/journals.yaml` 启用 `require_live_catalog=true`：首次访问或过期清单刷新失败时明确报错，避免将旧清单当作完整覆盖。其他配置可允许缓存/内置清单降级，并从日志检查覆盖情况。
+`nature_family` 启用时，每周从 Nature 官方 `https://www.nature.com/siteindex` 更新以 Nature 命名的期刊清单，包含 Reviews，新增期刊自动加入。缺少 ISSN 时先读取 Nature 官方期刊页的 ISSN 页脚，再用规范化 HTML 实体与 `&`/`and` 后的正式刊名精确查询 Crossref，并缓存结果。内置清单用于离线启动参考，**未经当前在线核验**。推荐配置 `config/journals.yaml` 启用 `require_live_catalog=true`：首次访问或过期清单刷新失败时明确报错，避免将旧清单当作完整覆盖。其他配置可允许缓存/内置清单降级，并从日志检查覆盖情况。
 
 期刊缺少摘要时使用标题进行评分，输出会标注 `title only`。没有摘要或正文时不生成 AI 内容；没有 PDF 时提供文章页面或 DOI 链接。不会绕过出版商的全文访问权限。来源明确标记的更正、撤稿、社论等会被过滤，元数据未注明文章类型的条目仍可能包含非研究内容。
 
@@ -400,3 +406,23 @@ arXiv、bioRxiv、medRxiv 和旧 Crossref 后端可选 `keywords` 为字面短�
 缓存仅供本地安全位置使用，不要把目录设在 `public/`、共享路径或提交到 Git。工作流未添加任何向量 cache/artifact 上传，`paper-state` 的文件白名单未变；因此 GitHub 临时 runner 之间目前不复用私有向量。要实现跨运行持久缓存，需要先确认私有存放位置和访问范围。真实模型的 16 条样本缓存测试：冷调用 10.54 秒（含加载），同进程命中 0.0044 秒，新实例从磁盘命中 2.01 秒（含加载）；两次缓存结果与冷调用相似度矩阵逐位相同。
 
 SMTP 994 与 465 均使用隐式 TLS；其他端口继续使用 STARTTLS，不允许明文降级。994 的修正依据 [CSTNET 官方客户端说明](https://help.cstnet.cn/changjianwenti/youjianshoufa/MailMaster.html)，保留 `mail.cstnet.cn:994`，无需改邮箱地址或端口。
+
+
+### 新增期刊与部分源失败处理
+
+新增六刊默认包含在 `journals`、`all` 与 `interests` 中；如果 `CUSTOM_CONFIG` 显式覆盖 `source.journals.presets`，需自行将相应 key 加入该列表。以下 ISSN 来自注册机构/出版社核验，新刊均走现有 Crossref ISSN 分页接口，未猜测新的 RSS endpoint：
+
+| preset | ISSN | 核验来源 |
+|---|---|---|
+| pnas | 0027-8424、1091-6490 | [ISSN 注册记录](https://portal.issn.org/resource/ISSN/1091-6490) |
+| acs_catalysis | 2155-5435 | [ISSN 注册记录](https://portal.issn.org/resource/ISSN/2155-5435) |
+| npjcompumats | 2057-3960 | [出版社期刊首页](https://www.nature.com/npjcompumats/) |
+| angew | 1433-7851、1521-3773 | [国际版 ISSN 注册记录](https://portal.issn.org/resource/ISSN/1521-3773) |
+| chemical_science | 2041-6520、2041-6539 | [ISSN 注册记录](https://portal.issn.org/resource/ISSN/2041-6539) |
+| mlst | 2632-2153 | [ISSN 注册记录](https://portal.issn.org/resource/ISSN/2632-2153) |
+
+`npjcompumats` 是独立固定选项，Nature 目录刷新不会删除它。固定 preset 的已核实 ISSN 优先于只含刊名的发现结果。Crossref 各线程共享单请求通道，每个请求链之间至少间隔 1 秒；429/暂时服务错误最多重试 5 次，指数退避上限 30 秒，遵守最长 60 秒的 Retry-After，超过预算明确失败，不提前重试。RSS 请求仍可并行。这样降低冷启动期刊目录批量查询的限流风险，不保证远端永不返回 429。
+
+RSS 有效但 Crossref 日期窗口查询失败时，保留 RSS 候选并明确记录“窗口覆盖未验证”，仍报告部分失败；不会仅凭 RSS 有条目就把整个窗口宣称完整。Research Square 配置中一个 OpenAlex source 返回 404 时，继续查询经过验证的其他配置 source，记录缺失 ID，并保持运行的部分失败状态；不会自动替换成猜测 ID、移除用户配置或声称两个来源均已覆盖。全部来源不可用时明确失败。正式运行已证实 `S4306402450` 返回 404，仍需用户核实/纠正该配置才能完成无缺失来源的验收。
+
+一次运行即使最终失败，已经 SMTP 接受的邮件和生成的 RSS 仍保存成功状态。修复源或部署设置后保留 `paper-state`，不得清空历史来重发。GitHub Pages 的设置/部署失败与文献抓取、邮件投递分别诊断；生成 artifact 不等于已经公开发布。

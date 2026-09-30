@@ -88,9 +88,25 @@ class JournalRetriever(BaseRetriever):
     def _resolve_issns(self, journal, client):
         if journal.issns:
             return journal
+        # Nature's official journal footer exposes its ISSN without a fuzzy
+        # Crossref title search. Cache it through the existing catalogue path.
+        if journal.rss and urlsplit(journal.rss).hostname == 'www.nature.com':
+            path = urlsplit(journal.rss).path
+            if re.fullmatch(r'/[a-z][a-z0-9-]*\.rss', path):
+                homepage = 'https://www.nature.com/' + path[1:-4] + '/'
+                try:
+                    page = client.get(homepage, timeout=self.timeout)
+                    page.raise_for_status()
+                    text = clean_text(page.text)
+                    if clean_text(journal.title).casefold() in text.casefold():
+                        found = tuple(dict.fromkeys(re.findall(r'ISSN(?:\s*\(International Standard Serial Number\))?\s+(\d{4}-\d{3}[\dX])\s*\((?:online|print)\)', text, re.I)))
+                        if found:
+                            return replace(journal, issns=found)
+                except Exception as exc:
+                    logger.warning(f'{journal.title}: publisher ISSN lookup unavailable: {type(exc).__name__}')
         response = client.get('https://api.crossref.org/journals', params={'query': journal.title, 'rows': 20}, timeout=self.timeout)
         response.raise_for_status()
-        normalize = lambda s: re.sub(r'[^a-z0-9]', '', s.lower())
+        normalize = lambda s: re.sub(r'[^a-z0-9]', '', clean_text(s).lower().replace('&', ' and '))
         for item in response.json()['message']['items']:
             if normalize(item.get('title', '')) == normalize(journal.title) and item.get('ISSN'):
                 return replace(journal, issns=tuple(item['ISSN']))
@@ -201,6 +217,8 @@ class JournalRetriever(BaseRetriever):
                 crossref_ok = True
             except Exception as exc:
                 errors.append(f'Crossref: {exc}')
+        if not crossref_ok and papers:
+            logger.warning(f'{journal.title}: RSS recovered {len(papers)} papers, but complete date-window coverage is unverified')
         if errors:
             logger.warning(f'{journal.title}: ' + '; '.join(errors))
         # A feed only covers its current issue. Report degraded/incomplete coverage.

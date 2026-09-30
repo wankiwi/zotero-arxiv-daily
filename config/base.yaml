@@ -17,7 +17,7 @@ source:
     max_pages: 100
     category: null # The categories of target biorxiv papers. Find categories from [here](https://www.biorxiv.org/). Example: ["biochemistry","animal behavior and cognition"]
   journals:
-    presets: [jacs, jctc, prl, nature_family, science, science_advances, jcp, jpcl]
+    presets: [jacs, jctc, prl, nature_family, science, science_advances, jcp, jpcl, pnas, acs_catalysis, npjcompumats, angew, chemical_science, mlst]
     custom: []
     window_days: 7
     workers: 4

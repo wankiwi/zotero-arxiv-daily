@@ -171,3 +171,50 @@ def test_rss_bad_entry_does_not_discard_good_entries(config, monkeypatch):
     papers = retriever._rss(CORE['jacs'], client, datetime(2026,3,1,tzinfo=timezone.utc), datetime(2026,3,5,tzinfo=timezone.utc))
     assert [p.title for p in papers] == ['Good']
     assert CORE['jacs'].title in retriever.failures
+
+
+def test_six_additional_journals_survive_live_catalog(config):
+    added = {'pnas','acs_catalysis','npjcompumats','angew','chemical_science','mlst'}
+    discovered = dict(NATURE)
+    journals = selected_journals(config.source.journals, discovered)
+    assert added <= {j.id for j in journals}
+    assert sum(j.id == 'npjcompumats' for j in journals) == 1
+    assert len({j.id for j in journals}) == len(journals)
+    assert all(CORE[key].issns for key in added)
+    assert CORE['npjcompumats'].issns == ('2057-3960',)
+
+
+def test_discovered_entry_does_not_erase_verified_issn(config):
+    from zotero_arxiv_daily.journals import Journal
+    discovered = {'npjcompumats': Journal('npjcompumats', 'npj Computational Materials')}
+    journals = selected_journals(config.source.journals, discovered)
+    assert [j for j in journals if j.id == 'npjcompumats'] == [CORE['npjcompumats']]
+
+
+def test_crossref_html_entities_and_and_are_equivalent(config):
+    retriever = JournalRetriever(config)
+    client = SimpleNamespace(get=lambda *a, **kw: response({'items': [
+        {'title': 'Nature Ecology &amp; Evolution', 'ISSN': ['2397-334X']}]}))
+    assert retriever._resolve_issns(NATURE['natecolevol'], client).issns == ('2397-334X',)
+
+
+def test_nature_official_footer_avoids_crossref_title_search(config):
+    retriever = JournalRetriever(config)
+    calls=[]
+    def get(url, **kwargs):
+        calls.append(url)
+        return SimpleNamespace(raise_for_status=lambda:None, text='<h1>Nature Ecology &amp; Evolution</h1><p>ISSN (International Standard Serial Number) 2397-334X (online)</p>')
+    resolved = retriever._resolve_issns(NATURE['natecolevol'], SimpleNamespace(get=get))
+    assert resolved.issns == ('2397-334X',)
+    assert calls == ['https://www.nature.com/natecolevol/']
+
+
+def test_rss_recovery_is_not_reported_as_complete_window(config, monkeypatch):
+    from contextlib import nullcontext
+    retriever = JournalRetriever(config)
+    paper = SimpleNamespace(title='Article', doi='10.1021/example', url='https://doi.org/10.1021/example')
+    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
+    monkeypatch.setattr(retriever,'_rss',lambda *args:[paper])
+    monkeypatch.setattr(retriever,'_crossref',lambda *args:(_ for _ in ()).throw(RuntimeError('429 exhausted')))
+    _, papers, failed = retriever._journal(CORE['jacs'], None, None)
+    assert papers == [paper] and failed
