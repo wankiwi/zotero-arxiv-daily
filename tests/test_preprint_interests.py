@@ -39,12 +39,13 @@ def test_category_precedence_normalization_and_null(config):
 def test_disabled_wins_over_source_overrides_and_custom_config(tmp_path, mode):
     shutil.copytree(ROOT / 'config', tmp_path / 'config')
     prepare(tmp_path, {'SOURCE_MODE': mode, 'PREPRINT_PROFILE': 'interests',
-                      'CUSTOM_CONFIG': 'executor:\n  source: [arxiv, medrxiv, journals]\npreprint_interests:\n  medrxiv:\n    enabled: true\n  researchsquare:\n    keywords: [obsolete]\n'})
+                      'CUSTOM_CONFIG': 'executor:\n  source: [arxiv, medrxiv, journals]\npreprint_interests:\n  medrxiv:\n    enabled: true\n  researchsquare:\n    keywords: [obsolete]\n    source_ids: [S4306525896, S4306402450]\n'})
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         cfg = compose(config_name='runtime')
     assert 'medrxiv' not in cfg.executor.source
     assert cfg.preprint_interests.medrxiv.enabled is False
     assert cfg.preprint_interests.researchsquare.backend == 'openalex'
+    assert list(cfg.preprint_interests.researchsquare.source_ids) == ['S4306525896']
     assert 'keywords' not in cfg.preprint_interests.researchsquare
     assert categories_for(cfg, 'arxiv')[-1] == 'cs.AI'
     assert cfg.source.journals == _profile().source.journals

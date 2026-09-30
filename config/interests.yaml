@@ -11,7 +11,7 @@ preprint_interests:
     enabled: false
   researchsquare:
     backend: openalex
-    source_ids: [S4306525896, S4306402450]
+    source_ids: [S4306525896]
     type: [preprint]
     subfield:
       - Physical and Theoretical Chemistry

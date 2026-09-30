@@ -365,7 +365,7 @@ preprint_interests:
     enabled: false
   researchsquare:
     backend: openalex
-    source_ids: [S4306525896, S4306402450]
+    source_ids: [S4306525896]
     type: [preprint]
     subfield:
       - Physical and Theoretical Chemistry
@@ -383,13 +383,13 @@ preprint_interests:
 
 - arXiv 使用[原生分类](https://arxiv.org/category_taxonomy)，日期窗口检索通过[官方 API](https://info.arxiv.org/help/api/user-manual.html)的 `cat:` 筛选；可选关键词通过 `ti:` / `abs:` 查询再本地复核，仍遵循 `include_cross_list`。
 - bioRxiv / medRxiv 使用各自的原生分类名称，[官方 API](https://api.biorxiv.org/)按每个分类独立请求和分页，并复核返回分类。新方向配置使用日期窗口；未指定窗口时默认回溯 1 天，旧的无方向配置保留旧检索行为。
-- Research Square 的 `interests` 配置使用 OpenAlex。两个 `locations.source.id` 取 OR，`type:preprint` 与七个子学科取 AND；子学科使用 `topics.subfield.id`，匹配任意已分配 topic 的子学科，不限于排名第一的 `primary_topic.subfield.id`。这是[官方定义的两种覆盖语义](https://help.openalex.org/data/subfields/)，可以保留主学科不同的交叉研究。没有分配这些子学科或已经被归为 `article` 的记录仍不匹配。
+- Research Square 的 `interests` 配置使用 OpenAlex。当前仅选择已验证的 `locations.source.id:S4306525896`，`type:preprint` 与七个子学科取 AND；子学科使用 `topics.subfield.id`，匹配任意已分配 topic 的子学科，不限于排名第一的 `primary_topic.subfield.id`。这是[官方定义的两种覆盖语义](https://help.openalex.org/data/subfields/)，可以保留主学科不同的交叉研究。没有分配这些子学科或已经被归为 `article` 的记录仍不匹配。
 
 OpenAlex 后端先请求 `/sources/<ID>` 核对 ID 与 Research Square 名称，再分页读取 `/subfields`，按上列**精确名称**解析 ID；不猜测映射、不模糊匹配。名称缺失、歧义、来源身份不符时失败并报告。作品按[官方 cursor 分页](https://help.openalex.org/api/paging/)抓取，每页 100 条，分页截断/循环明确报错。日期窗口使用 `from_publication_date` / `to_publication_date`，不是索引新增日期或 Research Square 修订日期；OpenAlex 收录延迟及合并已发表版本可能导致窗口漏检，不能承诺抓全平台新增稿件。
 
 返回后复核来源、类型、子学科和日期，按 OpenAlex work ID 与规范化 DOI 去重；同窗口中返回多个 Research Square DOI 版本时保留最新再排除撤稿。窗口/服务端过滤外的其他版本不会额外查询，撤稿信息亦受 OpenAlex 元数据时效限制。无摘要仍保留论文；有倒排摘要则重建；无 DOI 使用 OpenAlex work URL。若后续才补 DOI，历史身份可能改变。不会下载全文。OpenAlex 后端忽略旧 `keywords` 近似筛选，单次 `preprint_profile=interests` 会整体替换旧方向映射；未选该配置的旧 Crossref 后端保持兼容。
 
-[当前官方认证说明](https://help.openalex.org/api/authentication/)允许免 key 基础请求，本实现仅使用无 key API，不读取/创建凭据、不启用付费或付费增量过滤器。401/403/429 会报告访问或配额错误，无付费回退。开发环境访问 `api.openalex.org` 被代理 `403 Forbidden` 阻止，因此截至本次修改，**两个来源身份和七项实际名称-ID 映射尚未完成在线核验**；上述安全校验须在可访问 API 的环境中实际通过后，才算完成集成验证。测试中的子学科 ID 为明确标注的合成数据，不是声称核实的映射。
+[当前官方认证说明](https://help.openalex.org/api/authentication/)允许免 key 基础请求，本实现仅使用无 key API，不读取/创建凭据、不启用付费或付费增量过滤器。401/403/429 会报告访问或配额错误，无付费回退。开发环境访问 `api.openalex.org` 被代理 `403 Forbidden` 阻止，正式 Actions 已通过 `S4306525896` 的身份校验，另一原配置 ID 返回 404，现按用户确认移除。七项实际名称-ID 映射仍待正式运行验证；上述安全校验须在可访问 API 的环境中实际通过后，才算完成集成验证。测试中的子学科 ID 为明确标注的合成数据，不是声称核实的映射。
 
 arXiv、bioRxiv、medRxiv 和旧 Crossref 后端可选 `keywords` 为字面短语列表，短语间取 OR、与分类取 AND，忽略大小写及标点分隔，不做语义扩展或自动词干推导。普通期刊完全不受这些关键词影响；不要把 arXiv 分类代码套用到其他平台。
 
@@ -423,6 +423,6 @@ SMTP 994 与 465 均使用隐式 TLS；其他端口继续使用 STARTTLS，不�
 
 `npjcompumats` 是独立固定选项，Nature 目录刷新不会删除它。固定 preset 的已核实 ISSN 优先于只含刊名的发现结果。Crossref 各线程共享单请求通道，每个请求链之间至少间隔 1 秒；429/暂时服务错误最多重试 5 次，指数退避上限 30 秒，遵守最长 60 秒的 Retry-After，超过预算明确失败，不提前重试。RSS 请求仍可并行。这样降低冷启动期刊目录批量查询的限流风险，不保证远端永不返回 429。
 
-RSS 有效但 Crossref 日期窗口查询失败时，保留 RSS 候选并明确记录“窗口覆盖未验证”，仍报告部分失败；不会仅凭 RSS 有条目就把整个窗口宣称完整。Research Square 配置中一个 OpenAlex source 返回 404 时，继续查询经过验证的其他配置 source，记录缺失 ID，并保持运行的部分失败状态；不会自动替换成猜测 ID、移除用户配置或声称两个来源均已覆盖。全部来源不可用时明确失败。正式运行已证实 `S4306402450` 返回 404，仍需用户核实/纠正该配置才能完成无缺失来源的验收。
+RSS 有效但 Crossref 日期窗口查询失败时，保留 RSS 候选并明确记录“窗口覆盖未验证”，仍报告部分失败；不会仅凭 RSS 有条目就把整个窗口宣称完整。Research Square 配置中一个 OpenAlex source 返回 404 时，继续查询经过验证的其他配置 source，记录缺失 ID，并保持运行的部分失败状态；不会自动替换成猜测 ID、移除用户配置或声称两个来源均已覆盖。全部来源不可用时明确失败。正式运行已证实原配置中的另一 ID 返回 404，现已按用户确认从活动配置和示例删除，仅保留 `S4306525896`，不再声称双来源覆盖。若旧 `CUSTOM_CONFIG` 仍含多个 `source_ids`，请改为 `source_ids: [S4306525896]`；本次选择 `preprint_profile=interests` 会在旧 `CUSTOM_CONFIG` 后整体替换方向配置。
 
 一次运行即使最终失败，已经 SMTP 接受的邮件和生成的 RSS 仍保存成功状态。修复源或部署设置后保留 `paper-state`，不得清空历史来重发。GitHub Pages 的设置/部署失败与文献抓取、邮件投递分别诊断；生成 artifact 不等于已经公开发布。

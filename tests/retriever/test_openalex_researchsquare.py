@@ -22,6 +22,8 @@ def item(number=1, **changes):
 
 def setup(config, monkeypatch, pages, source_name='Research Square', catalog=None, status=200):
     config.preprint_interests = deepcopy(_profile().preprint_interests)
+    # Multi-source regression fixtures are independent of the active single-source profile.
+    config.preprint_interests.researchsquare.source_ids = SOURCES
     names = list(config.preprint_interests.researchsquare.subfield)
     if catalog is None:
         catalog = [{'id': f'https://openalex.org/subfields/{1000+i}', 'display_name': n} for i, n in enumerate(names)]
