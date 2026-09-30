@@ -24,13 +24,15 @@ def test_tldr_returns_response(llm_params):
     result = paper.generate_tldr(client, llm_params)
     assert result == "Hello! How can I assist you today?"
     assert paper.tldr == result
+    assert paper.tldr_status == 'generated' and paper.tldr_error is None
 
 
 def test_tldr_without_abstract_or_fulltext(llm_params):
     client = make_stub_openai_client()
     paper = make_sample_paper(abstract="", full_text=None)
     result = paper.generate_tldr(client, llm_params)
-    assert "Failed to generate TLDR" in result
+    assert result == ''
+    assert paper.tldr_status == 'not_generated' and paper.tldr_error is None
 
 
 def test_tldr_falls_back_to_abstract_on_error(llm_params):
@@ -46,6 +48,7 @@ def test_tldr_falls_back_to_abstract_on_error(llm_params):
     )
     result = paper.generate_tldr(broken_client, llm_params)
     assert result == paper.abstract
+    assert paper.tldr_status == 'fallback' and paper.tldr_error == 'request_failed'
 
 
 def test_tldr_truncates_long_prompt(llm_params):
@@ -122,3 +125,16 @@ def test_affiliations_error_returns_none(llm_params):
     result = paper.generate_affiliations(broken_client, llm_params)
     assert result is None
     assert paper.affiliations is None
+
+
+def test_tokenizer_network_failure_keeps_llm_usable(monkeypatch, llm_params):
+    import zotero_arxiv_daily.protocol as protocol
+    protocol._tokenizer.cache_clear()
+    monkeypatch.setattr(protocol.tiktoken, 'encoding_for_model', lambda *a: (_ for _ in ()).throw(OSError('offline')))
+    client = make_stub_openai_client()
+    paper = make_sample_paper()
+    try:
+        assert paper.generate_tldr(client, llm_params) == 'Hello! How can I assist you today?'
+        assert len(protocol.truncate_prompt('中文' * 100, 10).encode('utf-8')) <= 10
+    finally:
+        protocol._tokenizer.cache_clear()

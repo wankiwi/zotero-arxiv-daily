@@ -1,0 +1,23 @@
+# Explicit opt-in profile: journal settings are inherited unchanged.
+defaults:
+  - all
+  - _self_
+preprint_interests:
+  arxiv:
+    categories: [physics.chem-ph, physics.comp-ph, cond-mat.mtrl-sci, cond-mat.soft, cs.LG, cs.AI]
+  biorxiv:
+    categories: [biophysics, biochemistry]
+  medrxiv:
+    enabled: false
+  researchsquare:
+    backend: openalex
+    source_ids: [S4306525896]
+    type: [preprint]
+    subfield:
+      - Physical and Theoretical Chemistry
+      - Materials Chemistry
+      - General Materials Science
+      - Condensed Matter Physics
+      - Artificial Intelligence
+      - Biophysics
+      - Biochemistry

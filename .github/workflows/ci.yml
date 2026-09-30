@@ -1,24 +1,35 @@
 name: CI
 on:
   workflow_dispatch:
+    inputs:
+      model_test:
+        description: Also download the embedding model and run the slow test
+        type: boolean
+        default: false
   push:
-    branches:
-      - main
-
+    branches: [main]
   pull_request:
-    branches:
-      - main
-
+    branches: [main]
+permissions:
+  contents: read
 jobs:
   pytest:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7.1.4
-
-      - name: Run Pytest
-        run: |
-          uv run pytest -m "" --cov=src/zotero_arxiv_daily --cov-report=term-missing
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run --frozen pytest --cov=src/zotero_arxiv_daily --cov-report=term-missing
+  model-test:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.model_test }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run --frozen pytest -m slow

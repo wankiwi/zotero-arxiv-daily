@@ -1,34 +1,82 @@
 name: Send emails daily
 on:
   workflow_dispatch:
+    inputs:
+      output:
+        description: Email delivery (legacy values are accepted but RSS stays disabled)
+        type: choice
+        options: [configured, email, rss, both]
+        default: email
+      window_days:
+        description: Lookback in days (1-90); blank uses preset windows
+        type: string
+        default: ''
+      recipient:
+        description: Optional email recipient for this run; blank uses existing configuration
+        type: string
+        default: ''
+      sources:
+        description: Sources for this run; overrides CUSTOM_CONFIG when not configured
+        type: choice
+        options: [configured, all, journals]
+        default: configured
+      preprint_profile:
+        description: Preprint directions; interests uses the saved profile and disables medRxiv
+        type: choice
+        options: [configured, interests]
+        default: configured
+      llm_mode:
+        description: Keep configured LLM behavior or use original abstracts without LLM calls
+        type: choice
+        options: [configured, disabled]
+        default: configured
   schedule:
-    - cron: '0 22 * * *'
-
+    - cron: '0 22 * * *' # 06:00 Asia/Shanghai; GitHub schedules may be delayed.
+concurrency:
+  group: daily-papers
+  cancel-in-progress: false
+permissions:
+  contents: read
 jobs:
-  calculate-and-send:
+  recommend:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # Persist deduplication history to paper-state.
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
-          repository: ${{ vars.REPOSITORY }}
-          ref: ${{ vars.REF }}
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Run script
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Restore delivery history
+        run: uv run --frozen python scripts/workflow_state.py restore
+      - name: Prepare runtime configuration
+        env:
+          PAPER_CONFIG: ${{ vars.PAPER_CONFIG || 'all' }}
+          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
+          OUTPUT_CHANNEL: email
+          WINDOW_DAYS: ${{ inputs.window_days || '' }}
+          RECEIVER_OVERRIDE: ${{ inputs.recipient || '' }}
+          SOURCE_MODE: ${{ inputs.sources || 'configured' }}
+          PREPRINT_PROFILE: ${{ inputs.preprint_profile || 'configured' }}
+          LLM_MODE: ${{ inputs.llm_mode || 'configured' }}
+        run: uv run --frozen python scripts/prepare_workflow.py
+      - name: Retrieve, rank and deliver
         env:
           ZOTERO_ID: ${{ secrets.ZOTERO_ID }}
           ZOTERO_KEY: ${{ secrets.ZOTERO_KEY }}
           SENDER: ${{ secrets.SENDER }}
           RECEIVER: ${{ secrets.RECEIVER }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          SMTP_SERVER: ${{ vars.SMTP_SERVER || 'smtp.qq.com' }}
+          SMTP_PORT: ${{ vars.SMTP_PORT || '465' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
-          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
-        run: |
-          printf "%b\n" "$CUSTOM_CONFIG" > config/custom.yaml
-          echo "Use custom config: "
-          cat config/custom.yaml
-          uv run src/zotero_arxiv_daily/main.py
+          OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE || secrets.OPENAI_API_BASE || 'https://api.openai.com/v1' }}
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+          RSS_SITE_URL: ${{ vars.RSS_SITE_URL }}
+        run: uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime
+      - name: Save successful and pending deliveries
+        if: ${{ always() && !cancelled() }}
+        run: uv run --frozen python scripts/workflow_state.py save

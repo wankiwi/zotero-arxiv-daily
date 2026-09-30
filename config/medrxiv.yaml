@@ -1,0 +1,5 @@
+defaults:
+  - preprints
+  - _self_
+executor:
+  source: [medrxiv]

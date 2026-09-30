@@ -88,3 +88,15 @@ def test_run_with_hard_timeout_returns_none_on_failure(monkeypatch):
     )
     assert result is None
     assert "boom" in warnings[0]
+
+
+def test_conversion_defers_full_text_until_selected(config, monkeypatch):
+    raw = SimpleNamespace(title='Selected paper', authors=[], summary='Abstract', pdf_url='https://arxiv.org/pdf/2401.01234', entry_id='https://arxiv.org/abs/2401.01234')
+    calls = []
+    monkeypatch.setattr(arxiv_retriever, 'extract_text_from_html', lambda paper: calls.append('html') or 'Full text')
+    monkeypatch.setattr(arxiv_retriever, 'extract_text_from_pdf', lambda paper: calls.append('pdf'))
+    retriever = ArxivRetriever(config)
+    paper = retriever.convert_to_paper(raw)
+    assert paper.full_text is None and calls == []
+    assert retriever.enrich(paper).full_text == 'Full text'
+    assert calls == ['html']

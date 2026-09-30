@@ -1,12 +1,30 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
+from functools import lru_cache
 import re
 import tiktoken
 from openai import OpenAI
 from loguru import logger
+from .llm import model_unavailable
 import json
 RawPaperItem = TypeVar('RawPaperItem')
+
+@lru_cache(maxsize=1)
+def _tokenizer():
+    try:
+        return tiktoken.encoding_for_model("gpt-4o")
+    except Exception as exc:
+        logger.warning(f"Tokenizer unavailable; using conservative UTF-8 byte limit: {exc}")
+        return None
+
+
+def truncate_prompt(prompt: str, limit: int) -> str:
+    enc = _tokenizer()
+    if enc is None:
+        return prompt.encode('utf-8')[:limit].decode('utf-8', errors='ignore')
+    return enc.decode(enc.encode(prompt, disallowed_special=())[:limit])
+
 
 @dataclass
 class Paper:
@@ -20,6 +38,28 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    doi: Optional[str] = None
+    journal: Optional[str] = None
+    issns: list[str] = field(default_factory=list)
+    published: Optional[datetime] = None
+    scoring_basis: str = "abstract"
+    tldr_status: Optional[str] = None
+    tldr_error: Optional[str] = None
+
+    @property
+    def summary_label(self):
+        if self.tldr_status == 'generated':
+            return 'AI summary'
+        if self.tldr_status == 'fallback':
+            return 'Original abstract (AI summary unavailable)'
+        if self.tldr_status == 'legacy' or (self.tldr_status is None and self.tldr):
+            return 'Summary (legacy; origin unknown)'
+        return 'Original abstract (AI summary not generated)' if self.abstract else 'AI summary not generated'
+
+    @property
+    def summary_text(self):
+        return self.tldr or self.abstract or 'No abstract available'
+
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
         lang = llm_params.get('language', 'English')
@@ -38,10 +78,7 @@ class Paper:
             return "Failed to generate TLDR. Neither full text nor abstract is provided"
         
         # use gpt-4o tokenizer for estimation
-        enc = tiktoken.encoding_for_model("gpt-4o")
-        prompt_tokens = enc.encode(prompt)
-        prompt_tokens = prompt_tokens[:4000]  # truncate to 4000 tokens
-        prompt = enc.decode(prompt_tokens)
+        prompt = truncate_prompt(prompt, 4000)
         
         response = openai_client.chat.completions.create(
             messages=[
@@ -54,27 +91,36 @@ class Paper:
             **llm_params.get('generation_kwargs', {})
         )
         tldr = response.choices[0].message.content
+        if not isinstance(tldr, str) or not tldr.strip():
+            raise ValueError('Empty summary response')
         return tldr
     
-    def generate_tldr(self, openai_client:OpenAI,llm_params:dict) -> str:
+    def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
+        self.tldr_error = None
+        if not self.abstract and not self.full_text:
+            self.tldr, self.tldr_status = '', 'not_generated'
+            return self.tldr
         try:
-            tldr = self._generate_tldr_with_llm(openai_client,llm_params)
+            operation = lambda: self._generate_tldr_with_llm(openai_client,llm_params)
+            tldr = requests.call(operation) if requests is not None else operation()
             self.tldr = tldr
+            self.tldr_status = 'generated'
             return tldr
         except Exception as e:
-            logger.warning(f"Failed to generate tldr of {self.url}: {e}")
+            self.tldr_error = 'model_unavailable' if model_unavailable(e) else 'request_failed'
+            # Do not log provider response bodies, account IDs or request payloads.
+            if requests is None:
+                logger.warning(f'AI summary unavailable ({self.tldr_error}); using original abstract when available')
             tldr = self.abstract
             self.tldr = tldr
+            self.tldr_status = 'fallback' if self.abstract else 'not_generated'
             return tldr
 
     def _generate_affiliations_with_llm(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
         if self.full_text is not None:
             prompt = f"Given the beginning of a paper, extract the affiliations of the authors in a python list format, which is sorted by the author order. If there is no affiliation found, return an empty list '[]':\n\n{self.full_text}"
             # use gpt-4o tokenizer for estimation
-            enc = tiktoken.encoding_for_model("gpt-4o")
-            prompt_tokens = enc.encode(prompt)
-            prompt_tokens = prompt_tokens[:2000]  # truncate to 2000 tokens
-            prompt = enc.decode(prompt_tokens)
+            prompt = truncate_prompt(prompt, 2000)
             affiliations = openai_client.chat.completions.create(
                 messages=[
                     {
@@ -89,18 +135,21 @@ class Paper:
 
             affiliations = re.search(r'\[.*?\]', affiliations, flags=re.DOTALL).group(0)
             affiliations = json.loads(affiliations)
-            affiliations = list(set(affiliations))
-            affiliations = [str(a) for a in affiliations]
+            if not isinstance(affiliations, list):
+                raise ValueError("Affiliations must be a JSON list")
+            affiliations = list(dict.fromkeys(str(a) for a in affiliations))
 
             return affiliations
     
-    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
+    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict, requests=None) -> Optional[list[str]]:
         try:
-            affiliations = self._generate_affiliations_with_llm(openai_client,llm_params)
+            operation = lambda: self._generate_affiliations_with_llm(openai_client,llm_params)
+            affiliations = requests.call(operation) if requests is not None else operation()
             self.affiliations = affiliations
             return affiliations
         except Exception as e:
-            logger.warning(f"Failed to generate affiliations of {self.url}: {e}")
+            if requests is None or not model_unavailable(e):
+                logger.warning('AI affiliation extraction unavailable; preserving unknown affiliation')
             self.affiliations = None
             return None
 @dataclass
@@ -109,3 +158,4 @@ class CorpusPaper:
     abstract: str
     added_date: datetime
     paths: list[str]
+    doi: Optional[str] = None

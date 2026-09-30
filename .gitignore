@@ -17,3 +17,10 @@ models
 test-compose.yml
 outputs
 config/private.yaml
+# Recommendation state and publisher metadata cache
+/data/
+/public/
+
+config/runtime.yaml
+.coverage
+.ruff_cache/

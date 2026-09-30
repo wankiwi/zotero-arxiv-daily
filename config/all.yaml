@@ -1,0 +1,6 @@
+# All configured journal presets and all supported preprint platforms.
+defaults:
+  - preprints
+  - _self_
+executor:
+  source: [journals, arxiv, biorxiv, medrxiv, researchsquare]

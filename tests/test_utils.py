@@ -133,57 +133,32 @@ def test_send_email_starttls_success(config, monkeypatch):
     assert "text/html" in body
 
 
-def test_send_email_falls_back_to_ssl(config, monkeypatch):
+@pytest.mark.parametrize("port", [465, 994])
+def test_send_email_uses_implicit_tls(config, monkeypatch, port):
+    from omegaconf import open_dict
+    with open_dict(config):
+        config.email.smtp_port = port
     sent = []
-    call_count = {"smtp": 0}
-
-    StubOK = make_stub_smtp(sent)
-
-    class StubSMTP_TLS_Fails:
-        def __init__(self, *a, **kw):
-            call_count["smtp"] += 1
-        def starttls(self):
-            raise OSError("TLS not supported")
-
-    class StubSMTP_SSL(StubOK):
-        pass
-
-    monkeypatch.setattr(smtplib, "SMTP", StubSMTP_TLS_Fails)
-    monkeypatch.setattr(smtplib, "SMTP_SSL", StubSMTP_SSL)
+    class ImplicitTLS(make_stub_smtp(sent)):
+        def starttls(self, **kwargs):
+            raise AssertionError("Implicit TLS ports must not use STARTTLS")
+    monkeypatch.setattr(smtplib, "SMTP_SSL", ImplicitTLS)
+    monkeypatch.setattr(smtplib, "SMTP", lambda *a, **kw: pytest.fail("Implicit TLS ports must use SSL"))
     send_email(config, "<html>ssl</html>")
     assert len(sent) == 1
 
 
-def test_send_email_falls_back_to_plain(config, monkeypatch):
+def test_send_email_does_not_send_credentials_when_tls_fails(config, monkeypatch):
     sent = []
-    call_count = {"smtp": 0}
-
-    StubOK = make_stub_smtp(sent)
-
-    class StubSMTP_TLS_Fails:
-        def __init__(self, *a, **kw):
-            call_count["smtp"] += 1
-            if call_count["smtp"] == 1:
-                pass  # first SMTP() call succeeds, but starttls will fail
-            else:
-                pass  # third SMTP() call is the plain fallback
-        def starttls(self):
+    class FailedTLS(make_stub_smtp(sent)):
+        def starttls(self, **kwargs):
             raise OSError("TLS not supported")
-        def login(self, u, p):
-            pass
-        def sendmail(self, s, r, m):
-            sent.append((s, r, m))
-        def quit(self):
-            pass
-
-    class StubSMTP_SSL_Fails:
-        def __init__(self, *a, **kw):
-            raise OSError("SSL not supported")
-
-    monkeypatch.setattr(smtplib, "SMTP", StubSMTP_TLS_Fails)
-    monkeypatch.setattr(smtplib, "SMTP_SSL", StubSMTP_SSL_Fails)
-    send_email(config, "<html>plain</html>")
-    assert len(sent) == 1
+        def login(self, *args):
+            pytest.fail("Credentials must not be sent without TLS")
+    monkeypatch.setattr(smtplib, "SMTP", FailedTLS)
+    with pytest.raises(OSError, match="TLS not supported"):
+        send_email(config, "<html>plain</html>")
+    assert sent == []
 
 
 # ---------------------------------------------------------------------------
@@ -248,3 +223,28 @@ def test_extract_tex_multiple_tex_no_bbl(make_tar):
     result = extract_tex_code_from_tar(path, "test-paper")
     assert result is not None
     assert "Main content" in result["all"]
+
+
+def test_extract_tex_resolves_nested_includes_relative_to_main(make_tar):
+    path = make_tar({'paper/main.tex': r'\begin{document}\include{section}\end{document}',
+                     'paper/section.tex': r'Content \input{detail}', 'paper/detail.tex': 'Detail'})
+    assert 'Content Detail' in extract_tex_code_from_tar(path, 'nested')['all']
+
+
+def test_extract_tex_cycle_does_not_recurse_forever(make_tar):
+    path = make_tar({'main.tex': r'\begin{document}\input{main}\end{document}'})
+    assert extract_tex_code_from_tar(path, 'cyclic')['all']
+
+
+def test_email_has_matching_plain_and_html_alternatives(config, monkeypatch):
+    from email import message_from_string
+    from zotero_arxiv_daily.construct_email import render_email
+    from tests.canned_responses import make_sample_paper
+    sent = []
+    monkeypatch.setattr(smtplib, 'SMTP', make_stub_smtp(sent))
+    send_email(config, render_email([make_sample_paper(title='中文 Paper', score=7.5)]))
+    message = message_from_string(sent[0][2])
+    assert message.get_content_type() == 'multipart/alternative'
+    parts = message.get_payload()
+    assert [p.get_content_type() for p in parts] == ['text/plain', 'text/html']
+    assert all('1. 中文 Paper' in p.get_payload(decode=True).decode('utf-8') for p in parts)
