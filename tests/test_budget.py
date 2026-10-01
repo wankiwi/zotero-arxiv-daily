@@ -11,11 +11,13 @@ from zotero_arxiv_daily.protocol import Paper
 
 
 def test_production_pricing_is_fail_closed(config):
+    config.llm.budget.enabled=True
     with pytest.raises(budget.BudgetUnavailable,match='not verified'):
         budget.budget_plan(config.llm)
 
 
 def test_verified_plan_rejects_unknown_endpoint_model_and_limit(config,monkeypatch):
+    config.llm.budget.enabled=True
     monkeypatch.setattr(budget,'VERIFIED_PRICING',{'host':'test.example','model':'test-model','valid_through':'2099-01-01','input_cny_per_million':'3','output_cny_per_million':'9'})
     config.llm.api.base_url='https://test.example/v1';config.llm.generation_kwargs.model='test-model'
     cap,cost=budget.budget_plan(config.llm)
@@ -115,3 +117,28 @@ def test_unicode_prompt_bound_and_reasoning_stops_calls(config,monkeypatch):
     assert request['n']==1 and request['max_tokens']==128 and request['extra_body']=={'enable_thinking':False}
     p.generate_tldr(client,config.llm,guard)
     assert len(calls)==1
+
+
+def test_disabled_budget_does_not_mean_unlimited(config):
+    config.llm.budget.enabled=False
+    with pytest.raises(budget.BudgetUnavailable,match='paid calls prohibited'):
+        budget.budget_plan(config.llm)
+
+
+def test_executor_fail_closed_retains_abstract_without_client(config,monkeypatch,tmp_path):
+    from zotero_arxiv_daily.executor import Executor
+    from zotero_arxiv_daily.state import State
+    from tests.canned_responses import make_stub_zotero_client,make_sample_paper
+    from zotero_arxiv_daily.reranker.api import ApiReranker
+    import numpy as np
+    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget',budget.prepare_budget)
+    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI',lambda **kw:pytest.fail('Blocked budget created client'))
+    monkeypatch.setattr('zotero_arxiv_daily.executor.zotero.Zotero',lambda *a,**kw:make_stub_zotero_client())
+    monkeypatch.setattr(ApiReranker,'get_similarity_score',lambda self,a,b:np.ones((len(a),len(b))))
+    config.llm.budget.enabled=True
+    executor=Executor(config)
+    p=make_sample_paper()
+    monkeypatch.setattr(executor.retrievers['arxiv'],'retrieve_papers',lambda:[p])
+    selected=executor._recommend(State(tmp_path/'state.json'),[],10,1)
+    assert selected and selected[0].tldr==p.abstract
+    assert selected[0].tldr_error=='budget_unavailable'

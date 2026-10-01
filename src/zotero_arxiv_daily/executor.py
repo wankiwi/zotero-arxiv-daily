@@ -39,6 +39,8 @@ def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key:
 class Executor:
     def __init__(self, config: DictConfig):
         self.config = config
+        if config.llm.get("input_mode", "abstract") not in ("abstract", "full_text"):
+            raise ValueError("llm.input_mode must be abstract or full_text")
         self.include_path_patterns = normalize_path_patterns(config.zotero.include_path, "include_path")
         self.ignore_path_patterns = normalize_path_patterns(config.zotero.ignore_path, "ignore_path")
         self.retrievers = {source: get_retriever_cls(source)(config) for source in enabled_sources(config)}
@@ -106,7 +108,7 @@ class Executor:
         return corpus
 
     def _enrich(self, paper):
-        if self.config.executor.get('fetch_full_text', True):
+        if self.config.llm.get('input_mode', 'abstract') == 'full_text' and self.openai_client:
             retriever = self.retrievers.get(paper.source)
             if retriever:
                 try:
@@ -214,16 +216,13 @@ class Executor:
         ranked = select_papers(ranked, quotas, pending)[:maximum]
         if ranked and self.config.llm.get('enabled', True):
             try:
-                if self.config.llm.get('budget', {}).get('enabled', False):
-                    self.model_requests = prepare_budget(self.config.llm)
-                    self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url, max_retries=0)
-                else:
-                    self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url)
+                self.model_requests = prepare_budget(self.config.llm)
+                self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url, max_retries=0)
             except BudgetUnavailable as exc:
                 self.llm_blocked_reason = str(exc)
                 logger.warning(f'LLM budget guard: {exc}')
         # Fork-based PDF extraction must run outside worker threads.
-        if workers > 1 and not self.config.executor.get('fetch_full_text', True):
+        if workers > 1 and self.config.llm.get('input_mode', 'abstract') != 'full_text':
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 ranked = list(pool.map(self._enrich, ranked))
         else:

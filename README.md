@@ -54,7 +54,7 @@ uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.ena
 
 ## 当前配置的脱敏示例
 
-以下为本次核对的设置与本分支拟生效的每日策略。已替换 collection 名称、用户标识与所有凭据；`archive/**` **是示例，不是用户真实排除路径**。参考名称存在不证明 secret 内容正确或模型可用。GitHub 不能读回已有 secret。核对时 CUSTOM_CONFIG 的 LLM 为 false、全局上限50、RSS为true；随后用户批准LLM=true、RSS=false、每日¥0.20。下面展示批准目标，只有预算守卫已生效时才应将在线变量中的LLM打开；定时策略在本分支改为45与三组配额，并继续强制RSS关闭。这里故意展示有效投递策略，避免复制过时开关。
+以下为本次核对的设置与本分支拟生效的每日策略。已替换 collection 名称、用户标识与所有凭据；`archive/**` **是示例，不是用户真实排除路径**。参考名称存在不证明 secret 内容正确或模型可用。GitHub 不能读回已有 secret。核对时 CUSTOM_CONFIG 的 LLM 为 false、全局上限50、RSS为true；随后用户批准LLM=true、RSS=false、每日¥0.20；RSS变量已关闭，LLM变量等待守卫生效后开启。下面展示批准目标，只有预算守卫已生效时才应将在线变量中的LLM打开；定时策略在本分支改为45与三组配额，并继续强制RSS关闭。这里故意展示有效投递策略，避免复制过时开关。
 
 ```yaml
 zotero:
@@ -72,6 +72,7 @@ llm:
   enabled: true
   budget: {enabled: true, daily_cny: 0.20}
   language: Chinese
+  input_mode: abstract
   api:
     key: ${oc.env:OPENAI_API_KEY}
     base_url: ${oc.env:OPENAI_API_BASE}
@@ -129,8 +130,8 @@ preprint_interests:
 | `executor.exclude_existing` | true；排除已在整个 Zotero 文库中的论文，不只兴趣子集 |
 | `executor.send_empty` | false；允许无新论文时发空邮件，存在源错误时不会伪装成正常空结果 |
 | `executor.debug` | false；保留兼容的旧调试选项，当前SMTP不输出会话内容 |
-| `executor.fetch_full_text` | base=true，journal 系列 preset=false；仅排名选中后获取 arXiv 全文，用于 LLM，不是摘要恢复手段 |
-| `executor.enrichment_workers` | base=1，journal 系列=4；1–8，仅 fetch_full_text=false 时并发 |
+| `executor.fetch_full_text` | 保留旧配置兼容；摘要输入现由llm.input_mode控制，abstract模式不下载全文，full_text模式只对选中论文、可调用模型时获取支持的全文 |
+| `executor.enrichment_workers` | base=1，journal 系列=4；1–8，仅 llm.input_mode=abstract 时并发；全文提取不进入线程池 |
 | `reranker.local.model` | `jinaai/jina-embeddings-v5-text-nano-retrieval` |
 | `reranker.local.revision` | null；可锁定模型 commit/revision |
 | `reranker.local.cpu_dtype` | auto；允许auto/native/float32；auto在不支持原生BF16时转float32，native保留模型dtype |
@@ -191,7 +192,8 @@ preprint_interests:
 | 参数 | 默认/意义与例子 |
 |---|---|
 | `llm.enabled` | base=true；私有配置控制启用，定时不再强制关闭。预算守卫未验证时仍不调用 |
-| `llm.budget.enabled`, `daily_cny` | true、0.20；所有Actions强制启用且上限0.20，不能被CUSTOM_CONFIG绕过。历史本地库调用可显式关闭，但不属于此受控预算工作流，勿使用共享key绕过预算 |
+| `llm.budget.enabled`, `daily_cny` | true、0.20；所有Actions强制启用且上限0.20，不能被CUSTOM_CONFIG绕过。本地将其设为false也只会禁止模型调用，不会开放无限额调用 |
+| `llm.input_mode` | `abstract`（默认）或 `full_text`。abstract不为摘要下载全文；full_text尝试来源支持的合法全文，发送完整提取文本，若不可得/超上下文/超预算输入界限则明确回退abstract，邮件和日志注明原因 |
 | `llm.language` | Chinese；prompt明确要求一句话，失败不将英文原摘要冒称中文摘要 |
 | `llm.api.key`, `base_url` | OpenAI兼容服务key/URL；环境引用，不输出值 |
 | `llm.generation_kwargs` | 原样传入Chat Completions；默认max_tokens=16384，model必须配置；可设temperature等provider支持参数。token上限不是花费承诺 |
@@ -214,7 +216,7 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 ## ¥0.20/UTC日预算与当前阻塞
 
-仅约束本仓库受控请求，不是账户级扣费上限；其他客户端、旧版本或自行关闭本地预算的调用不在保护范围内。已有 main 尚无此守卫时，不应先在在线变量开启LLM。
+仅约束本仓库受控请求，不是账户级扣费上限；其他客户端、旧版本或自行修改守卫代码的调用不在保护范围内。已有 main 尚无此守卫时，不应先在在线变量开启LLM。
 
 预算守卫先验证HTTPS endpoint、模型、人民币峰值价、价格有效期，以及非推理模式的硬token上界。**当前 `VERIFIED_PRICING = None`，因此所有预算模式付费请求均关闭**：SiliconFlow通用文档的max_tokens不包含思维链，通用enable_thinking=false说明不足以证明这一确切模型的最坏计费上界。不会用一次成功响应冒充全局保证。需要可核验的精确模型约定才能加入经审查的价格记录；没有此证据就继续原摘要回退。
 
@@ -223,3 +225,13 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 受控请求只有摘要，无单位提取、自动补写或SDK重试（max_retries=0），n=1，输出128token；输入用UTF-8字节硬截断而非GPT tokenizer估算：用户内容最多768字节，系统内容最多256字节，再预留128 framing tokens。原摘要在邮件中完整保留，只有发给模型的上下文缩短。未经证明的tokenizer framing/推理上界不能视为通过验证。测试用峰值输入3元/百万、输出9元/百万时，每次保守0.004608元，最多43次（并不承诺45篇都生成中文摘要）；出错也记为耗用。异常reasoning输出立即停止后续请求，但事后检查本身不能补救已发生的无界计费，所以它不是替代验证的手段。
 
 价格与参数参考：[SiliconFlow价格](https://www.siliconflow.cn/pricing)、[Chat Completions](https://docs.siliconflow.cn/docs/api/chat-completions-post)、[推理参数说明](https://docs.siliconflow.cn/docs/userguide/capabilities/reasoning)。
+
+### 选择摘要输入
+
+```yaml
+llm:
+  input_mode: abstract # 默认：只用原摘要，不下载全文
+# 若确需原文：改为 full_text
+```
+
+`full_text`当前复用arXiv合法HTML/PDF/TeX提取（HTML含表格），不承诺所有出版社全文可获取，不绕过付费墙。输入是完整的已提取文本，仍可能受文档解析质量影响。其他来源未提供全文时回退abstract；不会把截断前缀标为全文。非预算模式全文超过当前4000token输入界限时回退；预算模式全文超过768字节用户输入界限时回退，该小额度通常只能支持摘要。回退不额外调用模型，也不隐瞒原因：`summary_input_source`及`summary_input_fallback`保存在状态，并显示在邮件元信息。无原摘要可回退时不声称成功生成。无论输入选哪一种，成功摘要后的原摘要仍完整显示。

@@ -28,7 +28,7 @@ framework = '''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Daily Papers</title><style>@media only screen and (max-width:720px){.digest-column{display:block!important;width:100%!important;box-sizing:border-box!important;padding:0 0 18px!important;}}</style></head>
 <body style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;padding:0;background:#eef1f4;color:#253244;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef1f4" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;"><tr><td align="center" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:24px 12px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef1f4" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;table-layout:fixed;"><tr><td align="center" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:24px 12px;">
 <!--[if mso]><table role="presentation" width="1200" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;"><tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;"><![endif]-->
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;max-width:1200px;table-layout:fixed;">
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:24px;background:#24364b;border-top:4px solid #b8423c;color:#ffffff;">
@@ -86,6 +86,10 @@ def render_email(papers: list[Paper]) -> str:
             metadata = f'{p.journal or p.source} · {date} · Source: {p.source}'
             if group == 'random':
                 metadata += ' · Random selection'
+            if p.summary_input_source:
+                metadata += f' · Summary input: {p.summary_input_source}'
+                if p.summary_input_fallback:
+                    metadata += f' ({p.summary_input_fallback})'
             if p.abstract_source:
                 metadata += f' · Abstract: {p.abstract_source}'
             block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',

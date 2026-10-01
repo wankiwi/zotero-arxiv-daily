@@ -163,3 +163,78 @@ def test_original_abstract_always_preserved(group,status,abstract):
         assert 'No abstract available' in html and 'No abstract available' in plain
     if status=='generated':
         assert '该研究提出新方法。' in html and 'Original abstract / 原摘要' in plain
+
+@pytest.mark.parametrize('mode,full_text,expected,reason',[
+    ('abstract','Entire full text','abstract',None),
+    ('full_text','Entire full text','full_text',None),
+    ('full_text',None,'abstract','full_text_unavailable'),
+    ('full_text','Long text '*10000,'abstract','full_text_exceeds_context_limit'),
+])
+def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,reason,monkeypatch):
+    import zotero_arxiv_daily.protocol as module
+    calls=[]
+    monkeypatch.setattr(module,'truncate_prompt',lambda text,limit:text[:limit])
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='该研究提出新方法。'))])
+    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    p=paper(1,full_text=full_text)
+    p.generate_tldr(client,{'input_mode':mode})
+    assert p.summary_input_source==expected and p.summary_input_fallback==reason
+    assert len(calls)==1
+    prompt=calls[0]['messages'][1]['content']
+    if expected=='full_text':assert full_text in prompt and 'Abstract:' not in prompt
+    else:assert p.abstract in prompt and 'Full text:' not in prompt
+    assert p.abstract in render_email([p])
+
+def test_full_text_budget_fallback_is_one_call(config):
+    from decimal import Decimal
+    from zotero_arxiv_daily.budget import BudgetRequests, utc_day
+    config.llm.budget.enabled=True;config.llm.input_mode='full_text'
+    calls=[]
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='该研究提出新方法。'))])
+    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    p=paper(1,full_text='Full paper '*10000)
+    p.generate_tldr(client,config.llm,BudgetRequests(Decimal('.20'),Decimal('.004608'),utc_day()))
+    assert len(calls)==1 and p.summary_input_source=='abstract'
+    assert p.summary_input_fallback=='full_text_exceeds_budget_input_bound'
+    assert p.summary_input_fallback in render_email([p])
+
+def test_abstract_mode_never_fetches_fulltext(config):
+    from zotero_arxiv_daily.executor import Executor
+    from zotero_arxiv_daily.llm import ModelRequests
+    executor=Executor.__new__(Executor);executor.config=config;executor.openai_client=None
+    executor.model_requests=ModelRequests()
+    executor.retrievers={'journals':SimpleNamespace(enrich=lambda p:pytest.fail('abstract mode fetched full text'))}
+    executor._enrich(paper(1))
+
+@pytest.mark.parametrize('fields',[
+    {'primary_area':['unrelated'], 'secondary_area':['ai_4_physical_sciences']},
+    {'primary_area':'applications->chemistry_physics_and_earth_sciences'},
+    {'primary_area':'applications to physical sciences (physics, chemistry, biology, etc.)'},
+])
+def test_venue_schema_subject_aliases(config,fields):
+    r=retriever(config)
+    assert r.convert_to_paper(note(r,**fields)).subject_match_reason.startswith('subject field')
+
+def test_corl_author_keyword_gate(config):
+    r=retriever(config)
+    raw=note(r,title='Robot planning',abstract='Experiments',primary_area=None,free_keyword_1='molecular dynamics')
+    assert r.convert_to_paper(raw)
+
+def test_next_year_iclr_group_discovery(config):
+    r=retriever(config);seen=[]
+    def get(client,path,params):
+        identity=params['id'];seen.append(identity)
+        return {'groups':[{'id':identity,'content':{'submission_id':{'value':identity+'/-/Submission'}}}]}
+    r._get=get
+    groups=list(r._groups(None,'ICLR',2026))
+    assert 'ICLR.cc/2027/Conference' in seen
+    assert all('/Workshop' not in group for group,inv in groups)
+
+def test_invalid_summary_mode_fails_before_source_or_api_setup(config):
+    from zotero_arxiv_daily.executor import Executor
+    config.llm.input_mode='prefix'
+    with pytest.raises(ValueError,match='input_mode'):Executor(config)

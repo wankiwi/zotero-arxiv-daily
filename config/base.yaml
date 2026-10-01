@@ -56,6 +56,7 @@ email:
   sender_password: ??? # The password of the sender account. Note that it's not necessarily the password for logging in the e-mail client, but the authentication code for SMTP service. Ask your email provider for this. Example: abcdefghijklmn
 
 llm:
+  input_mode: abstract # abstract (default) or full_text with explicit fallback.
   budget:
     enabled: true # Fail closed unless provider pricing and token bounds are verified.
     daily_cny: 0.20

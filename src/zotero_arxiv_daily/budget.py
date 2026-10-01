@@ -33,6 +33,8 @@ def utc_day():
 
 def budget_plan(config):
     budget = config.get('budget', {})
+    if budget.get('enabled', True) is not True:
+        raise BudgetUnavailable('Budget guard disabled: paid calls prohibited, not unlimited')
     cap = Decimal(str(budget.get('daily_cny', '0.20')))
     if not cap.is_finite() or not 0 < cap <= MAX_DAILY_CNY:
         raise BudgetUnavailable('Daily CNY budget must be positive and no more than 0.20')
@@ -53,7 +55,10 @@ def budget_plan(config):
 
 
 def git(*args, **kwargs):
-    result = subprocess.run(['git', *args], capture_output=True, **kwargs)
+    try:
+        result = subprocess.run(['git', *args], capture_output=True, timeout=60, **kwargs)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise BudgetUnavailable('Budget ledger Git operation unavailable; no model call authorized') from exc
     if result.returncode:
         raise BudgetUnavailable('Budget ledger Git operation failed; no model call authorized')
     return result.stdout.strip()
@@ -68,7 +73,10 @@ def reserve_day(cap, day=None):
         git('fetch', '--no-tags', 'origin', f'refs/heads/{branch}')
         parent = git('rev-parse', 'FETCH_HEAD').decode()
         exists = subprocess.run(['git', 'cat-file', '-e', f'{parent}:{name}'], capture_output=True)
-        data = json.loads(git('show', f'{parent}:{name}')) if exists.returncode == 0 else {'version': 1, 'days': {}}
+        try:
+            data = json.loads(git('show', f'{parent}:{name}')) if exists.returncode == 0 else {'version': 1, 'days': {}}
+        except (ValueError, TypeError) as exc:
+            raise BudgetUnavailable('Invalid budget ledger; preserve and investigate') from exc
         if not isinstance(data, dict) or data.get('version') != 1 or not isinstance(data.get('days'), dict):
             raise BudgetUnavailable('Invalid budget ledger; preserve and investigate')
         if day in data['days']:
@@ -85,7 +93,10 @@ def reserve_day(cap, day=None):
             git('update-index','--add','--cacheinfo',f'100644,{blob},{name}',env=config)
             tree = git('write-tree',env=config).decode()
             commit = git('commit-tree',tree,'-p',parent,'-m','Reserve daily LLM budget before requests',env=config).decode()
-            pushed = subprocess.run(['git','push','origin',f'{commit}:refs/heads/{branch}'],capture_output=True)
+            try:
+                pushed = subprocess.run(['git','push','origin',f'{commit}:refs/heads/{branch}'],capture_output=True,timeout=60)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise BudgetUnavailable('Budget reservation push ambiguous; no paid calls authorized') from exc
             if pushed.returncode == 0:
                 return day
             # A concurrent writer may have advanced the branch. Re-fetch and

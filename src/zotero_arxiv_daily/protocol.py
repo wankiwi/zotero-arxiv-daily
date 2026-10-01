@@ -47,6 +47,8 @@ class Paper:
     abstract_source: Optional[str] = None
     subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
+    summary_input_source: Optional[str] = None
+    summary_input_fallback: Optional[str] = None
     tldr_status: Optional[str] = None
     tldr_error: Optional[str] = None
 
@@ -67,28 +69,36 @@ class Paper:
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
         lang = llm_params.get('language', 'Chinese')
-        prompt = f"Given the following information of a paper, generate a one-sentence TLDR summary in {lang}:\n\n"
-        if self.title:
-            prompt += f"Title:\n {self.title}\n\n"
-
-        if self.abstract:
-            prompt += f"Abstract: {self.abstract}\n\n"
-
-        if self.full_text:
-            prompt += f"Preview of main content:\n {self.full_text}\n\n"
-
-        if not self.full_text and not self.abstract:
-            logger.warning(f"Neither full text nor abstract is provided for {self.url}")
-            return "Failed to generate TLDR. Neither full text nor abstract is provided"
-        
-        # use gpt-4o tokenizer for estimation
+        mode = llm_params.get('input_mode', 'abstract')
+        if mode not in ('abstract', 'full_text'):
+            raise ValueError('llm.input_mode must be abstract or full_text')
         budgeted = llm_params.get('budget', {}).get('enabled', False)
+        self.summary_input_source, self.summary_input_fallback = 'abstract', None
+        title = self.title
         if budgeted:
-            short_title = self.title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
-            prompt = f'Title: {short_title}\nAbstract: {self.abstract}'
-            prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
+            title = title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
+        full_prompt = f'Title: {title}\nFull text:\n{self.full_text or ""}'
+        if mode == 'full_text':
+            if not self.full_text:
+                self.summary_input_fallback = 'full_text_unavailable'
+            elif budgeted and len(full_prompt.encode('utf-8')) > PROMPT_BYTES:
+                self.summary_input_fallback = 'full_text_exceeds_budget_input_bound'
+            elif not budgeted and truncate_prompt(full_prompt, 4000) != full_prompt:
+                self.summary_input_fallback = 'full_text_exceeds_context_limit'
+            else:
+                self.summary_input_source = 'full_text'
+        if self.summary_input_source == 'full_text':
+            prompt = full_prompt  # Entire retrieved text, never a prefix labeled as full text.
         else:
-            prompt = truncate_prompt(prompt, 4000)
+            if self.summary_input_fallback:
+                logger.warning(f'Summary input fallback to abstract: {self.summary_input_fallback}')
+            if not self.abstract:
+                raise ValueError('No usable summary input after full-text fallback')
+            prompt = f'Title: {title}\nAbstract: {self.abstract}'
+            if budgeted:
+                prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
+            else:
+                prompt = truncate_prompt(prompt, 4000)
         system = f'Return exactly one sentence in {lang} summarizing the scientific evidence. No heading, list, or invented claims.'
         kwargs = dict(llm_params.get('generation_kwargs', {}))
         if budgeted:
@@ -116,7 +126,7 @@ class Paper:
     
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
         self.tldr_error = None
-        if not self.abstract and (not self.full_text or llm_params.get('budget', {}).get('enabled', False)):
+        if not self.abstract and (llm_params.get('input_mode', 'abstract') != 'full_text' or not self.full_text):
             self.tldr, self.tldr_status = '', 'not_generated'
             return self.tldr
         try:
