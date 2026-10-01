@@ -68,6 +68,29 @@ def test_rss_retention_and_max_items(tmp_path):
     assert len(items) == 2 and all(i.findtext('title') != 'P0' for i in items)
 
 
+def test_historical_rss_covers_are_filtered_before_limit_without_history_mutation(tmp_path):
+    state = State(tmp_path / 'state.json')
+    research = make_sample_paper(title='Front cover surfaces control transport', url='https://example.org/research')
+    cover = make_sample_paper(title='Outside Front Cover: Materials', url='https://example.org/cover')
+    state.add([research, cover])
+    state.save()
+    before = state.path.read_bytes()
+    path, emitted = write_rss(state, {'path':str(tmp_path/'feed.xml'), 'max_items':1})
+    assert [p.title for p in emitted] == [research.title]
+    assert ET.parse(path).findtext('./channel/item/title') == research.title
+    assert cover.title not in path.with_name('index.html').read_text()
+    assert state.path.read_bytes() == before and len(state.records) == 2
+
+
+def test_direct_rss_page_uses_same_cover_filter(tmp_path):
+    from zotero_arxiv_daily.output.rss import write_rss_page
+    cover = make_sample_paper(title='Inside Back Cover: Image')
+    research = make_sample_paper(title='Cover times in random walks')
+    write_rss_page(tmp_path/'feed.xml', [cover,research])
+    page = (tmp_path/'index.html').read_text()
+    assert cover.title not in page and research.title in page
+
+
 def test_corrupt_state_is_not_silently_overwritten(tmp_path):
     path = tmp_path / 'state.json'
     path.write_text('{invalid')

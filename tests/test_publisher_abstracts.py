@@ -121,7 +121,8 @@ def test_publisher_transport_has_no_automatic_retries():
         assert client.get_adapter('https://journals.aps.org').max_retries.total == 0
 
 
-def test_real_requests_redirect_preparation_never_reads_oversized_body():
+@pytest.mark.parametrize('guarded', [True, False])
+def test_real_requests_redirect_preparation_never_reads_oversized_body(guarded):
     import io
     import requests
     from requests.adapters import BaseAdapter
@@ -142,16 +143,21 @@ def test_real_requests_redirect_preparation_never_reads_oversized_body():
             response = requests.Response()
             response.request, response.url = request, request.url
             response.status_code = 302 if self.calls == 1 else 200
-            response.headers = {'Location':'https://www.nature.com/articles/synthetic-test'} if self.calls == 1 else {'Content-Type':'text/html'}
+            response.headers = requests.structures.CaseInsensitiveDict(
+                {'Location':'https://www.nature.com/articles/synthetic-test'} if self.calls == 1 else {'Content-Type':'text/html'})
+            assert response.is_redirect == (self.calls == 1)
             response.raw = HTTPResponse(body=oversized if self.calls == 1 else final, preload_content=False)
             return response
         def close(self): pass
     adapter = Adapter()
-    with module.publisher_session() as client:
+    with (module.publisher_session() if guarded else requests.Session()) as client:
         client.mount('https://', adapter)
         result = module.recover_publisher(make_sample_paper(doi=DOI), client, set())
     assert result[0] == ABSTRACT and adapter.calls == 2
-    assert oversized.consumed == 0 and oversized.closed
+    # The unguarded control reproduces the original eager read, so this fixture
+    # cannot pass merely because Requests failed to recognize the redirect.
+    assert oversized.consumed == (0 if guarded else module.MAX_BYTES + 1_000_000)
+    assert oversized.closed
     assert final.consumed < module.MAX_BYTES
 
 

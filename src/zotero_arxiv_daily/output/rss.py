@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 
 from ..identity import paper_id
 from ..state import load_paper, utcnow
+from ..selection import is_cover_title
 
 
 def write_rss(state, config):
@@ -15,7 +16,8 @@ def write_rss(state, config):
     if days < 1 or limit < 1:
         raise ValueError('RSS retention_days and max_items must be positive')
     cutoff = utcnow() - timedelta(days=days)
-    records = sorted((v for v in state.records.values() if datetime.fromisoformat(v['added']) >= cutoff),
+    records = sorted((v for v in state.records.values() if datetime.fromisoformat(v['added']) >= cutoff
+                      and not is_cover_title(v['paper']['title'])),
                      key=lambda v: v['added'], reverse=True)[:limit]
     root = ET.Element('rss', version='2.0')
     channel = ET.SubElement(root, 'channel')
@@ -57,6 +59,8 @@ def write_rss_page(feed_path, papers):
     """Public, static view of the same recommendations included in the feed."""
     articles = []
     for paper in papers:
+        if is_cover_title(paper.title):
+            continue
         score = f'{paper.score:.2f}' if paper.score is not None else 'Unknown'
         try:
             url = paper.url if urlsplit(paper.url).scheme in ('https', 'http') else '#'
