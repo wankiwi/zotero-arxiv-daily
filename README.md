@@ -179,7 +179,7 @@ preprint_interests:
 
 ### OpenReview 的真实范围与限制
 
-仅主会议，不含workshops。API v2 `/groups` 核验组，再读取其 `submission_id` 或 `submission_name`，按 submission invitation 拉取公开 notes，避免仅按 accepted venueid 丢失审稿中论文。年度组覆盖当前/上一年，ICLR另含下一年；TMLR无年度。`mintmdate`扫描窗口内实际更新记录，未发表记录日期优先 `odate`（首次公开），缺失时退至 cdate/tcdate（创建时间）；经venue ID和pdate核验的已发表记录使用pdate，以包含新发表的旧投稿。无持久增量水位，重叠窗口+delivery history去重，因此失败不会推进水位；窗口外首次公开但元数据日期错误的记录可能无法恢复，不能声称完整历史覆盖。
+仅主会议，不含workshops。API v2 `/groups` 核验组，再读取其 `submission_id` 或 `submission_name`，按 submission invitation 拉取公开 notes，避免仅按 accepted venueid 丢失审稿中论文。年度组覆盖当前/上一年，ICLR另含下一年；TMLR无年度。修改时间扫描窗口内实际更新记录，未发表记录日期优先 `odate`（首次公开），缺失时退至 cdate/tcdate（创建时间）；经venue ID和pdate核验的已发表记录使用pdate，以包含新发表的旧投稿。无持久增量水位，重叠窗口+delivery history去重，因此失败不会推进水位；窗口外首次公开但元数据日期错误的记录可能无法恢复，不能声称完整历史覆盖。
 
 官方content字段按 `.value`解包，subject标量/数组都支持。NeurIPS `ai_4_physical_sciences` / `machine_learning_for_sciences`、ICML `applications->chemistry_physics_and_earth_sciences`、ICLR physical sciences 标签映射到科学方向。TMLR和部分CoRL年份无subject；请求包含宽泛的 **Machine Learning** 时，核验的这五个ML主venue作为明确记录的venue-scope fallback，仍必须通过领域关键词过滤。仅配置科学方向且无subject时，用title/abstract/author关键词中的明确科学ML短语匹配；否则排除。每篇保存 `subject_match_reason`，日志报告fallback数。
 
@@ -258,3 +258,8 @@ llm:
 
 
 凭据设置后可在 Actions 的 **Test** 工作流选择 `mode=openreview`，在待验证分支运行只读验证：仅注入上述OpenReview secrets，不注入邮件/LLM凭据，不访问投递历史、不调用模型。先验证登录和TMLR公开样本，通过后检查其余四个会场；总请求不超过22、每秒最多一次、不重试或跟随重定向。日志仅含阶段、HTTP状态及计数，不保存稿件或认证响应。每会场最多10条近期修改样本；匹配数为该有限样本通过原有日期/主题/关键词条件的结果，不代表当天完整配额。
+
+
+`mode=openreview_full` 执行完整的有界覆盖诊断：所有已发现的当前/前一年会场及下一年ICLR，按投稿邀请分页，每页1000条、最多160次请求，逐阶段输出公开ACL、日期、关键词和主题计数。使用官方Notes分页参数；不以创建日期截断，避免漏掉早投稿而新公开的论文。生产检索也完整分页后应用原日期窗口，达到页数上限会明确报错。历史正例诊断只在内存中评估相同主题条件，不改变生产日期窗口，不输出论文或账号内容。
+
+2026-10-01公开API验证：55,589条公开记录、129条在原7天窗口内、1条TMLR同时匹配日期/关键词/主题，历史同主题正例1,164条。各会场并非每天发布新稿；不能把每组10条最近修改记录的小样本零命中解释为生产零结果，配额不足仍按实际合格数量投递。

@@ -389,3 +389,30 @@ def test_openreview_public_note_without_exclusions_is_retained(config,explicit_e
         raw[2]['nonreaders']=[]
         raw[2]['content']['abstract']['nonreaders']=[]
     assert r.convert_to_paper(raw).abstract=='Experiments'
+
+
+def test_openreview_pagination_uses_supported_queries_and_local_date_filter(config,monkeypatch):
+    import zotero_arxiv_daily.retriever.openreview_retriever as module
+    config.source.openreview.venues=['TMLR'];r=retriever(config);queries=[]
+    public=note(r)[2];public['readers']=['everyone']
+    class Client:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+    monkeypatch.setattr(module,'session',lambda:Client())
+    monkeypatch.setattr(r,'_groups',lambda *a:[('TMLR','TMLR/-/Submission')])
+    def get(client,path,params):
+        queries.append(params);return {'notes':[public],'count':1}
+    monkeypatch.setattr(r,'_get',get)
+    result=r.retrieve_papers()
+    assert len(result)==1  # cdate is old but first-public odate is within window.
+    assert 'mintmdate' not in queries[0] and 'mintcdate' not in queries[0]
+    assert queries[0]['count']=='true' and queries[0]['sort']=='tmdate:desc'
+
+
+def test_openreview_filter_stage_counts(config):
+    r=retriever(config);stats={}
+    assert r.convert_to_paper(note(r),diagnostics=stats)
+    assert all(stats[key]==1 for key in ['examined','public_acl','valid_date','within_window','keyword_match','subject_match'])
+    old=note(r);old[2]['odate']=int((r.since-timedelta(days=1)).timestamp()*1000)
+    assert r.convert_to_paper(old,diagnostics=stats) is None
+    assert stats['older_than_window']==1 and stats['keyword_match']==1

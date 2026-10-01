@@ -82,24 +82,25 @@ def validate(retriever, client):
         groups = list(retriever._groups(client, venue, now.year))
         if not groups:
             raise RuntimeError('No supported venue group found')
-        current = [group for group in groups if f'/{now.year}/' in group[0]]
-        group, invitation = (current or groups)[-1]
-        data = retriever._get(client, '/notes', {'invitation': invitation, 'limit': 10, 'offset': 0, 'sort': 'tmdate:desc'})
-        notes = data.get('notes')
-        if not isinstance(notes, list):
-            raise RuntimeError('Malformed notes response')
-        public = [n for n in notes if isinstance(n, dict) and isinstance(n.get('readers'), list)
-                  and 'everyone' in n['readers'] and no_exclusions(n) and not n.get('ddate')]
-        eligible, malformed = 0, 0
-        for note in public:
-            try:
-                eligible += retriever.convert_to_paper((venue, group, note)) is not None
-            except (ValueError, TypeError, KeyError, OverflowError):
-                malformed += 1
-        total_public += len(public)
-        print(json.dumps({'venue': venue, 'http_status': client.last_status, 'sample_count': len(notes),
-                          'public_count': len(public), 'eligible_in_configured_window': eligible, 'malformed_count': malformed}))
-        if venue == 'TMLR' and not public:
+        note_count = public_count = eligible = malformed = 0
+        for group, invitation in groups:
+            data = retriever._get(client, '/notes', {'invitation': invitation, 'limit': 10, 'offset': 0, 'sort': 'tmdate:desc'})
+            notes = data.get('notes')
+            if not isinstance(notes, list):
+                raise RuntimeError('Malformed notes response')
+            public = [n for n in notes if isinstance(n, dict) and isinstance(n.get('readers'), list)
+                      and 'everyone' in n['readers'] and no_exclusions(n) and not n.get('ddate')]
+            note_count += len(notes)
+            public_count += len(public)
+            for note in public:
+                try:
+                    eligible += retriever.convert_to_paper((venue, group, note)) is not None
+                except (ValueError, TypeError, KeyError, OverflowError):
+                    malformed += 1
+        total_public += public_count
+        print(json.dumps({'venue': venue, 'http_status': client.last_status, 'group_count': len(groups), 'sample_count': note_count,
+                          'public_count': public_count, 'eligible_in_configured_window': eligible, 'malformed_count': malformed}))
+        if venue == 'TMLR' and not public_count:
             raise RuntimeError('Representative public-note check returned no public notes; expansion stopped')
     print(json.dumps({'status': 'success', 'request_count': client.calls, 'public_sample_count': total_public}))
 

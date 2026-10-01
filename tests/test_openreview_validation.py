@@ -55,3 +55,19 @@ def test_provider_error_diagnostics_never_return_provider_text(message,category)
     from scripts.validate_openreview import safe_error_category
     response=SimpleNamespace(json=lambda:{'errors':[{'message':message}]})
     assert safe_error_category(response)==category
+
+
+def test_probe_checks_every_group_including_next_iclr_year(capsys):
+    client=SimpleNamespace(last_status=200,calls=21,stage='login')
+    queries=[]
+    class Retriever:
+        authenticated=True
+        days=7
+        def _authenticate(self,client):pass
+        def _groups(self,client,venue,year):
+            return [(str(y),f'{venue}/{y}/-/Submission') for y in ([year-1,year,year+1] if venue=='ICLR' else [year])]
+        def _get(self,client,path,params):
+            queries.append(params['invitation']);return {'notes':[{'readers':['everyone']}]}
+        def convert_to_paper(self,raw):return object()
+    validate(Retriever(),client)
+    assert len([q for q in queries if q.startswith('ICLR/')])==3

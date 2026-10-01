@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from collections.abc import Mapping
 import re
 import os
+import time
 from urllib.parse import quote
 from loguru import logger
 from .base import BaseRetriever, register_retriever
@@ -94,6 +95,10 @@ class OpenReviewRetriever(BaseRetriever):
         self.authenticated = True
 
     def _get(self, client, path, params):
+        delay = 1 - (time.monotonic() - getattr(self, '_last_request', 0))
+        if delay > 0:
+            time.sleep(delay)
+        self._last_request = time.monotonic()
         response = client.get(API + path, params=params, timeout=(10, 30), allow_redirects=False)
         if response.status_code in (401, 403, 429):
             raise RuntimeError(f'OpenReview API access blocked HTTP {response.status_code}; ' +
@@ -138,10 +143,13 @@ class OpenReviewRetriever(BaseRetriever):
                     groups = list(self._groups(client, venue, until.year))
                     if not groups: raise RuntimeError('No public API v2 conference groups found')
                     for group, invitation in groups:
+                        # Notes API supports mintcdate, not a documented mintmdate.
+                        # Creation cutoffs can miss older submissions made public
+                        # recently: page the verified invitation and filter locally.
                         offset, previous = 0, None
                         for _ in range(self.max_pages):
                             data = self._get(client, '/notes', {'invitation': invitation, 'limit': 1000, 'offset': offset,
-                                'mintmdate': int(since.timestamp() * 1000), 'sort': 'tmdate:asc'})
+                                'sort': 'tmdate:desc', 'count': 'true'})
                             notes = data.get('notes')
                             if not isinstance(notes, list): raise ValueError('Malformed OpenReview notes response')
                             fingerprint = tuple(n.get('id') for n in notes)
