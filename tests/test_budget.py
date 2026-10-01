@@ -111,7 +111,7 @@ def test_unicode_prompt_bound_and_reasoning_stops_calls(config,monkeypatch):
     def create(**kwargs):
         calls.append(kwargs)
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='中文摘要。',reasoning_content='Unexpected'))])
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=Paper('journals','长标题'*1000,[],'分子材料摘要'*1000,'https://example.org/paper')
     p.generate_tldr(client,config.llm,guard)
     assert len(calls)==1 and p.tldr_status=='fallback' and guard.remaining==0
@@ -163,7 +163,7 @@ def test_response_violation_aborts_queued_calls(problem):
         elif problem=='reasoning_tokens':response.usage.completion_tokens_details.reasoning_tokens=10
         else:response.choices[0].message.reasoning_content='Unexpected'
         return response
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     def worker(i):
         barrier.wait()
         p=Paper('journals',str(i),[],'Scientific abstract','https://example.org')
@@ -220,3 +220,42 @@ def test_reviewed_deepseek_peak_price_fits_45(config,monkeypatch):
     config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'
     cap,cost=budget.budget_plan(config.llm)
     assert cost==Decimal('0.00432') and cost*45==Decimal('0.19440') and cost*45<=cap
+
+@pytest.mark.parametrize('status',[429,500])
+def test_direct_sdk_default_retries_are_disabled_at_paid_boundary(status):
+    import httpx
+    from openai import OpenAI
+    from tests.canned_responses import make_sample_paper,make_budget_guard
+    calls=[]
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status,json={'error':{'message':'Synthetic provider error','type':'server_error'}})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        with OpenAI(api_key='fake-test-key',base_url='https://example.org/v1',http_client=transport) as client:
+            assert client.max_retries==2
+            guard=make_budget_guard()
+            paper=make_sample_paper()
+            paper.generate_tldr(client,{'generation_kwargs':{'model':'test-model'}},guard)
+            assert len(calls)==1 and client.max_retries==2
+            assert guard.remaining==Decimal('.199')
+            assert paper.tldr_status=='fallback' and paper.tldr_error=='request_failed'
+
+
+def test_unknown_retry_behavior_fails_before_dispatch():
+    from tests.canned_responses import make_sample_paper,make_budget_guard
+    calls=[]
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:calls.append(kw))))
+    del client.max_retries
+    paper=make_sample_paper()
+    paper.generate_tldr(client,{'generation_kwargs':{'model':'test-model'}},make_budget_guard())
+    assert not calls and paper.tldr_error=='budget_unavailable'
+
+
+def test_bootstrap_rejects_shallow_history(tmp_path,monkeypatch):
+    git,checkout,remote=make_git(tmp_path,monkeypatch,initialize_ledger=False)
+    shallow=tmp_path/'shallow'
+    git('clone','--depth','1','--branch','paper-state',remote.as_uri(),str(shallow))
+    monkeypatch.chdir(shallow)
+    assert git('rev-parse','--is-shallow-repository').strip()==b'true'
+    with pytest.raises(budget.BudgetUnavailable,match='complete history'):
+        budget.bootstrap_ledger()

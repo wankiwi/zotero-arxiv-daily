@@ -145,7 +145,7 @@ def test_chinese_prompt_without_live_llm(monkeypatch):
     def create(**kwargs):
         requests.append(kwargs)
         return make_chat_response('该研究提出了分子模拟方法。', model=kwargs.get('model'))
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=paper(1);p.generate_tldr(client,{'language':'Chinese','generation_kwargs':{'model':'test'}},make_budget_guard())
     assert p.tldr_status=='generated' and len(requests)==1
     assert 'exactly one sentence in Chinese' in requests[0]['messages'][0]['content']
@@ -178,7 +178,7 @@ def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,
     def create(**kwargs):
         calls.append(kwargs)
         return make_chat_response('该研究提出新方法。', model=kwargs.get('model'))
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=paper(1,full_text=full_text)
     p.generate_tldr(client,{'input_mode':mode,'generation_kwargs':{'model':'test'}},make_budget_guard())
     assert p.summary_input_source==expected and p.summary_input_fallback==reason
@@ -196,7 +196,7 @@ def test_full_text_budget_fallback_is_one_call(config):
     def create(**kwargs):
         calls.append(kwargs)
         return make_chat_response('该研究提出新方法。', model=kwargs.get('model'))
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=paper(1,full_text='Full paper '*10000)
     p.generate_tldr(client,config.llm,BudgetRequests(Decimal('.20'),Decimal('.004608'),utc_day()))
     assert len(calls)==1 and p.summary_input_source=='abstract'

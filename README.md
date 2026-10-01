@@ -218,11 +218,11 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 仅约束本仓库受控请求，不是账户级扣费上限；其他客户端或旧版本不在保护范围内。所有公开摘要生成入口均要求BudgetRequests预约；缺失budget配置默认要求守卫，false禁止调用而不是无限额。付费单位提取已移除，保留出版社单位元数据。
 
-保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01，到2026-10-08有效；过期须重新核验并更新。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
+保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01，有效期至2026-10-08 UTC结束；2026-10-09 UTC起自动停止付费调用、回退原摘要，须重新核验价格后更新，不会无证据自动续期。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
 
 用户输入最多768 UTF-8字节，系统输入最多256字节，再保留128 framing tokens，共按1152输入token上界预约。原摘要仍在邮件完整保留，仅模型上下文缩短。每次最坏预约 `(1152×3 + 96×9)/1,000,000 = ¥0.00432`，45篇合计¥0.1944。预算是基于已发布接口约定的工程上限，不是对供应商未来涨价或违规计费的绝对保证。
 
-任何调用前须在共享paper-state分支的llm_budget.json原子提交当天完整额度。普通fast-forward push实现并发比较交换，不强推、不改投递记录。失败、账本损坏/丢失、当天已预约均不调用；崩溃/超时不返还额度，当天后续运行回退原摘要。运行中串行预扣及实际请求，跨UTC日停止；模型ID、usage缺失/无效、token计数越界、reasoning_content/reasoning_tokens异常会终止所有排队调用。无SDK自动重试。
+任何调用前须在共享paper-state分支的llm_budget.json原子提交当天完整额度。普通fast-forward push实现并发比较交换，不强推、不改投递记录。失败、账本损坏/丢失、当天已预约均不调用；崩溃/超时不返还额度，当天后续运行回退原摘要。运行中串行预扣及实际请求，跨UTC日停止；模型ID、usage缺失/无效、token计数越界、reasoning_content/reasoning_tokens异常会终止所有排队调用。实际付费请求边界强制client.with_options(max_retries=0)，直接调用库函数也不能保留SDK默认重试。
 
 首次激活需明确初始化（本命令会向paper-state添加账本，但不调用模型）：
 
@@ -230,7 +230,7 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 uv run --frozen python scripts/bootstrap_budget.py --initialize-new-ledger
 ```
 
-只允许该分支从未存在账本时初始化；若账本曾存在后丢失，必须恢复旧账本而非重建空额度。常规推荐路径绝不自动初始化。先将守卫代码合并并初始化，再在CUSTOM_CONFIG设置llm.enabled=true；旧main不应先启用。endpoint/model/密钥值仍由现有secret和配置解析，不打印或改写凭据。付费验证必须占用同一UTC日预约，不能另开不计费的“测试”路径。
+初始化必须使用非浅克隆的完整历史，并核对远端账本。只允许该分支从未存在账本时初始化；若账本曾存在后丢失，必须恢复旧账本而非重建空额度。常规推荐路径绝不自动初始化。先将守卫代码合并并初始化，再在CUSTOM_CONFIG设置llm.enabled=true；旧main不应先启用。endpoint/model/密钥值仍由现有secret和配置解析，不打印或改写凭据。付费验证必须占用同一UTC日预约，不能另开不计费的“测试”路径。
 
 ### OpenReview访问故障的实际影响
 

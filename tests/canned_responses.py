@@ -57,6 +57,7 @@ def make_stub_openai_client():
     to the Docker mock_openai server that CI previously relied on.
     """
     return SimpleNamespace(
+        max_retries=0,
         chat=SimpleNamespace(
             completions=SimpleNamespace(create=_stub_chat_create),
         ),

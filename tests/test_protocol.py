@@ -16,7 +16,7 @@ def test_tldr_returns_response(llm_params):
 @pytest.mark.parametrize('params',[{}, {'budget':{}}, {'budget':{'enabled':False}}])
 def test_missing_or_disabled_reservation_blocks_all_direct_summary_paths(params):
     calls=[]
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:calls.append(kw))))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:calls.append(kw))))
     paper=make_sample_paper()
     paper.generate_tldr(client,params)
     assert paper.tldr_error=='budget_unavailable' and not calls
@@ -30,7 +30,7 @@ def test_tldr_without_evidence_never_calls(llm_params):
     assert paper.generate_tldr(None,llm_params)=='' and paper.tldr_status=='not_generated'
 
 def test_tldr_fallback_after_reserved_failure(llm_params):
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:(_ for _ in ()).throw(RuntimeError('API down')))))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:(_ for _ in ()).throw(RuntimeError('API down')))))
     paper=make_sample_paper()
     assert paper.generate_tldr(client,llm_params,make_budget_guard())==paper.abstract
     assert paper.tldr_error=='request_failed'
@@ -48,7 +48,7 @@ def test_long_unicode_abstract_is_bounded_without_tokenizer(llm_params,monkeypat
     def create(**kwargs):
         requests.append(kwargs)
         return make_chat_response('中文摘要。', model=kwargs.get('model'))
-    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     paper=make_sample_paper(abstract='科学摘要'*10000)
     paper.generate_tldr(client,llm_params,make_budget_guard())
     assert len(requests[0]['messages'][1]['content'].encode())<=768

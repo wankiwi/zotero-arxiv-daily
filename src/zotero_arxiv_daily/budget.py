@@ -177,6 +177,8 @@ def audit_response(response, expected_model):
 
 def bootstrap_ledger():
     """Explicit one-time operation, never called by a paid execution path."""
+    if git('rev-parse', '--is-shallow-repository') != b'false':
+        raise BudgetUnavailable('Bootstrap requires a non-shallow clone with complete history')
     branch, name = 'paper-state', 'llm_budget.json'
     refs = git('ls-remote', '--heads', 'origin', f'refs/heads/{branch}').decode().split()
     if len(refs) != 2 or refs[1] != f'refs/heads/{branch}':
@@ -190,3 +192,13 @@ def bootstrap_ledger():
     data = {'version': 1, 'days': {}, 'initialized_at': datetime.now(timezone.utc).isoformat()}
     if not _push_ledger(parent, data, 'Initialize new LLM budget ledger explicitly'):
         raise BudgetUnavailable('Bootstrap push failed; inspect remote before retrying')
+
+
+def no_retry_client(client):
+    """Enforce the reservation's one-request contract at the paid boundary."""
+    options = getattr(client, 'with_options', None)
+    request_client = options(max_retries=0) if callable(options) else client
+    retries = getattr(request_client, 'max_retries', None)
+    if type(retries) is not int or retries != 0:
+        raise BudgetUnavailable('Paid client must explicitly disable automatic retries')
+    return request_client

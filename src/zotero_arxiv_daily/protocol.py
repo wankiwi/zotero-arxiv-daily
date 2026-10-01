@@ -6,7 +6,7 @@ import tiktoken
 from openai import OpenAI
 from loguru import logger
 from .llm import model_unavailable
-from .budget import BudgetUnavailable, BudgetRequests, PROMPT_BYTES, SYSTEM_BYTES, MAX_OUTPUT_TOKENS, audit_response
+from .budget import BudgetUnavailable, BudgetRequests, PROMPT_BYTES, SYSTEM_BYTES, MAX_OUTPUT_TOKENS, audit_response, no_retry_client
 RawPaperItem = TypeVar('RawPaperItem')
 
 @lru_cache(maxsize=1)
@@ -111,7 +111,8 @@ class Paper:
                       'extra_body': {'enable_thinking': False}}
         
         def operation():
-            response = openai_client.chat.completions.create(
+            request_client = no_retry_client(openai_client)
+            response = request_client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",

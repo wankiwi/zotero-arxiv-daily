@@ -25,7 +25,7 @@ def not_found(message, code=404):
 
 
 def client_with(operation):
-    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=operation)))
+    return SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=operation)))
 
 
 def test_unavailable_model_stops_parallel_summary_and_affiliation_requests():
