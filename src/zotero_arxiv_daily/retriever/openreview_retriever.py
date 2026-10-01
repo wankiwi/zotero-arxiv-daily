@@ -28,12 +28,18 @@ def value(content, key, default=None):
     result = content.get(key, default)
     return result.get('value', default) if isinstance(result, dict) else result
 
+def no_exclusions(item):
+    exclusions = item.get('nonreaders', [])
+    return isinstance(exclusions, list) and not exclusions
+
+
 def public_fields(content):
     # Fields without their own ACL inherit the public note/group ACL. Explicit
-    # field ACLs override it; never pass restricted values to filters or output.
+    # readers and exclusions override it; malformed exclusions fail closed.
     return {key: item for key, item in content.items()
-            if not isinstance(item, dict) or 'readers' not in item or
-            isinstance(item['readers'], list) and 'everyone' in item['readers']}
+            if not isinstance(item, dict) or (no_exclusions(item) and
+                ('readers' not in item or
+                 isinstance(item['readers'], list) and 'everyone' in item['readers']))}
 
 
 def strings(item):
@@ -163,7 +169,7 @@ class OpenReviewRetriever(BaseRetriever):
         if not isinstance(note, Mapping) or not isinstance(note.get('content'), Mapping):
             raise ValueError('OpenReview note content must be a mapping')
         readers = note.get('readers', [] if self.authenticated else ['everyone'])
-        if note.get('ddate') or not isinstance(readers, list) or 'everyone' not in readers: return None
+        if note.get('ddate') or not isinstance(readers, list) or 'everyone' not in readers or not no_exclusions(note): return None
         content = public_fields(note['content'])
         if 'withdraw' in str(value(content, 'venue', '')).casefold(): return None
         title, abstract = clean_abstract(value(content, 'title', '')), clean_abstract(value(content, 'abstract', ''))

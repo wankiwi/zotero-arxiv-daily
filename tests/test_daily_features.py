@@ -360,3 +360,32 @@ def test_openreview_credentials_optional_but_pair_required(config,monkeypatch):
     r._authenticate(SimpleNamespace());assert not r.authenticated
     monkeypatch.setenv('OPENREVIEW_USERNAME','synthetic-user')
     with pytest.raises(RuntimeError,match='both OPENREVIEW'):r._authenticate(SimpleNamespace())
+
+
+@pytest.mark.parametrize('exclusions',[['excluded-group'],None,'',{},False,0,['everyone']])
+def test_authenticated_openreview_rejects_note_exclusions(config,exclusions):
+    r=retriever(config);r.authenticated=True;raw=note(r)
+    raw[2].update(readers=['everyone'],nonreaders=exclusions)
+    # No Paper is created, so neither digest rendering nor LLM sees the note.
+    assert r.convert_to_paper(raw) is None
+
+
+@pytest.mark.parametrize('exclusions',[['excluded-group'],None,'',{},False,0,['everyone']])
+def test_openreview_excluded_fields_never_reach_paper(config,exclusions):
+    r=retriever(config);r.authenticated=True;raw=note(r)
+    raw[2].update(readers=['everyone'],nonreaders=[])
+    raw[2]['content']['abstract']={'value':'CONFIDENTIAL','readers':['everyone'],'nonreaders':exclusions}
+    raw[2]['content']['authors']={'value':['CONFIDENTIAL'],'nonreaders':exclusions}
+    p=r.convert_to_paper(raw)
+    assert p and not p.abstract and not p.authors and 'CONFIDENTIAL' not in repr(p)
+    raw[2]['content']['title']['nonreaders']=exclusions
+    assert r.convert_to_paper(raw) is None
+
+
+@pytest.mark.parametrize('explicit_empty',[False,True])
+def test_openreview_public_note_without_exclusions_is_retained(config,explicit_empty):
+    r=retriever(config);r.authenticated=True;raw=note(r);raw[2]['readers']=['everyone']
+    if explicit_empty:
+        raw[2]['nonreaders']=[]
+        raw[2]['content']['abstract']['nonreaders']=[]
+    assert r.convert_to_paper(raw).abstract=='Experiments'
