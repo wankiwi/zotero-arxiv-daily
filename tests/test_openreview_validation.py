@@ -41,3 +41,17 @@ def test_probe_rejects_request_beyond_bound_or_origin():
         client.calls=22
         with pytest.raises(RuntimeError,match='boundary'):client.get('https://api2.openreview.net/notes')
     finally:client.close()
+
+
+@pytest.mark.parametrize('message,category',[
+    ('expiresIn must be a string SENSITIVE','login_expiry_parameter_rejected'),
+    ('Invalid username or password SENSITIVE','credentials_or_login_identifier_rejected'),
+    ('Invalid email SENSITIVE','login_email_format_rejected'),
+    ('Account not activated SENSITIVE','account_activation_required'),
+    ('MFA required SENSITIVE','MFA_required'),
+    ('SENSITIVE','unclassified_error'),
+])
+def test_provider_error_diagnostics_never_return_provider_text(message,category):
+    from scripts.validate_openreview import safe_error_category
+    response=SimpleNamespace(json=lambda:{'errors':[{'message':message}]})
+    assert safe_error_category(response)==category
