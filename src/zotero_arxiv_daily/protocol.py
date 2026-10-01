@@ -2,12 +2,11 @@ from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
 from functools import lru_cache
-import re
 import tiktoken
 from openai import OpenAI
 from loguru import logger
 from .llm import model_unavailable
-import json
+from .budget import BudgetUnavailable, BudgetRequests, PROMPT_BYTES, SYSTEM_BYTES, MAX_OUTPUT_TOKENS, audit_response, no_retry_client
 RawPaperItem = TypeVar('RawPaperItem')
 
 @lru_cache(maxsize=1)
@@ -42,7 +41,15 @@ class Paper:
     journal: Optional[str] = None
     issns: list[str] = field(default_factory=list)
     published: Optional[datetime] = None
+    publication_kind: Optional[str] = None
+    publication_status: Optional[str] = None
+    publication_venue: Optional[str] = None
+    recommendation_group: Optional[str] = None
+    abstract_source: Optional[str] = None
+    subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
+    summary_input_source: Optional[str] = None
+    summary_input_fallback: Optional[str] = None
     tldr_status: Optional[str] = None
     tldr_error: Optional[str] = None
 
@@ -61,97 +68,93 @@ class Paper:
         return self.tldr or self.abstract or 'No abstract available'
 
 
-    def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
-        lang = llm_params.get('language', 'English')
-        prompt = f"Given the following information of a paper, generate a one-sentence TLDR summary in {lang}:\n\n"
-        if self.title:
-            prompt += f"Title:\n {self.title}\n\n"
-
-        if self.abstract:
-            prompt += f"Abstract: {self.abstract}\n\n"
-
-        if self.full_text:
-            prompt += f"Preview of main content:\n {self.full_text}\n\n"
-
-        if not self.full_text and not self.abstract:
-            logger.warning(f"Neither full text nor abstract is provided for {self.url}")
-            return "Failed to generate TLDR. Neither full text nor abstract is provided"
+    def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
+        if not isinstance(requests, BudgetRequests) or llm_params.get("budget", {}).get("enabled", True) is not True:
+            raise BudgetUnavailable("A mandatory daily budget reservation is required")
+        lang = llm_params.get('language', 'Chinese')
+        mode = llm_params.get('input_mode', 'abstract')
+        if mode not in ('abstract', 'full_text'):
+            raise ValueError('llm.input_mode must be abstract or full_text')
+        budgeted = True
+        self.summary_input_source, self.summary_input_fallback = 'abstract', None
+        title = self.title
+        if budgeted:
+            title = title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
+        full_prompt = f'Title: {title}\nFull text:\n{self.full_text or ""}'
+        if mode == 'full_text':
+            if not self.full_text:
+                self.summary_input_fallback = 'full_text_unavailable'
+            elif budgeted and len(full_prompt.encode('utf-8')) > PROMPT_BYTES:
+                self.summary_input_fallback = 'full_text_exceeds_budget_input_bound'
+            elif not budgeted and truncate_prompt(full_prompt, 4000) != full_prompt:
+                self.summary_input_fallback = 'full_text_exceeds_context_limit'
+            else:
+                self.summary_input_source = 'full_text'
+        if self.summary_input_source == 'full_text':
+            prompt = full_prompt  # Entire retrieved text, never a prefix labeled as full text.
+        else:
+            if self.summary_input_fallback:
+                logger.warning(f'Summary input fallback to abstract: {self.summary_input_fallback}')
+            if not self.abstract:
+                raise ValueError('No usable summary input after full-text fallback')
+            prompt = f'Title: {title}\nAbstract: {self.abstract}'
+            if budgeted:
+                prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
+            else:
+                prompt = truncate_prompt(prompt, 4000)
+        system = f'Return exactly one sentence in {lang} summarizing the scientific evidence. No heading, list, or invented claims.'
+        kwargs = dict(llm_params.get('generation_kwargs', {}))
+        if budgeted:
+            if len(system.encode('utf-8')) > SYSTEM_BYTES:
+                raise BudgetUnavailable('System prompt exceeds verified input bound')
+            kwargs = {'model': kwargs['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'n': 1,
+                      'extra_body': {'enable_thinking': False}}
         
-        # use gpt-4o tokenizer for estimation
-        prompt = truncate_prompt(prompt, 4000)
-        
-        response = openai_client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user. Your answer should be in {lang}.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            **llm_params.get('generation_kwargs', {})
-        )
-        tldr = response.choices[0].message.content
-        if not isinstance(tldr, str) or not tldr.strip():
-            raise ValueError('Empty summary response')
-        return tldr
-    
+        def operation():
+            request_client = no_retry_client(openai_client)
+            response = request_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system,
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                **kwargs
+            )
+            audit_response(response, kwargs['model'])
+            if getattr(response.choices[0], 'finish_reason', None) != 'stop':
+                raise ValueError('Summary did not finish normally; retain original abstract')
+            tldr = response.choices[0].message.content
+            if not isinstance(tldr, str) or not tldr.strip():
+                raise ValueError('Empty summary response')
+            return tldr.strip()
+        return requests.call(operation)
+
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
         self.tldr_error = None
-        if not self.abstract and not self.full_text:
+        if not self.abstract and (llm_params.get('input_mode', 'abstract') != 'full_text' or not self.full_text):
             self.tldr, self.tldr_status = '', 'not_generated'
             return self.tldr
         try:
-            operation = lambda: self._generate_tldr_with_llm(openai_client,llm_params)
-            tldr = requests.call(operation) if requests is not None else operation()
+            tldr = self._generate_tldr_with_llm(openai_client,llm_params,requests)
             self.tldr = tldr
             self.tldr_status = 'generated'
-            return tldr
+            return tldr.strip()
         except Exception as e:
-            self.tldr_error = 'model_unavailable' if model_unavailable(e) else 'request_failed'
+            self.tldr_error = 'budget_unavailable' if isinstance(e, BudgetUnavailable) else 'model_unavailable' if model_unavailable(e) else 'request_failed'
             # Do not log provider response bodies, account IDs or request payloads.
             if requests is None:
                 logger.warning(f'AI summary unavailable ({self.tldr_error}); using original abstract when available')
             tldr = self.abstract
             self.tldr = tldr
             self.tldr_status = 'fallback' if self.abstract else 'not_generated'
-            return tldr
+            return tldr.strip()
 
-    def _generate_affiliations_with_llm(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
-        if self.full_text is not None:
-            prompt = f"Given the beginning of a paper, extract the affiliations of the authors in a python list format, which is sorted by the author order. If there is no affiliation found, return an empty list '[]':\n\n{self.full_text}"
-            # use gpt-4o tokenizer for estimation
-            prompt = truncate_prompt(prompt, 2000)
-            affiliations = openai_client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an assistant who perfectly extracts affiliations of authors from a paper. You should return a python list of affiliations sorted by the author order, like [\"TsingHua University\",\"Peking University\"]. If an affiliation is consisted of multi-level affiliations, like 'Department of Computer Science, TsingHua University', you should return the top-level affiliation 'TsingHua University' only. Do not contain duplicated affiliations. If there is no affiliation found, you should return an empty list [ ]. You should only return the final list of affiliations, and do not return any intermediate results.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                **llm_params.get('generation_kwargs', {})
-            )
-            affiliations = affiliations.choices[0].message.content
+    def generate_affiliations(self, openai_client:OpenAI, llm_params:dict, requests=None) -> Optional[list[str]]:
+        """Compatibility API: retain metadata; optional paid extraction is disabled."""
+        return self.affiliations
 
-            affiliations = re.search(r'\[.*?\]', affiliations, flags=re.DOTALL).group(0)
-            affiliations = json.loads(affiliations)
-            if not isinstance(affiliations, list):
-                raise ValueError("Affiliations must be a JSON list")
-            affiliations = list(dict.fromkeys(str(a) for a in affiliations))
-
-            return affiliations
-    
-    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict, requests=None) -> Optional[list[str]]:
-        try:
-            operation = lambda: self._generate_affiliations_with_llm(openai_client,llm_params)
-            affiliations = requests.call(operation) if requests is not None else operation()
-            self.affiliations = affiliations
-            return affiliations
-        except Exception as e:
-            if requests is None or not model_unavailable(e):
-                logger.warning('AI affiliation extraction unavailable; preserving unknown affiliation')
-            self.affiliations = None
-            return None
 @dataclass
 class CorpusPaper:
     title: str

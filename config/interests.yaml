@@ -3,6 +3,11 @@ defaults:
   - all
   - _self_
 preprint_interests:
+  openreview:
+    enabled: true
+    venues: [ICLR, NeurIPS, ICML, TMLR, CoRL]
+    subject_areas: [AI for Science, Machine Learning, Scientific Machine Learning]
+    keywords: [atomistic, molecular, chemistry, materials, molecular dynamics]
   arxiv:
     categories: [physics.chem-ph, physics.comp-ph, cond-mat.mtrl-sci, cond-mat.soft, cs.LG, cs.AI]
   biorxiv:
@@ -21,3 +26,11 @@ preprint_interests:
       - Artificial Intelligence
       - Biophysics
       - Biochemistry
+
+abstracts:
+  enabled: true
+executor:
+  max_paper_num: 45
+  quotas: {journals: 25, preprints: 15, random: 5}
+llm:
+  language: Chinese

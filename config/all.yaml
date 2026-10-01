@@ -3,4 +3,4 @@ defaults:
   - preprints
   - _self_
 executor:
-  source: [journals, arxiv, biorxiv, medrxiv, researchsquare]
+  source: [journals, arxiv, biorxiv, medrxiv, researchsquare, openreview]

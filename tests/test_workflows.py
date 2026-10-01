@@ -74,10 +74,10 @@ def test_state_branch_roundtrip_preserves_working_branch_and_user_index(tmp_path
 
 
 @pytest.mark.parametrize('name, sources', [
-    (None, ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
-    ('', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
-    ('  ', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
-    ('default', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    (None, ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
+    ('', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
+    ('  ', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
+    ('default', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
     ('preprints', ['arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
     ('researchsquare', ['researchsquare']), ('arxiv', ['arxiv']),
     ('biorxiv', ['biorxiv']), ('medrxiv', ['medrxiv']),
@@ -103,7 +103,7 @@ def test_mixed_source_customization_and_common_window(tmp_path):
         config = compose(config_name='runtime')
     assert list(config.executor.source) == ['journals', 'arxiv', 'researchsquare']
     assert list(config.source.arxiv.category) == ['physics.chem-ph']
-    assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare'])
+    assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview'])
 
 
 def test_explicit_run_recipient_overrides_custom_config(tmp_path):
@@ -126,7 +126,7 @@ def test_invalid_explicit_recipient_rejected(tmp_path, recipient):
 
 @pytest.mark.parametrize('sources,expected', [
     ('configured', ['arxiv', 'biorxiv']),
-    ('all', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    ('all', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
     ('journals', ['journals']),
 ])
 @pytest.mark.parametrize('llm_mode', ['configured', 'disabled'])
@@ -208,11 +208,12 @@ preprint_interests:
 '''})
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         config = compose(config_name='runtime')
-    assert list(config.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare']
-    assert not config.llm.enabled and config.output.email.enabled and not config.output.rss.enabled
+    assert list(config.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare', 'openreview']
+    assert config.llm.enabled and config.llm.budget.enabled and config.llm.budget.daily_cny == 0.20
+    assert config.output.email.enabled and not config.output.rss.enabled
     assert config.email.receiver == 'daily@example.org'
     assert config.email.smtp_server == 'mail.cstnet.cn' and config.email.smtp_port == 994
-    assert config.executor.max_paper_num == 50 and config.state.enabled
+    assert config.executor.max_paper_num == 45 and config.state.enabled
     assert config.state.path == 'data/recommendations.json'
     assert list(config.preprint_interests.arxiv.categories) == ['physics.chem-ph', 'physics.comp-ph', 'cond-mat.mtrl-sci', 'cond-mat.soft', 'cs.LG', 'cs.AI']
     assert list(config.preprint_interests.biorxiv.categories) == ['biophysics', 'biochemistry']

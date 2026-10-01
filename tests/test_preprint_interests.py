@@ -50,7 +50,7 @@ def test_disabled_wins_over_source_overrides_and_custom_config(tmp_path, mode):
     assert categories_for(cfg, 'arxiv')[-1] == 'cs.AI'
     assert cfg.source.journals == _profile().source.journals
     if mode == 'all':
-        assert list(cfg.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare']
+        assert list(cfg.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare', 'openreview']
 
 
 def _profile():

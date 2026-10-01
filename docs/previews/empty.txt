@@ -1,0 +1,21 @@
+ZOTERO · RESEARCH DIGEST
+
+Daily Papers
+
+0 recommendations · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers
+
+Relevance uses text similarity weighted by when papers were added to your library. Higher scores mean a closer match, not a probability. Scores are shown to one decimal place.
+
+期刊 / Journals (0)
+
+No new recommendations in this group.
+
+预印本 / Preprints（含会议论文） (0)
+
+No new recommendations in this group.
+
+随机推荐 / Random (0)
+
+No new recommendations in this group.
+
+Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.

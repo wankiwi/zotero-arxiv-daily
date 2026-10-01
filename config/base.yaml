@@ -7,7 +7,19 @@ zotero:
 # null keeps existing source.<platform>.category behavior. See config/interests.yaml.
 preprint_interests: null
 
+abstracts:
+  enabled: false # Enable public Crossref/OpenAlex DOI recovery before ranking.
+  max_papers: 50 # Bound missing-abstract metadata requests per run.
+  mailto: null
+
 source:
+  openreview:
+    enabled: true
+    venues: [ICLR, NeurIPS, ICML, TMLR, CoRL]
+    subject_areas: [AI for Science, Machine Learning, Scientific Machine Learning]
+    keywords: [atomistic, molecular, chemistry, materials, molecular dynamics]
+    window_days: 7
+    max_pages: 100
   arxiv:
     window_days: null # null preserves the latest category RSS announcement.
     category: null # The categories of target arxiv papers. Find the abbr of your research area from [here](https://arxiv.org/category_taxonomy). Example: ["cs.AI","cs.CV","cs.LG","cs.CL"]
@@ -44,6 +56,10 @@ email:
   sender_password: ??? # The password of the sender account. Note that it's not necessarily the password for logging in the e-mail client, but the authentication code for SMTP service. Ask your email provider for this. Example: abcdefghijklmn
 
 llm:
+  input_mode: abstract # abstract (default) or full_text with explicit fallback.
+  budget:
+    enabled: true # Fail closed unless provider pricing and token bounds are verified.
+    daily_cny: 0.20
   enabled: true
   api:
     key: ??? # API Key of your LLM API. Example: sk-xxx
@@ -52,7 +68,7 @@ llm:
   # Arguments for the LLM API. See [here](https://platform.openai.com/docs/api-reference/chat/create) for more details.
     max_tokens: 16384
     model: ???
-  language: English # Preferred language for the TL;DR. Example: English
+  language: Chinese # Preferred language for the TL;DR. Example: English
 
 reranker:
   local:
@@ -72,6 +88,7 @@ reranker:
     batch_size: null # The batch size for embedding API requests. Adjust to match your provider's limit. Example: 64
 
 executor:
+  quotas: null # null preserves the legacy global maximum; see interests profile.
   fetch_full_text: true # Fetch arXiv full text only after ranking.
   enrichment_workers: 1 # Up to 8; concurrency applies when fetch_full_text=false.
   exclude_existing: true

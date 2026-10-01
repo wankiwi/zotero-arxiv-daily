@@ -30,11 +30,12 @@ def prepare(root: Path, environ=os.environ):
     if sources not in ('configured', 'all', 'journals'):
         raise ValueError('Invalid sources mode')
     if sources != 'configured':
-        selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare']
+        selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']
         config = OmegaConf.merge(config, {'executor': {'source': selected}})
-    llm_mode = 'disabled' if scheduled else environ.get('LLM_MODE', 'configured')
+    llm_mode = environ.get('LLM_MODE', 'configured')
     if llm_mode not in ('configured', 'disabled'):
         raise ValueError('Invalid llm_mode')
+    config = OmegaConf.merge(config, {'llm': {'budget': {'enabled': True, 'daily_cny': 0.20}}})
     if llm_mode == 'disabled':
         config = OmegaConf.merge(config, {'llm': {'enabled': False}})
     channel = environ.get('OUTPUT_CHANNEL', 'configured')
@@ -45,6 +46,8 @@ def prepare(root: Path, environ=os.environ):
     config = OmegaConf.merge(config, {'output': {'email': {'enabled': True},
                                                'rss': {'enabled': False}}})
     if scheduled:
+        config = OmegaConf.merge(config, {'executor': {'quotas': {'journals': 25, 'preprints': 15, 'random': 5}, 'max_paper_num': 45},
+                                           'llm': {'language': 'Chinese'}, 'abstracts': {'enabled': True}})
         # Keep the daily destination in the existing secret, never in public code
         # or a stale CUSTOM_CONFIG receiver. Resolution happens only at delivery.
         config = OmegaConf.merge(config, {'email': {'receiver': '${oc.env:RECEIVER}'}})
@@ -59,7 +62,7 @@ def prepare(root: Path, environ=os.environ):
         if not days.isdigit() or not 1 <= int(days) <= 90:
             raise ValueError('window_days must be between 1 and 90')
         config = OmegaConf.merge(config, {'source': {name: {'window_days': int(days)}
-                                                   for name in ('journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare')}})
+                                                   for name in ('journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')}})
     # Workflow history lives in paper-state; never rely on an immutable cache key.
     config = OmegaConf.merge(config, {'state': {'enabled': True, 'path': 'data/recommendations.json'}})
     config = OmegaConf.merge(config, {'output': {'rss': {'path': 'public/feed.xml'}}})

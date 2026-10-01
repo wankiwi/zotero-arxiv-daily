@@ -1,0 +1,59 @@
+ZOTERO · RESEARCH DIGEST
+
+Daily Papers
+
+2 recommendations · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers
+
+Relevance uses text similarity weighted by when papers were added to your library. Higher scores mean a closer match, not a probability. Scores are shown to one decimal place.
+
+期刊 / Journals (2)
+
+journals · Date unavailable · Source: journals
+
+1. Synthetic journals paper 1: Molecular dynamics and scientific machine learning across complex materials
+
+Example Author
+
+Unknown Affiliation
+
+Relevance: 8.0
+
+Scored using abstract similarity to your library.
+
+AI summary
+
+该合成示例仅用于检验中文一句话摘要和邮件排版。
+
+Original abstract / 原摘要
+
+Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented.
+
+Article (https://example.org/paper)
+
+journals · Date unavailable · Source: journals
+
+2. Synthetic journals paper 2: Molecular dynamics and scientific machine learning across complex materials
+
+Example Author
+
+Unknown Affiliation
+
+Relevance: 7.9
+
+Scored using abstract similarity to your library.
+
+AI summary not generated
+
+No abstract available
+
+Article (https://example.org/paper)
+
+预印本 / Preprints（含会议论文） (0)
+
+No new recommendations in this group.
+
+随机推荐 / Random (0)
+
+No new recommendations in this group.
+
+Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.

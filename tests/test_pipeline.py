@@ -67,6 +67,10 @@ def test_enrichment_runs_only_for_selected_papers(pipeline, monkeypatch):
     with open_dict(pipeline):
         pipeline.executor.max_paper_num = 1
         pipeline.executor.fetch_full_text = True
+        pipeline.llm.input_mode = 'full_text'
+        pipeline.llm.enabled = True
+    from tests.canned_responses import make_stub_openai_client
+    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kwargs: make_stub_openai_client())
     executor = Executor(pipeline)
     papers = [make_sample_paper(title=f'Paper {i}', url=f'https://example.org/{i}') for i in range(3)]
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: papers)

@@ -1,140 +1,55 @@
-"""Tests for zotero_arxiv_daily.protocol: Paper.generate_tldr, Paper.generate_affiliations."""
-
+"""Paid paths require a synthetic guard even when clients are fake."""
+from types import SimpleNamespace
 import pytest
+from tests.canned_responses import make_sample_paper, make_stub_openai_client, make_budget_guard, make_chat_response
+from zotero_arxiv_daily.budget import BudgetUnavailable
 
-from tests.canned_responses import make_sample_paper, make_stub_openai_client
-
-
-@pytest.fixture()
+@pytest.fixture
 def llm_params():
-    return {
-        "language": "English",
-        "generation_kwargs": {"model": "gpt-4o-mini", "max_tokens": 16384},
-    }
-
-
-# ---------------------------------------------------------------------------
-# generate_tldr
-# ---------------------------------------------------------------------------
-
+    return {'language':'Chinese','generation_kwargs':{'model':'test-model','max_tokens':16384}}
 
 def test_tldr_returns_response(llm_params):
-    client = make_stub_openai_client()
-    paper = make_sample_paper()
-    result = paper.generate_tldr(client, llm_params)
-    assert result == "Hello! How can I assist you today?"
-    assert paper.tldr == result
-    assert paper.tldr_status == 'generated' and paper.tldr_error is None
+    paper=make_sample_paper()
+    result=paper.generate_tldr(make_stub_openai_client(),llm_params,make_budget_guard())
+    assert result=='Hello! How can I assist you today?' and paper.tldr_status=='generated'
 
+@pytest.mark.parametrize('params',[{}, {'budget':{}}, {'budget':{'enabled':False}}])
+def test_missing_or_disabled_reservation_blocks_all_direct_summary_paths(params):
+    calls=[]
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:calls.append(kw))))
+    paper=make_sample_paper()
+    paper.generate_tldr(client,params)
+    assert paper.tldr_error=='budget_unavailable' and not calls
+    with pytest.raises(BudgetUnavailable):paper._generate_tldr_with_llm(client,params)
+    if params.get('budget',{}).get('enabled') is False:
+        paper.generate_tldr(client,params,make_budget_guard())
+        assert not calls
 
-def test_tldr_without_abstract_or_fulltext(llm_params):
-    client = make_stub_openai_client()
-    paper = make_sample_paper(abstract="", full_text=None)
-    result = paper.generate_tldr(client, llm_params)
-    assert result == ''
-    assert paper.tldr_status == 'not_generated' and paper.tldr_error is None
+def test_tldr_without_evidence_never_calls(llm_params):
+    paper=make_sample_paper(abstract='',full_text=None)
+    assert paper.generate_tldr(None,llm_params)=='' and paper.tldr_status=='not_generated'
 
+def test_tldr_fallback_after_reserved_failure(llm_params):
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:(_ for _ in ()).throw(RuntimeError('API down')))))
+    paper=make_sample_paper()
+    assert paper.generate_tldr(client,llm_params,make_budget_guard())==paper.abstract
+    assert paper.tldr_error=='request_failed'
 
-def test_tldr_falls_back_to_abstract_on_error(llm_params):
-    paper = make_sample_paper()
+def test_affiliations_api_cannot_spend(llm_params):
+    paper=make_sample_paper()
+    assert paper.generate_affiliations(None,llm_params) is None
+    paper.affiliations=['Publisher metadata']
+    assert paper.generate_affiliations(None,llm_params)==['Publisher metadata']
 
-    # Client whose create() raises
-    from types import SimpleNamespace
-
-    broken_client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kw: (_ for _ in ()).throw(RuntimeError("API down")))
-        )
-    )
-    result = paper.generate_tldr(broken_client, llm_params)
-    assert result == paper.abstract
-    assert paper.tldr_status == 'fallback' and paper.tldr_error == 'request_failed'
-
-
-def test_tldr_truncates_long_prompt(llm_params):
-    client = make_stub_openai_client()
-    paper = make_sample_paper(full_text="word " * 10000)
-    result = paper.generate_tldr(client, llm_params)
-    assert result is not None
-
-
-# ---------------------------------------------------------------------------
-# generate_affiliations
-# ---------------------------------------------------------------------------
-
-
-def test_affiliations_returns_parsed_list(llm_params):
-    client = make_stub_openai_client()
-    paper = make_sample_paper()
-    result = paper.generate_affiliations(client, llm_params)
-    assert isinstance(result, list)
-    assert "TsingHua University" in result
-    assert "Peking University" in result
-
-
-def test_affiliations_none_without_fulltext(llm_params):
-    client = make_stub_openai_client()
-    paper = make_sample_paper(full_text=None)
-    result = paper.generate_affiliations(client, llm_params)
-    assert result is None
-
-
-def test_affiliations_deduplicates(llm_params):
-    """The stub returns two distinct affiliations, so no dedup needed.
-    But confirm the set() dedup in the code doesn't break anything.
-    """
-    client = make_stub_openai_client()
-    paper = make_sample_paper()
-    result = paper.generate_affiliations(client, llm_params)
-    assert len(result) == len(set(result))
-
-
-def test_affiliations_malformed_llm_output(llm_params):
-    """LLM returns affiliations without JSON brackets. Should fall back gracefully."""
-    from types import SimpleNamespace
-
-    def create_no_brackets(**kwargs):
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content="TsingHua University, Peking University"),
-                )
-            ]
-        )
-
-    client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(create=create_no_brackets)
-        )
-    )
-    paper = make_sample_paper()
-    result = paper.generate_affiliations(client, llm_params)
-    # re.search for [...] will fail -> AttributeError -> caught -> returns None
-    assert result is None
-
-
-def test_affiliations_error_returns_none(llm_params):
-    from types import SimpleNamespace
-
-    broken_client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")))
-        )
-    )
-    paper = make_sample_paper()
-    result = paper.generate_affiliations(broken_client, llm_params)
-    assert result is None
-    assert paper.affiliations is None
-
-
-def test_tokenizer_network_failure_keeps_llm_usable(monkeypatch, llm_params):
+def test_long_unicode_abstract_is_bounded_without_tokenizer(llm_params,monkeypatch):
     import zotero_arxiv_daily.protocol as protocol
-    protocol._tokenizer.cache_clear()
-    monkeypatch.setattr(protocol.tiktoken, 'encoding_for_model', lambda *a: (_ for _ in ()).throw(OSError('offline')))
-    client = make_stub_openai_client()
-    paper = make_sample_paper()
-    try:
-        assert paper.generate_tldr(client, llm_params) == 'Hello! How can I assist you today?'
-        assert len(protocol.truncate_prompt('中文' * 100, 10).encode('utf-8')) <= 10
-    finally:
-        protocol._tokenizer.cache_clear()
+    monkeypatch.setattr(protocol,'truncate_prompt',lambda *args:pytest.fail('Wrong-model tokenizer used for paid input'))
+    requests=[]
+    def create(**kwargs):
+        requests.append(kwargs)
+        return make_chat_response('中文摘要。', model=kwargs.get('model'))
+    client=SimpleNamespace(max_retries=0,chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    paper=make_sample_paper(abstract='科学摘要'*10000)
+    paper.generate_tldr(client,llm_params,make_budget_guard())
+    assert len(requests[0]['messages'][1]['content'].encode())<=768
+    assert paper.abstract=='科学摘要'*10000

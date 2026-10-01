@@ -1,10 +1,17 @@
 name: Test
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Isolated tests or read-only OpenReview authentication validation
+        type: choice
+        options: [tests, openreview, openreview_full]
+        default: tests
 permissions:
   contents: read
 jobs:
   isolated-tests:
+    if: ${{ inputs.mode != 'openreview' && inputs.mode != 'openreview_full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -14,3 +21,24 @@ jobs:
         run: uv sync --frozen
       - name: Run isolated tests without delivery credentials
         run: uv run --frozen pytest
+  openreview-validation:
+    if: ${{ inputs.mode == 'openreview' || inputs.mode == 'openreview_full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Validate official login and public submissions only
+        env:
+          OPENREVIEW_USERNAME: ${{ secrets.OPENREVIEW_USERNAME }}
+          OPENREVIEW_PASSWORD: ${{ secrets.OPENREVIEW_PASSWORD }}
+        run: |
+          if [ "${{ inputs.mode }}" = "openreview_full" ]; then
+            uv run --frozen python scripts/diagnose_openreview.py
+          else
+            uv run --frozen python scripts/validate_openreview.py
+          fi

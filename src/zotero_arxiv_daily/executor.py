@@ -14,7 +14,10 @@ from .construct_email import render_email
 from .utils import send_email
 from openai import OpenAI
 from .llm import ModelRequests
+from .budget import prepare_budget, BudgetUnavailable
 from .preprint_interests import enabled_sources
+from .selection import quotas_for, select_papers, pending_batch
+from .abstracts import clean_abstract, recover_abstracts
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -36,6 +39,8 @@ def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key:
 class Executor:
     def __init__(self, config: DictConfig):
         self.config = config
+        if config.llm.get("input_mode", "abstract") not in ("abstract", "full_text"):
+            raise ValueError("llm.input_mode must be abstract or full_text")
         self.include_path_patterns = normalize_path_patterns(config.zotero.include_path, "include_path")
         self.ignore_path_patterns = normalize_path_patterns(config.zotero.ignore_path, "ignore_path")
         self.retrievers = {source: get_retriever_cls(source)(config) for source in enabled_sources(config)}
@@ -43,6 +48,7 @@ class Executor:
             raise ValueError('No enabled sources remain after preprint interest configuration')
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = None
+        self.llm_blocked_reason = None
         self.model_requests = ModelRequests()
         self.library_dois, self.library_titles, self.library_titles_without_doi = set(), set(), set()
 
@@ -79,7 +85,7 @@ class Executor:
                 self.library_titles.add(title_key(title))
                 if not doi:
                     self.library_titles_without_doi.add(title_key(title))
-            abstract = data.get('abstractNote') or ''
+            abstract = clean_abstract(data.get('abstractNote'))
             if not abstract.strip():
                 continue
             try:
@@ -102,7 +108,7 @@ class Executor:
         return corpus
 
     def _enrich(self, paper):
-        if self.config.executor.get('fetch_full_text', True):
+        if self.config.llm.get('input_mode', 'abstract') == 'full_text' and self.openai_client:
             retriever = self.retrievers.get(paper.source)
             if retriever:
                 try:
@@ -112,10 +118,12 @@ class Executor:
         if self.openai_client:
             if not paper.tldr:
                 paper.generate_tldr(self.openai_client, self.config.llm, self.model_requests)
-            if paper.affiliations is None and paper.full_text:
-                paper.generate_affiliations(self.openai_client, self.config.llm, self.model_requests)
         elif not paper.tldr:
             paper.tldr_status, paper.tldr_error = 'not_generated', None
+            if getattr(self, 'llm_blocked_reason', None):
+                paper.tldr = paper.abstract
+                paper.tldr_status = 'fallback' if paper.abstract else 'not_generated'
+                paper.tldr_error = 'budget_unavailable'
         return paper
 
     def run(self):
@@ -136,6 +144,7 @@ class Executor:
         workers = int(self.config.executor.get('enrichment_workers', 1))
         if maximum < 1 or not 1 <= workers <= 8:
             raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
+        quotas = quotas_for(self.config.executor)
         errors = []
         self.model_requests = ModelRequests()
         try:
@@ -154,7 +163,7 @@ class Executor:
         state.add(ranked)
         state.save()  # Preserve pending deliveries before contacting transports.
         if email_enabled:
-            pending = state.pending('email')[:maximum]
+            pending = pending_batch(state.pending('email'), quotas, maximum)
             if pending or (self.config.executor.send_empty and not errors):
                 try:
                     send_email(self.config, render_email(pending))
@@ -188,19 +197,30 @@ class Executor:
             except Exception as exc:
                 logger.error(f'Retrieval failed for {source}: {exc}')
                 errors.append(f'{source}: {exc}')
+        for paper in candidates:
+            paper.abstract = clean_abstract(paper.abstract)
         unique = deduplicate(candidates)
         if self.config.executor.get('exclude_existing', True):
             unique = [p for p in unique if paper_doi(p) not in self.library_dois
                       and title_key(p.title) not in (self.library_titles_without_doi if paper_doi(p) else self.library_titles)]
         unique = [p for p in unique if not state.has(p)]
         logger.info(f'{len(candidates)} candidates, {len(unique)} new papers after deduplication')
+        recover_abstracts(unique, self.config.get('abstracts', {}))
         ranked = self.reranker.rerank(unique, corpus) if unique else []
         minimum = float(self.config.executor.get('min_score', -10))
-        ranked = [p for p in ranked if p.score >= minimum][:maximum]
+        ranked = [p for p in ranked if p.score >= minimum]
+        quotas = quotas_for(self.config.executor)
+        pending = state.pending('email') if self.config.get('output', {}).get('email', {}).get('enabled', True) else []
+        ranked = select_papers(ranked, quotas, pending)[:maximum]
         if ranked and self.config.llm.get('enabled', True):
-            self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url)
+            try:
+                self.model_requests = prepare_budget(self.config.llm)
+                self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url, max_retries=0)
+            except BudgetUnavailable as exc:
+                self.llm_blocked_reason = str(exc)
+                logger.warning(f'LLM budget guard: {exc}')
         # Fork-based PDF extraction must run outside worker threads.
-        if workers > 1 and not self.config.executor.get('fetch_full_text', True):
+        if workers > 1 and self.config.llm.get('input_mode', 'abstract') != 'full_text':
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 ranked = list(pool.map(self._enrich, ranked))
         else:
