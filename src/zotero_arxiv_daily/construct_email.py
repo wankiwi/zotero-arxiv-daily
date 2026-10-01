@@ -1,5 +1,6 @@
 """Table-based email cards inspired by TideDra/zotero-arxiv-daily."""
 from .protocol import Paper
+from .budget import pricing_warning
 from .selection import GROUPS, paper_group
 from html import escape
 from html.parser import HTMLParser
@@ -104,7 +105,12 @@ def render_email(papers: list[Paper]) -> str:
         columns.append('<td class="digest-column" width="33.33%" valign="top" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;width:33.33%;padding:0 6px;">' + heading +
                        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;table-layout:fixed;">' + ''.join(parts) + '</table></td>')
     content = '<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;table-layout:fixed;"><tr>' + ''.join(columns) + '</tr></table></td></tr>'
-    count = f'{len(papers)} recommendation' + ('' if len(papers) == 1 else 's')
+    warning = pricing_warning()
+    if warning:
+        content = ('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px;'
+                   'background:#fff3cd;color:#713f12;border:2px solid #b7791f;font-size:14px;line-height:1.7;">'
+                   '<strong>LLM 费用提醒 / Pricing warning</strong><br>' + escape(warning) + '</td></tr>') + content
+    count = f'{len(papers)} recommendation'  + ('' if len(papers) == 1 else 's')
     return framework.replace('__COUNT__', count).replace('__CONTENT__', content)
 
 

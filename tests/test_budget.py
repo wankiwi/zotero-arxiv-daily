@@ -259,3 +259,28 @@ def test_bootstrap_rejects_shallow_history(tmp_path,monkeypatch):
     assert git('rev-parse','--is-shallow-repository').strip()==b'true'
     with pytest.raises(budget.BudgetUnavailable,match='complete history'):
         budget.bootstrap_ledger()
+
+
+def test_stale_pricing_warns_continues_and_renders_email(config,monkeypatch):
+    from zotero_arxiv_daily.construct_email import render_email,email_plain_text
+    monkeypatch.setattr(budget,'utc_day',lambda:'2026-10-09')
+    config.llm.api.base_url='https://api.siliconflow.cn/v1'
+    config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'
+    warnings=[]
+    monkeypatch.setattr(budget.logger,'warning',warnings.append)
+    cap,cost=budget.budget_plan(config.llm)
+    assert cap==Decimal('.20') and cost==Decimal('.00432') and warnings
+    html=render_email([])
+    assert 'Stale LLM pricing' in html and 'Stale LLM pricing' in email_plain_text(html)
+    assert '实际费用可能超过' in html
+    monkeypatch.setattr(budget,'utc_day',lambda:'2026-10-08')
+    assert not budget.pricing_warning()
+
+
+def test_known_price_increase_reduces_allowed_calls(config,monkeypatch):
+    pricing=dict(budget.VERIFIED_PRICING,input_cny_per_million='6',output_cny_per_million='18')
+    monkeypatch.setattr(budget,'VERIFIED_PRICING',pricing)
+    config.llm.api.base_url='https://api.siliconflow.cn/v1'
+    config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'
+    cap,cost=budget.budget_plan(config.llm)
+    assert int(cap//cost)==23

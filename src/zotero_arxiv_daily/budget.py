@@ -13,12 +13,13 @@ from tempfile import TemporaryDirectory
 from threading import Lock
 from urllib.parse import urlsplit
 from .llm import ModelRequests
+from loguru import logger
 
 class BudgetUnavailable(RuntimeError):
     pass
 
 # Reviewed public provider contract: explicit non-thinking, peak CNY tariff.
-# Different endpoints/models or expired pricing fail closed.
+# Different endpoints/models fail closed; stale pricing warns and continues.
 VERIFIED_PRICING = {
     'host': 'api.siliconflow.cn',
     'model': 'deepseek-ai/DeepSeek-V4-Flash',
@@ -38,6 +39,14 @@ def utc_day():
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def pricing_warning():
+    if VERIFIED_PRICING and utc_day() > VERIFIED_PRICING['valid_through']:
+        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行每日 ¥0.20 记账额度；'
+                '若供应商涨价，实际费用可能超过估算及 ¥0.20，请尽快复核价格。'
+                ' Stale LLM pricing: estimates may understate actual charges.')
+    return ''
+
+
 def budget_plan(config):
     budget = config.get('budget', {})
     if budget.get('enabled', True) is not True:
@@ -55,8 +64,11 @@ def budget_plan(config):
         raise BudgetUnavailable('Endpoint is not a valid verified HTTPS origin') from exc
     if base.scheme != 'https' or base.hostname != pricing['host'] or port not in (None, 443) or base.path.rstrip('/') != '/v1' or base.query or base.fragment or base.username or base.password:
         raise BudgetUnavailable('Endpoint does not match the verified pricing record')
-    if config.generation_kwargs.get('model') != pricing['model'] or utc_day() > pricing['valid_through']:
-        raise BudgetUnavailable('Model or pricing validity does not match the verified pricing record')
+    if config.generation_kwargs.get('model') != pricing['model']:
+        raise BudgetUnavailable('Model does not match the verified pricing record')
+    warning = pricing_warning()
+    if warning:
+        logger.warning(warning)
     input_tokens = PROMPT_BYTES + SYSTEM_BYTES + FRAMING_TOKENS
     per_call = (Decimal(input_tokens) * Decimal(pricing['input_cny_per_million']) +
                 Decimal(MAX_OUTPUT_TOKENS) * Decimal(pricing['output_cny_per_million'])) / Decimal(1000000)

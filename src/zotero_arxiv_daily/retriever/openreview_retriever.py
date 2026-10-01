@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 from collections.abc import Mapping
 import re
+import os
 from urllib.parse import quote
 from loguru import logger
 from .base import BaseRetriever, register_retriever
@@ -27,6 +28,14 @@ def value(content, key, default=None):
     result = content.get(key, default)
     return result.get('value', default) if isinstance(result, dict) else result
 
+def public_fields(content):
+    # Fields without their own ACL inherit the public note/group ACL. Explicit
+    # field ACLs override it; never pass restricted values to filters or output.
+    return {key: item for key, item in content.items()
+            if not isinstance(item, dict) or 'readers' not in item or
+            isinstance(item['readers'], list) and 'everyone' in item['readers']}
+
+
 def strings(item):
     return [item] if isinstance(item, str) else [v for v in item if isinstance(v, str)] if isinstance(item, list) else []
 
@@ -47,14 +56,45 @@ class OpenReviewRetriever(BaseRetriever):
         self.days, self.max_pages = self.options.get('window_days', 7), self.options.get('max_pages', 100)
         if type(self.days) is not int or not 1 <= self.days <= 90 or type(self.max_pages) is not int or self.max_pages < 1:
             raise ValueError('OpenReview requires window_days 1-90 and positive max_pages')
+        self.authenticated = False
         self.failures = []
         self.venue_ids = {}
         self.fallback_count = 0
 
+    def _authenticate(self, client):
+        """Official API v2 login; credentials/token stay only in memory."""
+        self.authenticated = False
+        username, password = os.getenv('OPENREVIEW_USERNAME'), os.getenv('OPENREVIEW_PASSWORD')
+        if not username and not password:
+            return
+        if not username or not password:
+            raise RuntimeError('Set both OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD repository secrets')
+        try:
+            response = client.post(API + '/login', json={'id': username, 'password': password, 'expiresIn': 3600},
+                                   timeout=(10, 30), allow_redirects=False)
+            if response.status_code != 200:
+                raise RuntimeError('login rejected')
+            data = response.json()
+        except Exception:
+            raise RuntimeError('OpenReview official login failed; verify credentials/account access (response withheld)') from None
+        if not isinstance(data, dict):
+            raise RuntimeError('OpenReview official login returned an invalid response')
+        if data.get('mfaPending'):
+            raise RuntimeError('OpenReview login requires MFA; unattended login cannot continue; complete an officially supported account authentication setup')
+        token = data.get('token')
+        if not isinstance(token, str) or not token or any(c.isspace() for c in token):
+            raise RuntimeError('OpenReview official login returned no valid session token')
+        client.headers['Authorization'] = 'Bearer ' + token
+        self.authenticated = True
+
     def _get(self, client, path, params):
-        response = client.get(API + path, params=params, timeout=(10, 30))
+        response = client.get(API + path, params=params, timeout=(10, 30), allow_redirects=False)
         if response.status_code in (401, 403, 429):
-            raise RuntimeError(f'OpenReview public API access blocked HTTP {response.status_code}; no challenge bypass')
+            raise RuntimeError(f'OpenReview API access blocked HTTP {response.status_code}; ' +
+                ('rate limited: wait for the next run; respect provider limits' if response.status_code == 429 else
+                 'configure OPENREVIEW_USERNAME and OPENREVIEW_PASSWORD secrets for official login, or verify account access if already configured'))
+        if 300 <= response.status_code < 400:
+            raise RuntimeError("OpenReview API redirected; authenticate through the official supported path")
         response.raise_for_status()
         return response.json()
 
@@ -64,7 +104,7 @@ class OpenReviewRetriever(BaseRetriever):
             data = self._get(client, '/groups', {'id': identity})
             groups = [g for g in data.get('groups', []) if g.get('id') == identity]
             for group in groups:
-                content = group.get('content', {})
+                content = public_fields(group.get('content', {}))
                 invitation = value(content, 'submission_id')
                 name = value(content, 'submission_name')
                 if not invitation and isinstance(name, str): invitation = identity + '/-/' + name
@@ -86,6 +126,7 @@ class OpenReviewRetriever(BaseRetriever):
         self.failures, self.fallback_count = [], 0
         records, seen = [], set()
         with session() as client:
+            self._authenticate(client)
             for venue in self.venues:
                 try:
                     groups = list(self._groups(client, venue, until.year))
@@ -121,8 +162,9 @@ class OpenReviewRetriever(BaseRetriever):
         venue, group, note = raw
         if not isinstance(note, Mapping) or not isinstance(note.get('content'), Mapping):
             raise ValueError('OpenReview note content must be a mapping')
-        content = note['content']
-        if note.get('ddate') or 'everyone' not in note.get('readers', ['everyone']): return None
+        readers = note.get('readers', [] if self.authenticated else ['everyone'])
+        if note.get('ddate') or not isinstance(readers, list) or 'everyone' not in readers: return None
+        content = public_fields(note['content'])
         if 'withdraw' in str(value(content, 'venue', '')).casefold(): return None
         title, abstract = clean_abstract(value(content, 'title', '')), clean_abstract(value(content, 'abstract', ''))
         if not title: return None

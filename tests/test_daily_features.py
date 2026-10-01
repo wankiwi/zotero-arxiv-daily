@@ -296,3 +296,67 @@ def test_newly_published_tmlr_uses_publication_date(config):
     p=r.convert_to_paper(raw)
     assert p and p.publication_kind=='journal'
     assert p.published.timestamp()==raw[2]['pdate']/1000
+
+
+@pytest.mark.parametrize('readers',[None,[],['private'],'everyone'])
+def test_authenticated_openreview_rejects_nonpublic_notes(config,readers):
+    r=retriever(config);r.authenticated=True;raw=note(r)
+    if readers is not None:raw[2]['readers']=readers
+    assert r.convert_to_paper(raw) is None
+
+
+def test_authenticated_public_note_excludes_private_fields(config):
+    r=retriever(config);r.authenticated=True;raw=note(r)
+    raw[2]['readers']=['everyone']
+    for key in ['abstract','authors','primary_area','pdf','venue','venueid','keywords']:
+        raw[2]['content'][key]={'value':'CONFIDENTIAL','readers':['private']}
+    p=r.convert_to_paper(raw)
+    assert p and not p.abstract and not p.authors and not p.pdf_url
+    assert 'CONFIDENTIAL' not in repr(p)
+    raw[2]['content']['title']['readers']=['private']
+    assert r.convert_to_paper(raw) is None
+
+
+def test_authenticated_public_note_is_retained(config):
+    r=retriever(config);r.authenticated=True;raw=note(r);raw[2]['readers']=['everyone']
+    raw[2]['content']['abstract']['readers']=['everyone']
+    assert r.convert_to_paper(raw).abstract=='Experiments'
+
+
+def test_openreview_official_login(config,monkeypatch):
+    r=retriever(config);calls=[]
+    monkeypatch.setenv('OPENREVIEW_USERNAME','synthetic-user');monkeypatch.setenv('OPENREVIEW_PASSWORD','synthetic-password')
+    def post(url,**kwargs):
+        calls.append((url,kwargs));return SimpleNamespace(status_code=200,json=lambda:{'token':'synthetic-token'})
+    client=SimpleNamespace(headers={},post=post)
+    r._authenticate(client)
+    assert r.authenticated and client.headers['Authorization']=='Bearer synthetic-token'
+    url,kwargs=calls[0]
+    assert url=='https://api2.openreview.net/login' and kwargs['json']['id']=='synthetic-user'
+    assert kwargs['json']['password']=='synthetic-password' and kwargs['allow_redirects'] is False
+
+
+@pytest.mark.parametrize('result',[{'mfaPending':True,'mfaPendingToken':'SENSITIVE'}, {}, {'token':'bad token'}, 'SENSITIVE'])
+def test_openreview_login_invalid_or_mfa_is_sanitized(config,monkeypatch,result):
+    r=retriever(config)
+    monkeypatch.setenv('OPENREVIEW_USERNAME','synthetic-user');monkeypatch.setenv('OPENREVIEW_PASSWORD','synthetic-password')
+    client=SimpleNamespace(headers={},post=lambda *a,**kw:SimpleNamespace(status_code=200,json=lambda:result))
+    with pytest.raises(RuntimeError) as error:r._authenticate(client)
+    assert 'SENSITIVE' not in str(error.value) and not r.authenticated and not client.headers
+    if isinstance(result,dict) and result.get('mfaPending'):assert 'MFA' in str(error.value)
+
+
+def test_openreview_login_transport_error_sanitized(config,monkeypatch):
+    r=retriever(config)
+    monkeypatch.setenv('OPENREVIEW_USERNAME','synthetic-user');monkeypatch.setenv('OPENREVIEW_PASSWORD','synthetic-password')
+    def post(*a,**kw):raise RuntimeError('SENSITIVE response body and password')
+    with pytest.raises(RuntimeError,match='response withheld') as error:r._authenticate(SimpleNamespace(post=post))
+    assert 'SENSITIVE' not in str(error.value)
+
+
+def test_openreview_credentials_optional_but_pair_required(config,monkeypatch):
+    r=retriever(config)
+    monkeypatch.delenv('OPENREVIEW_USERNAME',raising=False);monkeypatch.delenv('OPENREVIEW_PASSWORD',raising=False)
+    r._authenticate(SimpleNamespace());assert not r.authenticated
+    monkeypatch.setenv('OPENREVIEW_USERNAME','synthetic-user')
+    with pytest.raises(RuntimeError,match='both OPENREVIEW'):r._authenticate(SimpleNamespace())

@@ -218,7 +218,7 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 仅约束本仓库受控请求，不是账户级扣费上限；其他客户端或旧版本不在保护范围内。所有公开摘要生成入口均要求BudgetRequests预约；缺失budget配置默认要求守卫，false禁止调用而不是无限额。付费单位提取已移除，保留出版社单位元数据。
 
-保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01，有效期至2026-10-08 UTC结束；2026-10-09 UTC起自动停止付费调用、回退原摘要，须重新核验价格后更新，不会无证据自动续期。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
+保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01；建议于2026-10-08 UTC结束前复核。2026-10-09 UTC起若未复核，继续按最后复核费率运行并保留每日¥0.20估算记账额度，同时在邮件（HTML及纯文本）和日志醒目提醒；供应商涨价时实际费用可能超过估算及¥0.20，不承诺实际费用的绝对硬上限。已知新价格时应更新费率并按预算减少请求。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
 
 用户输入最多768 UTF-8字节，系统输入最多256字节，再保留128 framing tokens，共按1152输入token上界预约。原摘要仍在邮件完整保留，仅模型上下文缩短。每次最坏预约 `(1152×3 + 96×9)/1,000,000 = ¥0.00432`，45篇合计¥0.1944。预算是基于已发布接口约定的工程上限，不是对供应商未来涨价或违规计费的绝对保证。
 
@@ -247,3 +247,11 @@ llm:
 ```
 
 `full_text`当前复用arXiv合法HTML/PDF/TeX提取（HTML含表格），不承诺所有出版社全文可获取，不绕过付费墙。输入是完整的已提取文本，仍可能受文档解析质量影响。其他来源未提供全文时回退abstract；不会把截断前缀标为全文。全文超过当前768字节用户输入界限时回退，该小额度通常只能支持摘要。回退不额外调用模型，也不隐瞒原因：`summary_input_source`及`summary_input_fallback`保存在状态，并显示在邮件元信息。无原摘要可回退时不声称成功生成。无论输入选哪一种，成功摘要后的原摘要仍完整显示。
+
+## OpenReview 官方登录与访问限制
+
+公开匿名请求可能收到403挑战或429限流；这不是“没有论文”。官方网页[挑战提示](https://github.com/openreview/openreview-web/blob/master/app/challenge/route.js)提供登录路径，本实现遵循[官方API v2客户端](https://github.com/openreview/openreview-py/blob/master/openreview/api/client.py)的 `/login` 与 Bearer 会话流程。
+
+在仓库 **Settings → Secrets and variables → Actions → New repository secret** 分别设置 `OPENREVIEW_USERNAME`（账户登录邮箱/用户名）及 `OPENREVIEW_PASSWORD`（账户密码）；不要发到聊天、提交到代码或放入 CUSTOM_CONFIG。两者都缺省时继续匿名公开API；只填一个时明确报错。工作流仅向检索步骤注入这两个环境变量。登录失败只记录脱敏错误，令牌仅留在内存，不输出响应正文、不复制浏览器cookie、不绕过挑战、不换IP。启用MFA的账户可能无法无人值守登录，此时明确停止OpenReview检索，请通过官方支持解决账户认证，程序不会自动发送验证码或降低账户安全设置。
+
+即使登录成功也只接收 `readers` 明确包含 `everyone` 的公开稿件，私有审稿内容不进入摘要/邮件。403应核查账号访问权限；429应等待下一次运行并遵守限流，登录不保证解除所有服务端限制。其他来源仍可投递并保存历史，随后任务以源不完整失败；不得将错误伪装成空结果。
