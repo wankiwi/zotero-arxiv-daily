@@ -7,6 +7,7 @@ import tiktoken
 from openai import OpenAI
 from loguru import logger
 from .llm import model_unavailable
+from .budget import BudgetUnavailable, BudgetRequests, PROMPT_BYTES, SYSTEM_BYTES, MAX_OUTPUT_TOKENS
 import json
 RawPaperItem = TypeVar('RawPaperItem')
 
@@ -42,6 +43,9 @@ class Paper:
     journal: Optional[str] = None
     issns: list[str] = field(default_factory=list)
     published: Optional[datetime] = None
+    recommendation_group: Optional[str] = None
+    abstract_source: Optional[str] = None
+    subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
     tldr_status: Optional[str] = None
     tldr_error: Optional[str] = None
@@ -62,7 +66,7 @@ class Paper:
 
 
     def _generate_tldr_with_llm(self, openai_client:OpenAI,llm_params:dict) -> str:
-        lang = llm_params.get('language', 'English')
+        lang = llm_params.get('language', 'Chinese')
         prompt = f"Given the following information of a paper, generate a one-sentence TLDR summary in {lang}:\n\n"
         if self.title:
             prompt += f"Title:\n {self.title}\n\n"
@@ -78,43 +82,60 @@ class Paper:
             return "Failed to generate TLDR. Neither full text nor abstract is provided"
         
         # use gpt-4o tokenizer for estimation
-        prompt = truncate_prompt(prompt, 4000)
+        budgeted = llm_params.get('budget', {}).get('enabled', False)
+        if budgeted:
+            short_title = self.title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
+            prompt = f'Title: {short_title}\nAbstract: {self.abstract}'
+            prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
+        else:
+            prompt = truncate_prompt(prompt, 4000)
+        system = f'Return exactly one sentence in {lang} summarizing the scientific evidence. No heading, list, or invented claims.'
+        kwargs = dict(llm_params.get('generation_kwargs', {}))
+        if budgeted:
+            if len(system.encode('utf-8')) > SYSTEM_BYTES:
+                raise BudgetUnavailable('System prompt exceeds verified input bound')
+            kwargs = {'model': kwargs['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'n': 1,
+                      'extra_body': {'enable_thinking': False}}
         
         response = openai_client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": f"You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user. Your answer should be in {lang}.",
+                    "content": system,
                 },
                 {"role": "user", "content": prompt},
             ],
-            **llm_params.get('generation_kwargs', {})
+            **kwargs
         )
+        if budgeted and getattr(response.choices[0].message, 'reasoning_content', None):
+            raise BudgetUnavailable('Provider unexpectedly emitted reasoning; stop paid requests')
         tldr = response.choices[0].message.content
         if not isinstance(tldr, str) or not tldr.strip():
             raise ValueError('Empty summary response')
-        return tldr
+        return tldr.strip()
     
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
         self.tldr_error = None
-        if not self.abstract and not self.full_text:
+        if not self.abstract and (not self.full_text or llm_params.get('budget', {}).get('enabled', False)):
             self.tldr, self.tldr_status = '', 'not_generated'
             return self.tldr
         try:
+            if llm_params.get('budget', {}).get('enabled', False) and not isinstance(requests, BudgetRequests):
+                raise BudgetUnavailable('A durable daily reservation is required for model calls')
             operation = lambda: self._generate_tldr_with_llm(openai_client,llm_params)
             tldr = requests.call(operation) if requests is not None else operation()
             self.tldr = tldr
             self.tldr_status = 'generated'
-            return tldr
+            return tldr.strip()
         except Exception as e:
-            self.tldr_error = 'model_unavailable' if model_unavailable(e) else 'request_failed'
+            self.tldr_error = 'budget_unavailable' if isinstance(e, BudgetUnavailable) else 'model_unavailable' if model_unavailable(e) else 'request_failed'
             # Do not log provider response bodies, account IDs or request payloads.
             if requests is None:
                 logger.warning(f'AI summary unavailable ({self.tldr_error}); using original abstract when available')
             tldr = self.abstract
             self.tldr = tldr
             self.tldr_status = 'fallback' if self.abstract else 'not_generated'
-            return tldr
+            return tldr.strip()
 
     def _generate_affiliations_with_llm(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
         if self.full_text is not None:

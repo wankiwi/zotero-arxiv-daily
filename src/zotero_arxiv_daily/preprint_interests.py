@@ -3,7 +3,7 @@ import re
 from collections.abc import Mapping
 from omegaconf import DictConfig, ListConfig
 
-PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare')
+PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')
 
 
 def _terms(value, path, categories=False, platform=None):
@@ -43,6 +43,8 @@ def validate_interests(config):
         if not isinstance(values, (Mapping, DictConfig)) or not values:
             raise ValueError(f'preprint_interests.{name} must be a non-empty mapping')
         allowed = {'enabled', 'categories', 'keywords'}
+        if name == 'openreview':
+            allowed = {'enabled', 'venues', 'subject_areas', 'keywords'}
         if name == 'researchsquare':
             allowed |= {'backend', 'source_ids', 'type', 'subfield'}
         unknown = set(values) - allowed
@@ -57,6 +59,10 @@ def validate_interests(config):
             if name == 'researchsquare':
                 raise ValueError('Research Square has no supported category filter here; use keywords')
             spec['categories'] = _terms(values['categories'], f'{name}.categories', True, name)
+        if name == 'openreview':
+            for key in ('venues', 'subject_areas'):
+                if key in values:
+                    spec[key] = _terms(values[key], f'{name}.{key}')
         if 'keywords' in values:
             spec['keywords'] = _terms(values['keywords'], f'{name}.keywords')
         if name == 'researchsquare':
