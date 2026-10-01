@@ -36,7 +36,8 @@ def safe_error_category(response):
 
 class ProbeClient:
     """At most 22 requests, no retries/redirects, one request per second."""
-    def __init__(self):
+    def __init__(self, max_requests=22):
+        self.max_requests = max_requests
         self.client = requests.Session()
         self.headers = self.client.headers
         self.headers['User-Agent'] = 'zotero-arxiv-daily/1.0'
@@ -45,7 +46,7 @@ class ProbeClient:
         self.error_category = None
 
     def request(self, method, url, **kwargs):
-        if url not in {API + '/login', API + '/groups', API + '/notes'} or self.calls >= 22:
+        if url not in {API + '/login', API + '/groups', API + '/notes'} or self.calls >= self.max_requests:
             raise RuntimeError('Probe request boundary exceeded')
         time.sleep(max(0, 1 - (time.monotonic() - self.last_start)))
         self.last_start = time.monotonic()

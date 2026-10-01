@@ -5,13 +5,13 @@ on:
       mode:
         description: Isolated tests or read-only OpenReview authentication validation
         type: choice
-        options: [tests, openreview]
+        options: [tests, openreview, openreview_full]
         default: tests
 permissions:
   contents: read
 jobs:
   isolated-tests:
-    if: ${{ inputs.mode != 'openreview' }}
+    if: ${{ inputs.mode != 'openreview' && inputs.mode != 'openreview_full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,9 +22,9 @@ jobs:
       - name: Run isolated tests without delivery credentials
         run: uv run --frozen pytest
   openreview-validation:
-    if: ${{ inputs.mode == 'openreview' }}
+    if: ${{ inputs.mode == 'openreview' || inputs.mode == 'openreview_full' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
@@ -36,4 +36,9 @@ jobs:
         env:
           OPENREVIEW_USERNAME: ${{ secrets.OPENREVIEW_USERNAME }}
           OPENREVIEW_PASSWORD: ${{ secrets.OPENREVIEW_PASSWORD }}
-        run: uv run --frozen python scripts/validate_openreview.py
+        run: |
+          if [ "${{ inputs.mode }}" = "openreview_full" ]; then
+            uv run --frozen python scripts/diagnose_openreview.py
+          else
+            uv run --frozen python scripts/validate_openreview.py
+          fi

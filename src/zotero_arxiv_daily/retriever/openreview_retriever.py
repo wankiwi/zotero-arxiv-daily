@@ -164,16 +164,22 @@ class OpenReviewRetriever(BaseRetriever):
                     logger.warning(f'OpenReview {venue}: {exc}')
         return records
 
-    def convert_to_paper(self, raw):
+    def convert_to_paper(self, raw, diagnostics=None):
+        def count(stage):
+            if diagnostics is not None:
+                diagnostics[stage] = diagnostics.get(stage, 0) + 1
+        count("examined")
         venue, group, note = raw
         if not isinstance(note, Mapping) or not isinstance(note.get('content'), Mapping):
             raise ValueError('OpenReview note content must be a mapping')
         readers = note.get('readers', [] if self.authenticated else ['everyone'])
         if note.get('ddate') or not isinstance(readers, list) or 'everyone' not in readers or not no_exclusions(note): return None
+        count('public_acl')
         content = public_fields(note['content'])
         if 'withdraw' in str(value(content, 'venue', '')).casefold(): return None
         title, abstract = clean_abstract(value(content, 'title', '')), clean_abstract(value(content, 'abstract', ''))
         if not title: return None
+        count('valid_title_not_withdrawn')
         status_ids = self.venue_ids.get(group, {})
         venue_id = value(content, 'venueid')
         status, kind = 'unverified', 'preprint'
@@ -188,10 +194,18 @@ class OpenReviewRetriever(BaseRetriever):
         timestamp = note['pdate'] if status == 'published' else note.get('odate') or note.get('cdate') or note.get('tcdate')
         if not timestamp: raise ValueError('OpenReview submission has no public/creation timestamp')
         published = datetime.fromtimestamp(timestamp / 1000, timezone.utc)
-        if not self.since <= published <= self.until: return None
+        count('valid_date')
+        if published < self.since:
+            count('older_than_window')
+            return None
+        if published > self.until:
+            count('future_date')
+            return None
+        count('within_window')
         author_keywords = [text for key in ('keywords', 'primary_keyword', 'secondary_keyword', 'free_keyword_1', 'free_keyword_2')
                            for text in strings(value(content, key))]
         if not contains([title, abstract, *author_keywords], self.keywords): return None
+        count('keyword_match')
         areas = [text for key in ('primary_area', 'secondary_area', 'subject_areas', 'subject_area', 'area') for text in strings(value(content, key))]
         if contains(areas, [term for subject in self.subjects for term in SUBJECTS[subject]]):
             reason = 'subject field matched configured area'
@@ -203,6 +217,7 @@ class OpenReviewRetriever(BaseRetriever):
             reason = 'subject text fallback (venue has no subject field)'
             self.fallback_count += 1
         else: return None
+        count('subject_match')
         logger.debug(f'OpenReview {note["id"]}: {reason}')
         identity = quote(note['id'], safe='')
         return Paper(source='openreview', title=title, abstract=abstract,
