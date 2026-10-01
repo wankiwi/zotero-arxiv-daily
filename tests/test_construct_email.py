@@ -104,3 +104,18 @@ def test_email_rejects_unsafe_links_and_escapes_untrusted_fields():
     assert 'Relevance: Unknown' in html and 'Authors unavailable' in html
     assert 'AI summary' in html and '&lt;b&gt;text&lt;/b&gt;' in html
     assert 'AI summary' in email_plain_text(html)
+
+
+def test_email_inline_font_coverage():
+    from html.parser import HTMLParser
+
+    class FontCheck(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag in {'body', 'table', 'td', 'p', 'h1', 'h2', 'a', 'span'}:
+                style = dict(attrs).get('style', '')
+                assert 'font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;' in style, tag
+
+    paper = make_sample_paper(doi='10.1000/example', score=7.5)
+    for html in [render_email([paper]), render_email([])]:
+        FontCheck().feed(html)
+        assert '@font-face' not in html

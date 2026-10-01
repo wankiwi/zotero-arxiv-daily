@@ -224,3 +224,10 @@ preprint_interests:
     assert config.source.biorxiv.window_days == config.source.researchsquare.window_days == 1
     assert 'daily@example.org' not in (tmp_path / 'config/runtime.yaml').read_text()
     assert OmegaConf.to_container(config.email, resolve=False)['receiver'] == '${oc.env:RECEIVER}'
+
+
+def test_daily_schedule_uses_requested_utc_time():
+    import yaml
+
+    workflow = yaml.load((ROOT / '.github/workflows/main.yml').read_text(), Loader=yaml.BaseLoader)
+    assert workflow['on']['schedule'] == [{'cron': '17 20 * * *'}]

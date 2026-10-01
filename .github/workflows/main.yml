@@ -31,7 +31,7 @@ on:
         options: [configured, disabled]
         default: configured
   schedule:
-    - cron: '0 22 * * *' # 06:00 Asia/Shanghai; GitHub schedules may be delayed.
+    - cron: '17 20 * * *' # 20:17 UTC / 04:17 next day Asia/Shanghai; GitHub schedules may be delayed.
 concurrency:
   group: daily-papers
   cancel-in-progress: false

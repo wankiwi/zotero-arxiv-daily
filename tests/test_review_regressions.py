@@ -28,7 +28,7 @@ def test_atom_non_doi_id_does_not_mask_doi_link(config):
 
 
 def test_arxiv_default_window_sees_delayed_announcements(config, monkeypatch):
-    # Submitted Friday 12:00 EDT, public Sunday 20:00 EDT; daily job is 22:00 UTC.
+    # Submitted Friday 12:00 EDT, public Sunday 20:00 EDT; daily job is 20:17 UTC.
     submitted = datetime(2026,9,25,16,tzinfo=UTC)
     public = datetime(2026,9,28,0,tzinfo=UTC)
     class Clock(datetime):
@@ -52,7 +52,7 @@ def test_arxiv_default_window_sees_delayed_announcements(config, monkeypatch):
             config.source.arxiv.window_days = compose(config_name='all').source.arxiv.window_days
     found = []
     for day in range(25,30):
-        Clock.current = datetime(2026,9,day,22,tzinfo=UTC)
+        Clock.current = datetime(2026,9,day,20,17,tzinfo=UTC)
         found.extend(ArxivRetriever(config)._retrieve_raw_papers())
     assert paper in found
 
