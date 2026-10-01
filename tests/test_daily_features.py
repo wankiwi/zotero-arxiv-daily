@@ -132,8 +132,8 @@ def test_three_numbered_groups_plain_and_html():
     papers[2].abstract=''
     html=render_email(papers);plain=email_plain_text(html)
     for title in ('1. Paper 1','1. Paper 2','1. Paper 3'):assert title in html and title in plain
-    assert html.count('class="digest-column"')==3
-    assert 'max-width:720px' in html and 'width="33.33%"' in html
+    assert html.count('class="digest-section"')==3
+    assert 'max-width:760px' in html and '33.33%' not in html
     assert 'No abstract available' in html
     assert plain.index('Journals')<plain.index('Preprints')<plain.index('Random')
     assert 'No new recommendations in this group' in render_email([])
@@ -151,17 +151,20 @@ def test_chinese_prompt_without_live_llm():
 @pytest.mark.parametrize('group',['journals','preprints','random'])
 @pytest.mark.parametrize('status',['generated','fallback','not_generated'])
 @pytest.mark.parametrize('abstract',['Original abstract ' * 100, ''])
-def test_original_abstract_always_preserved(group,status,abstract):
+def test_original_abstract_kept_in_data_and_only_shown_without_summary(group,status,abstract):
     p=paper(1,recommendation_group=group);p.abstract=abstract
     p.tldr='该研究提出新方法。' if status=='generated' else abstract
     p.tldr_status=status
     html=render_email([p]);plain=email_plain_text(html)
-    if abstract:
+    assert p.abstract == abstract
+    if status=='generated':
+        assert '该研究提出新方法。' in html and '该研究提出新方法。' in plain
+        assert 'Original abstract' not in plain and 'No abstract available' not in plain
+        if abstract: assert abstract not in html and abstract.strip() not in plain
+    elif abstract:
         assert abstract in html and abstract.strip() in plain
     else:
         assert 'No abstract available' in html and 'No abstract available' in plain
-    if status=='generated':
-        assert '该研究提出新方法。' in html and 'Original abstract / 原摘要' in plain
 
 @pytest.mark.parametrize('mode,full_text,expected,reason',[
     ('abstract','Entire full text','abstract',None),
@@ -182,7 +185,7 @@ def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,
     prompt=calls[0]['messages'][1]['content']
     if expected=='full_text':assert full_text in prompt and 'Abstract:' not in prompt
     else:assert p.abstract in prompt and 'Full text:' not in prompt
-    assert p.abstract in render_email([p])
+    assert p.abstract not in render_email([p])
 
 def test_full_text_budget_fallback_is_one_call(config):
     from decimal import Decimal

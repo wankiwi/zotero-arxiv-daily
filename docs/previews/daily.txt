@@ -14,7 +14,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute o…
 
 Relevance: 8.0
 
@@ -24,10 +24,6 @@ AI summary
 
 该合成示例仅用于检验中文一句话摘要和邮件排版。
 
-Original abstract / 原摘要
-
-Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented.
-
 Article (https://example.org/paper)
 
 journals · Date unavailable · Source: journals
@@ -36,13 +32,13 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.9
 
 Scored using abstract similarity to your library.
 
-AI summary not generated
+Abstract unavailable
 
 No abstract available
 
@@ -54,7 +50,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.8
 
@@ -72,7 +68,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.7
 
@@ -90,7 +86,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.6
 
@@ -108,7 +104,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.5
 
@@ -126,7 +122,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.4
 
@@ -144,7 +140,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.3
 
@@ -162,7 +158,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.2
 
@@ -180,7 +176,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.1
 
@@ -198,7 +194,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.0
 
@@ -216,7 +212,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.9
 
@@ -234,7 +230,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.8
 
@@ -252,7 +248,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.7
 
@@ -270,7 +266,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.6
 
@@ -288,7 +284,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.5
 
@@ -306,7 +302,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.4
 
@@ -324,7 +320,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.3
 
@@ -342,7 +338,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.2
 
@@ -360,7 +356,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.1
 
@@ -378,7 +374,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.0
 
@@ -396,7 +392,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 5.9
 
@@ -414,7 +410,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 5.8
 
@@ -432,7 +428,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 5.7
 
@@ -450,7 +446,7 @@ journals · Date unavailable · Source: journals
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 5.6
 
@@ -470,7 +466,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute o…
 
 Relevance: 8.0
 
@@ -480,10 +476,6 @@ AI summary
 
 该合成示例仅用于检验中文一句话摘要和邮件排版。
 
-Original abstract / 原摘要
-
-Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented.
-
 Article (https://example.org/paper)
 
 openreview · Date unavailable · Source: openreview
@@ -492,13 +484,13 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.9
 
 Scored using abstract similarity to your library.
 
-AI summary not generated
+Abstract unavailable
 
 No abstract available
 
@@ -510,7 +502,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.8
 
@@ -528,7 +520,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.7
 
@@ -546,7 +538,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.6
 
@@ -564,7 +556,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.5
 
@@ -582,7 +574,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.4
 
@@ -600,7 +592,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.3
 
@@ -618,7 +610,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.2
 
@@ -636,7 +628,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.1
 
@@ -654,7 +646,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.0
 
@@ -672,7 +664,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.9
 
@@ -690,7 +682,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.8
 
@@ -708,7 +700,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.7
 
@@ -726,7 +718,7 @@ openreview · Date unavailable · Source: openreview
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 6.6
 
@@ -746,7 +738,7 @@ openreview · Date unavailable · Source: openreview · Random selection
 
 Example Author
 
-Unknown Affiliation
+Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute of Molecular Science; Example Institute o…
 
 Relevance: 8.0
 
@@ -756,10 +748,6 @@ AI summary
 
 该合成示例仅用于检验中文一句话摘要和邮件排版。
 
-Original abstract / 原摘要
-
-Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented. Synthetic abstract for layout testing only. No research findings are represented.
-
 Article (https://example.org/paper)
 
 openreview · Date unavailable · Source: openreview · Random selection
@@ -768,13 +756,13 @@ openreview · Date unavailable · Source: openreview · Random selection
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.9
 
 Scored using abstract similarity to your library.
 
-AI summary not generated
+Abstract unavailable
 
 No abstract available
 
@@ -786,13 +774,13 @@ openreview · Date unavailable · Source: openreview · Random selection
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.8
 
 Scored using abstract similarity to your library.
 
-Original abstract (AI summary not generated)
+Original abstract (AI summary unavailable)
 
 Synthetic abstract for layout testing only. No research findings are represented.
 
@@ -804,7 +792,7 @@ openreview · Date unavailable · Source: openreview · Random selection
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.7
 
@@ -822,7 +810,7 @@ openreview · Date unavailable · Source: openreview · Random selection
 
 Example Author
 
-Unknown Affiliation
+Example University
 
 Relevance: 7.6
 

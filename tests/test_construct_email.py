@@ -2,10 +2,11 @@
 
 from zotero_arxiv_daily.construct_email import render_email, get_block_html
 from tests.canned_responses import make_sample_paper
+import pytest
 
 
 def test_render_email_with_papers():
-    papers = [make_sample_paper(score=7.5, tldr="A great paper.", affiliations=["MIT"])]
+    papers = [make_sample_paper(score=7.5, tldr="A great paper.", tldr_status='generated', affiliations=["MIT"])]
     html = render_email(papers)
     assert "Sample Paper Title" in html
     assert "A great paper." in html
@@ -32,13 +33,14 @@ def test_render_email_author_truncation():
 
 
 def test_render_email_affiliation_truncation():
-    affiliations = [f"Uni {i}" for i in range(8)]
+    affiliations = ['A very long university affiliation ' * 20, 'ANOTHER_AFFILIATION']
     paper = make_sample_paper(affiliations=affiliations, score=7.0, tldr="ok")
-    html = render_email([paper])
-    assert "Uni 0" in html
-    assert "Uni 4" in html
-    assert "..." in html
-    assert "Uni 7" not in html
+    html = render_email([paper], affiliation_max_chars=60)
+    from zotero_arxiv_daily.construct_email import email_plain_text, shorten_affiliations
+    shortened = shorten_affiliations(affiliations, 60)
+    assert len(shortened) <= 60 and shortened.endswith('…')
+    assert shortened in html and shortened in email_plain_text(html)
+    assert 'ANOTHER_AFFILIATION' not in html and paper.affiliations == affiliations
 
 
 def test_render_email_no_affiliations():
@@ -98,3 +100,31 @@ def test_email_inline_font_coverage():
     for html in [render_email([paper]), render_email([])]:
         FontCheck().feed(html)
         assert '@font-face' not in html
+
+
+@pytest.mark.parametrize('status,summary,error', [('legacy','Old summary',None),
+    ('generated','',None), ('generated','Invalid summary','request_failed')])
+def test_invalid_or_unverified_summary_never_hides_original(status, summary, error):
+    from zotero_arxiv_daily.construct_email import email_plain_text
+    paper = make_sample_paper(abstract='ORIGINAL EVIDENCE', tldr=summary,
+                              tldr_status=status, tldr_error=error)
+    html = render_email([paper])
+    assert 'ORIGINAL EVIDENCE' in html and 'ORIGINAL EVIDENCE' in email_plain_text(html)
+    if summary: assert summary not in html
+    assert paper.abstract == 'ORIGINAL EVIDENCE'
+
+
+@pytest.mark.parametrize('limit', [0, 19, 1001, True, '180'])
+def test_affiliation_limit_validation(limit):
+    with pytest.raises(ValueError, match='affiliation_max_chars'):
+        render_email([], affiliation_max_chars=limit)
+
+
+def test_affiliations_are_shortened_before_html_escaping():
+    from zotero_arxiv_daily.construct_email import email_plain_text, shorten_affiliations
+    affiliations = ['<unsafe> & Institute ' * 20]
+    paper = make_sample_paper(affiliations=affiliations)
+    short = shorten_affiliations(affiliations, 35)
+    html = render_email([paper], affiliation_max_chars=35)
+    assert '<unsafe>' not in html and short in email_plain_text(html)
+    assert len(short) <= 35 and paper.affiliations == affiliations

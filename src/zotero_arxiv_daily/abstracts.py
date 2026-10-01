@@ -5,6 +5,7 @@ from urllib.parse import quote
 from loguru import logger
 from .http import session
 from .identity import paper_doi, canonical_doi
+from .publisher_abstracts import publisher_session, publisher_url, recover_publisher
 
 # Strip only known formatting tags. Unknown '<Tc' and '<y ...>' sequences
 # are scientific plaintext, not HTML. Decode entities once, never reparse them
@@ -35,11 +36,15 @@ def recover_abstracts(papers, config):
     if not config.get('enabled', False): return
     limit = config.get('max_papers', 50)
     if type(limit) is not int or limit < 0: raise ValueError('abstracts.max_papers must be a nonnegative integer')
+    publisher_limit = config.get('publisher_max_papers', 10)
+    if type(publisher_limit) is not int or not 0 <= publisher_limit <= 50:
+        raise ValueError('abstracts.publisher_max_papers must be an integer from 0 to 50')
     missing = [p for p in papers if not p.abstract and paper_doi(p)]
     if len(missing) > limit:
         logger.warning(f'Abstract recovery limited to {limit}/{len(missing)} missing DOI abstracts')
-    with session(config.get('mailto')) as client:
+    with session(config.get('mailto')) as client, publisher_session() as publisher:
         blocked = set()
+        publisher_blocked, publisher_attempts = set(), 0
         for paper in missing[:limit]:
             doi = paper_doi(paper)
             for provider, url in [('Crossref', 'https://api.crossref.org/works/' + quote(doi, safe='')),
@@ -61,6 +66,22 @@ def recover_abstracts(papers, config):
                         abstract = inverted_abstract(data.get('abstract_inverted_index')) if canonical_doi(data.get('doi')) == doi else ''
                     if abstract:
                         paper.abstract, paper.abstract_source = abstract, provider
+                        paper.abstract_source_url, paper.abstract_recovery_status = url, 'recovered'
                         break
                 except Exception as exc:
                     logger.warning(f'{provider} abstract lookup failed ({type(exc).__name__}); retaining missing-abstract status')
+            if not paper.abstract and config.get('publisher_fallback', True) and publisher_url(paper):
+                if publisher_attempts >= publisher_limit:
+                    paper.abstract_recovery_status = 'publisher_lookup_limit'
+                    continue
+                publisher_attempts += 1
+                try:
+                    abstract, url, status = recover_publisher(paper, publisher, publisher_blocked)
+                    paper.abstract_recovery_status = status
+                    if abstract:
+                        paper.abstract, paper.abstract_source, paper.abstract_source_url = abstract, 'Publisher', url
+                    else:
+                        logger.warning(f'Publisher abstract lookup: {status}; retaining missing-abstract status')
+                except Exception as exc:
+                    paper.abstract_recovery_status = 'publisher_request_failed'
+                    logger.warning(f'Publisher abstract lookup failed ({type(exc).__name__}); retaining missing-abstract status')

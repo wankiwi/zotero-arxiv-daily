@@ -166,7 +166,7 @@ class Executor:
             pending = pending_batch(state.pending('email'), quotas, maximum)
             if pending or (self.config.executor.send_empty and not errors):
                 try:
-                    send_email(self.config, render_email(pending))
+                    send_email(self.config, render_email(pending, affiliation_max_chars=self.config.email.get('affiliation_max_chars', 180)))
                     logger.info(f'SMTP accepted {len(pending)} recommendations')
                     state.mark(pending, 'email')
                     state.save()

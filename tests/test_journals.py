@@ -71,6 +71,22 @@ def test_crossref_pagination_issn_filter_and_missing_abstract(config):
     assert papers[0].journal == journal.title
 
 
+def test_cover_labels_are_excluded_from_crossref_and_rss(config):
+    from dataclasses import replace
+    retriever = JournalRetriever(config)
+    titles = ['Outside Front Cover: Molecular materials', 'Inside Back Cover (Issue 10)',
+              'Front cover surfaces control molecular transport', 'Covers and interfaces in chemistry']
+    since, until = datetime(2026, 3, 1, tzinfo=timezone.utc), datetime(2026, 3, 5, tzinfo=timezone.utc)
+    journal = replace(CORE['jacs'], issns=(CORE['jacs'].issns[0],))
+    client = SimpleNamespace(get=lambda *a, **kw: response({'items': [entry(f'10.1021/{i}', t) for i,t in enumerate(titles)]}))
+    assert [p.title for p in retriever._crossref(journal, client, since, until)] == titles[2:]
+    xml = '<rss version="2.0"><channel>' + ''.join(
+        f'<item><title>{t}</title><link>https://doi.org/10.1021/{i}</link><pubDate>Mon, 02 Mar 2026 00:00:00 GMT</pubDate></item>'
+        for i,t in enumerate(titles)) + '</channel></rss>'
+    client = SimpleNamespace(get=lambda *a, **kw: SimpleNamespace(content=xml.encode(), raise_for_status=lambda:None))
+    assert [p.title for p in retriever._rss(journal, client, since, until)] == titles[2:]
+
+
 def test_crossref_repeated_cursor_is_not_silent_truncation(config):
     retriever = JournalRetriever(config)
     client = SimpleNamespace(get=lambda *a, **kw: response({'items': [entry()] * 200, 'next-cursor': '*'}))

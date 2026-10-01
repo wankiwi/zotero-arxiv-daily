@@ -24,6 +24,11 @@ def clean_text(value):
     return ' '.join(unescape(re.sub(r'<[^>]+>', ' ', value or '')).split())
 
 
+def is_cover_title(title):
+    """Publisher cover labels, not research titles mentioning covers or surfaces."""
+    return bool(re.match(r'^(?:(?:inside|outside)\s+)?(?:front|back)\s+cover\s*(?:$|[:(])', title, re.I))
+
+
 def crossref_date(item):
     # created/indexed are metadata timestamps, not publication dates.
     for field in ('published-online', 'published-print', 'published', 'issued'):
@@ -136,7 +141,7 @@ class JournalRetriever(BaseRetriever):
                         title = clean_text((item.get('title') or [''])[0])
                         doi = normalize_doi(item.get('DOI'))
                         published = crossref_date(item)
-                        if not title or not doi or not published or not since <= published <= until:
+                        if not title or is_cover_title(title) or not doi or not published or not since <= published <= until:
                             continue
                         if re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
                             continue
@@ -175,7 +180,7 @@ class JournalRetriever(BaseRetriever):
         for entry in feed.entries:
             try:
                 title = clean_text(entry.get('title'))
-                if not title or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
+                if not title or is_cover_title(title) or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
                     continue
                 parsed = entry.get('published_parsed') or entry.get('updated_parsed')
                 if not parsed:

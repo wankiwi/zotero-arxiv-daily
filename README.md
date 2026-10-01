@@ -10,8 +10,8 @@
 4. 清理 HTML/JATS/转义实体。缺少摘要的 DOI 论文可依次从 Crossref 和 OpenAlex 合法公开元数据恢复，并验证返回 DOI；不编造摘要，不绕过付费墙。失败或仍缺摘要时明确显示 `No abstract available`，排序注明 `title only`。
 5. 本地或 API embedding 与 Zotero 摘要比较，按文库加入时间加权；分数不是概率。先按相关性选 **25 篇期刊、15 篇预印本**，再从剩余符合条件且未见过的候选中**无放回随机选 5 篇**。随机组和前两组无重叠；OpenReview默认归预印本；经官方venue ID及pdate双重确认的已发表TMLR归期刊，已录用会议论文保留conference状态并归“预印本（含会议论文）”列。未知状态不猜测为已发表。
 6. 不足时仅发送实际候选，日志显示各组实际数/目标数，不跨组补满、不重复、不扩大领域。等待重试的投递占用对应组名额；随机结果存入历史，失败重试不重新抽样。旧历史无组标记时按来源归期刊/预印本。
-7. 邮件桌面为期刊、预印本、随机推荐三列，各列从 1 编号；窄屏（≤720px）竖排为三组。纯文本保留同样的三组与独立编号。使用 email-safe table，Aptos → Calibri → Arial → Helvetica → sans-serif，不下载字体。客户端可能忽略媒体查询，因此最终显示仍取决于客户端。
-8. LLM 可按论文摘要/全文生成**中文一句话** TLDR，；作者单位仅保留来源元数据，不再调用付费模型提取。AI 成功、未启用、失败回退和旧摘要均标明来源；模型不可用时停止后续无效请求。没有摘要/全文不调用 TLDR API。用户已批准启用 LLM，每日上限 **¥0.20**；本分支取消定时强制关闭，但运行前必须通过下述预算校验。已依据公开API非推理模式约定建立保守峰值价预算守卫，待合并、初始化账本及启用配置后方可调用，中文提示词不代表已执行翻译。成功的中文摘要下方仍完整保留原摘要，分别标注；不会因成功生成摘要而隐藏或截断原文。
+7. 邮件在电脑和手机均为单列，依次显示期刊、预印本、随机推荐三组，各组从 1 编号；纯文本保持相同顺序。使用 email-safe table、760px 最大内容宽度及 Aptos → Calibri → Arial → Helvetica → sans-serif，无需媒体查询或外部字体。
+8. LLM 按论文摘要或可获取的全文生成**中文一句话**总结。只有状态为成功、非空且没有错误的总结才显示为 AI summary；此时 HTML 和纯文本均不再重复原摘要。未生成、失败、空结果和无法验证来源的旧总结均显示原摘要，原摘要也没有时明确标为不可用。完整原摘要始终保留在内部数据。作者单位仅使用来源元数据，显示长度默认限制为180字符（含省略号），完整单位信息保留在内部数据。模型调用由每日 **¥0.20** 预算守卫管理，不付费提取作者单位。
 9. SMTP 成功后记录投递；支持本地显式启用 RSS。仓库工作流固定只发邮件，禁用 RSS/Pages；旧 CUSTOM_CONFIG 中 RSS 开关不能重新启用发布。SMTP 接受不等同于收件箱到账；SMTP 接受后进程崩溃但状态尚未保存仍存在邮件协议固有的重复窗口。
 
 ## 快速开始与安全测试
@@ -63,6 +63,7 @@ zotero:
   include_path: null
   ignore_path: ["archive/**"]  # 脱敏占位，按自己的 collection 修改
 email:
+  affiliation_max_chars: 180
   sender: ${oc.env:SENDER}
   receiver: ${oc.env:RECEIVER}
   smtp_server: mail.cstnet.cn
@@ -77,7 +78,7 @@ llm:
     key: ${oc.env:OPENAI_API_KEY}
     base_url: https://api.siliconflow.cn/v1
   generation_kwargs:
-    model: deepseek-ai/DeepSeek-V4-Flash  # 配置值，尚未实测可用性
+    model: deepseek-ai/DeepSeek-V4-Flash  # 已通过受预算约束的单篇中文验证
 executor:
   source: [journals, arxiv, biorxiv, researchsquare, openreview]
   max_paper_num: 45
@@ -91,6 +92,8 @@ source:
 abstracts:
   enabled: true
   max_papers: 50
+  publisher_fallback: true
+  publisher_max_papers: 10
 output:
   email: {enabled: true}
   rss: {enabled: false}
@@ -176,6 +179,8 @@ preprint_interests:
 | `source.journals.catalog_cache` | data/journal_catalog.json；目录及ISSN缓存 |
 | `source.journals.mailto` | null；Crossref请求联系邮箱，勿将私人邮箱写入公共示例 |
 | `abstracts.enabled`, `max_papers`, `mailto` | base=false、50、null；interests/定时启用。排名与配额选择后，最多对50篇已选中、缺摘要且有DOI的论文查询两个元数据源；缺摘要候选仍按标题排名，补回摘要不重新排名；401/403/429后跳过该provider，保留警告 |
+| `abstracts.publisher_fallback`, `publisher_max_papers` | true、10；Crossref/OpenAlex均未返回摘要时，最多为10篇已选论文尝试Nature或PRL公开摘要页（范围0–50，且受max_papers限制）。每篇最多4次GET（含重定向）、页面最多2MB；只访问HTTPS白名单出版社及Nature的匿名authorize/transit重定向，验证最终文章页面DOI，仅抽取摘要区或明确的citation_abstract。遇401/403/429或挑战页立即停止该站点，不绕过付费墙、不取全文或宣传描述代替摘要 |
+| `email.affiliation_max_chars` | 180；HTML/纯文本中作者单位总显示字符上限，包含末尾省略号 `…`，范围20–1000。例：`email: {affiliation_max_chars: 120}`；不修改内部完整单位信息 |
 
 ### OpenReview 的真实范围与限制
 
@@ -210,7 +215,7 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 ## 维护与排错
 
-`Executor`组织取文库→源检索→去重→摘要恢复→排序/分组→摘要生成→状态/投递。`retriever/`注册来源，`reranker/`注册embedding实现，`selection.py`统一分组和待投递配额，`abstracts.py`处理合法元数据恢复，`protocol.py`记录摘要来源/分组，`construct_email.py`生成三列HTML及纯文本，`state.py`保存投递，`scripts/prepare_workflow.py`处理有效策略，`scripts/workflow_state.py`持久化Git状态。
+`Executor`组织取文库→源检索→去重→排序/分组→已选论文摘要恢复→摘要生成→状态/投递。`retriever/`注册来源，`reranker/`注册embedding实现，`selection.py`统一分组和待投递配额，`abstracts.py`处理合法元数据恢复，`protocol.py`记录摘要来源/分组，`construct_email.py`生成单列HTML及纯文本，`state.py`保存投递，`scripts/prepare_workflow.py`处理有效策略，`scripts/workflow_state.py`持久化Git状态。
 
 无结果先查源错误、窗口、关键词、ignore_path、阈值、文库及历史去重；不要通过清历史强行再发。模型失败看结构化摘要状态，不打印API响应体或secret。OpenReview403是访问限制，不是没有论文。Crossref未索引但出版社RSS正常时会标注覆盖限制；临时网络错误仍失败。测试工作流不载入真实投递凭据；只有手工运行发送工作流才发送真实邮件。
 
@@ -218,9 +223,9 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 仅约束本仓库受控请求，不是账户级扣费上限；其他客户端或旧版本不在保护范围内。所有公开摘要生成入口均要求BudgetRequests预约；缺失budget配置默认要求守卫，false禁止调用而不是无限额。付费单位提取已移除，保留出版社单位元数据。
 
-保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01；建议于2026-10-08 UTC结束前复核。2026-10-09 UTC起若未复核，继续按最后复核费率运行并保留每日¥0.20估算记账额度，同时在邮件（HTML及纯文本）和日志醒目提醒；供应商涨价时实际费用可能超过估算及¥0.20，不承诺实际费用的绝对硬上限。已知新价格时应更新费率并按预算减少请求。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
+保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://api-docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01；建议于2026-10-08 UTC结束前复核。2026-10-09 UTC起若未复核，继续按最后复核费率运行并保留每日¥0.20估算记账额度，同时在邮件（HTML及纯文本）和日志醒目提醒；供应商涨价时实际费用可能超过估算及¥0.20，不承诺实际费用的绝对硬上限。已知新价格时应更新费率并按预算减少请求。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
 
-用户输入最多768 UTF-8字节，系统输入最多256字节，再保留128 framing tokens，共按1152输入token上界预约。原摘要仍在邮件完整保留，仅模型上下文缩短。每次最坏预约 `(1152×3 + 96×9)/1,000,000 = ¥0.00432`，45篇合计¥0.1944。预算是基于已发布接口约定的工程上限，不是对供应商未来涨价或违规计费的绝对保证。
+用户输入最多768 UTF-8字节，系统输入最多256字节，再保留128 framing tokens，共按1152输入token上界预约。原摘要完整保留在内部数据；只有没有有效AI总结时才在邮件中显示原摘要，仅模型上下文缩短。每次最坏预约 `(1152×3 + 96×9)/1,000,000 = ¥0.00432`，45篇合计¥0.1944。预算是基于已发布接口约定的工程上限，不是对供应商未来涨价或违规计费的绝对保证。
 
 任何调用前须在共享paper-state分支的llm_budget.json原子提交当天完整额度。普通fast-forward push实现并发比较交换，不强推、不改投递记录。失败、账本损坏/丢失、当天已预约均不调用；崩溃/超时不返还额度，当天后续运行回退原摘要。运行中串行预扣及实际请求，跨UTC日停止；模型ID、usage缺失/无效、token计数越界、reasoning_content/reasoning_tokens异常会终止所有排队调用。实际付费请求边界强制client.with_options(max_retries=0)，直接调用库函数也不能保留SDK默认重试。
 
@@ -246,7 +251,7 @@ llm:
 # 若确需原文：改为 full_text
 ```
 
-`full_text`当前复用arXiv合法HTML/PDF/TeX提取（HTML含表格），不承诺所有出版社全文可获取，不绕过付费墙。输入是完整的已提取文本，仍可能受文档解析质量影响。其他来源未提供全文时回退abstract；不会把截断前缀标为全文。全文超过当前768字节用户输入界限时回退，该小额度通常只能支持摘要。回退不额外调用模型，也不隐瞒原因：`summary_input_source`及`summary_input_fallback`保存在状态，并显示在邮件元信息。无原摘要可回退时不声称成功生成。无论输入选哪一种，成功摘要后的原摘要仍完整显示。
+`full_text`当前复用arXiv合法HTML/PDF/TeX提取（HTML含表格），不承诺所有出版社全文可获取，不绕过付费墙。输入是完整的已提取文本，仍可能受文档解析质量影响。其他来源未提供全文时回退abstract；不会把截断前缀标为全文。全文超过当前768字节用户输入界限时回退，该小额度通常只能支持摘要。回退不额外调用模型，也不隐瞒原因：`summary_input_source`及`summary_input_fallback`保存在状态，并显示在邮件元信息。无原摘要可回退时不声称成功生成。无论输入选哪一种，有效AI总结都不会在邮件中重复附上原摘要；内部原摘要不删除。
 
 ## OpenReview 官方登录与访问限制
 
@@ -267,3 +272,5 @@ llm:
 ### 单篇 LLM 验证（不发送邮件）
 
 手动运行 **Test → mode=llm**：先验证预算记录中的服务地址与模型，再通过只读模型列表检查凭据与模型可用性，然后为 UTC 当日预留整个 ¥0.20 额度，只对一篇已投递、包含公开原始摘要的论文生成一句中文总结。使用生产摘要函数、96-token 输出限制、关闭思考和零自动重试；日志仅保留状态与 token 用量，不输出论文内容、账户信息或密钥。此模式没有 SMTP 凭据，不写入投递历史，不发送或重发邮件。即使验证失败或仅用掉一小部分预算，当天额度也不会返还；同日后续任务保留原始摘要。401/403 在预留预算前停止，需要通过 GitHub Secrets 安全更新 `OPENAI_API_KEY`。
+
+出版社封面（明确以“Outside Front Cover:”等封面标签开头）不作为研究论文推荐；研究标题中正常提到cover或surface不会被排除。恢复后的摘要记录来源URL与状态，出版社拒绝普通HTTP访问时保留缺失状态和警告，不用标题相似的预印本或其他版本替代。

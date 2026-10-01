@@ -2,11 +2,11 @@ ZOTERO · RESEARCH DIGEST
 
 Daily Papers
 
-2 recommendations · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers
+3 recommendations · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers
 
 Relevance uses text similarity weighted by when papers were added to your library. Higher scores mean a closer match, not a probability. Scores are shown to one decimal place.
 
-期刊 / Journals (2)
+期刊 / Journals (1)
 
 journals · Date unavailable · Source: journals
 
@@ -26,9 +26,11 @@ AI summary
 
 Article (https://example.org/paper)
 
-journals · Date unavailable · Source: journals
+预印本 / Preprints（含会议论文） (1)
 
-2. Synthetic journals paper 2: Molecular dynamics and scientific machine learning across complex materials
+openreview · Date unavailable · Source: openreview
+
+1. Synthetic preprints paper 2: Molecular dynamics and scientific machine learning across complex materials
 
 Example Author
 
@@ -44,12 +46,24 @@ No abstract available
 
 Article (https://example.org/paper)
 
-预印本 / Preprints（含会议论文） (0)
+随机推荐 / Random (1)
 
-No new recommendations in this group.
+openreview · Date unavailable · Source: openreview · Random selection
 
-随机推荐 / Random (0)
+1. Synthetic random paper 3: Molecular dynamics and scientific machine learning across complex materials
 
-No new recommendations in this group.
+Example Author
+
+Example University
+
+Relevance: 7.8
+
+Scored using abstract similarity to your library.
+
+Original abstract (AI summary unavailable)
+
+Synthetic abstract for layout testing only. No research findings are represented.
+
+Article (https://example.org/paper)
 
 Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.

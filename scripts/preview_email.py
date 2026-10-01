@@ -14,8 +14,11 @@ def main():
                 authors=['Example Author'], abstract='' if index == 1 else 'Synthetic abstract for layout testing only. No research findings are represented. ' * (12 if index == 0 else 1),
                 tldr='该合成示例仅用于检验中文一句话摘要和邮件排版。' if index == 0 else None,
                 tldr_status='generated' if index == 0 else 'not_generated',
+                affiliations=['Example Institute of Molecular Science; ' * 18] if index == 0 else ['Example University'],
                 score=8-index/10, url='https://example.org/paper', recommendation_group=group))
-    for name, items in [('daily', papers), ('empty', []), ('shortage', papers[:2])]:
+    showcase = [papers[0], papers[26], papers[42]]
+    showcase[-1].tldr_status, showcase[-1].tldr_error = 'fallback', 'request_failed'
+    for name, items in [('daily', papers), ('empty', []), ('shortage', papers[:2]), ('showcase', showcase)]:
         html=render_email(items)
         (destination/f'{name}.html').write_text(html,encoding='utf-8')
         (destination/f'{name}.txt').write_text(email_plain_text(html),encoding='utf-8')

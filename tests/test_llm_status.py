@@ -90,7 +90,8 @@ def test_summary_status_roundtrips_and_labels_both_outputs(tmp_path, status, lab
     assert not restored.pending('email')
     restored_paper = restored.pending('rss')[0]
     assert restored_paper.tldr_status == status and restored_paper.tldr_error == paper.tldr_error
-    assert label in render_email([restored_paper])
+    email_label = 'Original abstract (AI summary unavailable)' if status == 'legacy' else label
+    assert email_label in render_email([restored_paper])
     path, _ = write_rss(restored, {'path': str(tmp_path / 'feed.xml')})
     assert label in ET.parse(path).findtext('./channel/item/description')
 

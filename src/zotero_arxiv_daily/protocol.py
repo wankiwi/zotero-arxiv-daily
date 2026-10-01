@@ -28,6 +28,8 @@ class Paper:
     publication_venue: Optional[str] = None
     recommendation_group: Optional[str] = None
     abstract_source: Optional[str] = None
+    abstract_source_url: Optional[str] = None
+    abstract_recovery_status: Optional[str] = None
     subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
     summary_input_source: Optional[str] = None

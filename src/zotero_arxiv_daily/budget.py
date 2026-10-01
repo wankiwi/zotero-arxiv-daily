@@ -26,7 +26,7 @@ VERIFIED_PRICING = {
     'input_cny_per_million': '3', 'output_cny_per_million': '9',
     'verified_on': '2026-10-01', 'valid_through': '2026-10-08',
     'pricing_source': 'https://www.siliconflow.cn/pricing',
-    'model_contract': 'https://docs.siliconflow.cn/docs/api/chat-completions-post',
+    'model_contract': 'https://api-docs.siliconflow.cn/docs/api/chat-completions-post',
 }
 MAX_DAILY_CNY = Decimal('0.20')
 PROMPT_BYTES = 768
