@@ -90,7 +90,7 @@ reranker:
 executor:
   quotas: null # null preserves the legacy global maximum; see interests profile.
   fetch_full_text: true # Compatibility key; llm.input_mode now controls full-text retrieval.
-  enrichment_workers: 1 # Up to 8; concurrency applies when fetch_full_text=false.
+  enrichment_workers: 1 # Up to 8; concurrency applies when llm.input_mode=abstract.
   exclude_existing: true
   min_score: -10
   debug: false # Whether to use debug mode. Example: true
