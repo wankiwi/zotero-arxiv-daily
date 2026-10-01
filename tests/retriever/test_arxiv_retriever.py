@@ -3,7 +3,6 @@
 import time
 from types import SimpleNamespace
 
-import feedparser
 
 from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
 import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
@@ -28,7 +27,6 @@ def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
         e for e in mock_feedparser.entries
         if e.get("arxiv_announce_type", "new") == "new"
     ]
-    paper_ids = [e.id.removeprefix("oai:arXiv.org:") for e in new_entries]
 
     # Build fake ArxivResult-like objects matching each RSS entry
     fake_results = []

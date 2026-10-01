@@ -1,29 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
-from functools import lru_cache
-import tiktoken
 from openai import OpenAI
 from loguru import logger
 from .llm import model_unavailable
 from .budget import BudgetUnavailable, BudgetRequests, PROMPT_BYTES, SYSTEM_BYTES, MAX_OUTPUT_TOKENS, audit_response, no_retry_client
 RawPaperItem = TypeVar('RawPaperItem')
-
-@lru_cache(maxsize=1)
-def _tokenizer():
-    try:
-        return tiktoken.encoding_for_model("gpt-4o")
-    except Exception as exc:
-        logger.warning(f"Tokenizer unavailable; using conservative UTF-8 byte limit: {exc}")
-        return None
-
-
-def truncate_prompt(prompt: str, limit: int) -> str:
-    enc = _tokenizer()
-    if enc is None:
-        return prompt.encode('utf-8')[:limit].decode('utf-8', errors='ignore')
-    return enc.decode(enc.encode(prompt, disallowed_special=())[:limit])
-
 
 @dataclass
 class Paper:
@@ -75,19 +57,14 @@ class Paper:
         mode = llm_params.get('input_mode', 'abstract')
         if mode not in ('abstract', 'full_text'):
             raise ValueError('llm.input_mode must be abstract or full_text')
-        budgeted = True
         self.summary_input_source, self.summary_input_fallback = 'abstract', None
-        title = self.title
-        if budgeted:
-            title = title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
+        title = self.title.encode('utf-8')[:128].decode('utf-8', errors='ignore')
         full_prompt = f'Title: {title}\nFull text:\n{self.full_text or ""}'
         if mode == 'full_text':
             if not self.full_text:
                 self.summary_input_fallback = 'full_text_unavailable'
-            elif budgeted and len(full_prompt.encode('utf-8')) > PROMPT_BYTES:
+            elif len(full_prompt.encode('utf-8')) > PROMPT_BYTES:
                 self.summary_input_fallback = 'full_text_exceeds_budget_input_bound'
-            elif not budgeted and truncate_prompt(full_prompt, 4000) != full_prompt:
-                self.summary_input_fallback = 'full_text_exceeds_context_limit'
             else:
                 self.summary_input_source = 'full_text'
         if self.summary_input_source == 'full_text':
@@ -98,17 +75,13 @@ class Paper:
             if not self.abstract:
                 raise ValueError('No usable summary input after full-text fallback')
             prompt = f'Title: {title}\nAbstract: {self.abstract}'
-            if budgeted:
-                prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
-            else:
-                prompt = truncate_prompt(prompt, 4000)
+            prompt = prompt.encode('utf-8')[:PROMPT_BYTES].decode('utf-8', errors='ignore')
         system = f'Return exactly one sentence in {lang} summarizing the scientific evidence. No heading, list, or invented claims.'
         kwargs = dict(llm_params.get('generation_kwargs', {}))
-        if budgeted:
-            if len(system.encode('utf-8')) > SYSTEM_BYTES:
-                raise BudgetUnavailable('System prompt exceeds verified input bound')
-            kwargs = {'model': kwargs['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'n': 1,
-                      'extra_body': {'enable_thinking': False}}
+        if len(system.encode('utf-8')) > SYSTEM_BYTES:
+            raise BudgetUnavailable('System prompt exceeds verified input bound')
+        kwargs = {'model': kwargs['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'n': 1,
+                  'extra_body': {'enable_thinking': False}}
         
         def operation():
             request_client = no_retry_client(openai_client)

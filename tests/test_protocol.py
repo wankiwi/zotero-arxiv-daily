@@ -41,9 +41,7 @@ def test_affiliations_api_cannot_spend(llm_params):
     paper.affiliations=['Publisher metadata']
     assert paper.generate_affiliations(None,llm_params)==['Publisher metadata']
 
-def test_long_unicode_abstract_is_bounded_without_tokenizer(llm_params,monkeypatch):
-    import zotero_arxiv_daily.protocol as protocol
-    monkeypatch.setattr(protocol,'truncate_prompt',lambda *args:pytest.fail('Wrong-model tokenizer used for paid input'))
+def test_long_unicode_abstract_is_bounded_without_tokenizer(llm_params):
     requests=[]
     def create(**kwargs):
         requests.append(kwargs)

@@ -155,7 +155,6 @@ def test_run_end_to_end(config, monkeypatch):
     from omegaconf import open_dict
 
     from tests.canned_responses import (
-        make_sample_corpus,
         make_sample_paper,
         make_stub_openai_client,
         make_stub_smtp,

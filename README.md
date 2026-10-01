@@ -54,7 +54,7 @@ uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.ena
 
 ## 当前配置的脱敏示例
 
-以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、25/15/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM尚未进行付费试调用，不声称模型密钥已实测可用。GitHub不能读回已有secret，所有凭据继续由用户管理。
+以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、25/15/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM是否成功以每次运行的生成状态及预算账本为准。GitHub不能读回已有secret，所有凭据继续由用户管理。
 
 ```yaml
 zotero:

@@ -138,9 +138,7 @@ def test_three_numbered_groups_plain_and_html():
     assert plain.index('Journals')<plain.index('Preprints')<plain.index('Random')
     assert 'No new recommendations in this group' in render_email([])
 
-def test_chinese_prompt_without_live_llm(monkeypatch):
-    import zotero_arxiv_daily.protocol as module
-    monkeypatch.setattr(module,'truncate_prompt',lambda text,limit:text)
+def test_chinese_prompt_without_live_llm():
     requests=[]
     def create(**kwargs):
         requests.append(kwargs)
@@ -171,10 +169,8 @@ def test_original_abstract_always_preserved(group,status,abstract):
     ('full_text',None,'abstract','full_text_unavailable'),
     ('full_text','Long text '*10000,'abstract','full_text_exceeds_budget_input_bound'),
 ])
-def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,reason,monkeypatch):
-    import zotero_arxiv_daily.protocol as module
+def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,reason):
     calls=[]
-    monkeypatch.setattr(module,'truncate_prompt',lambda text,limit:text[:limit])
     def create(**kwargs):
         calls.append(kwargs)
         return make_chat_response('该研究提出新方法。', model=kwargs.get('model'))

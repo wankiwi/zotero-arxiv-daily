@@ -8,6 +8,7 @@ from omegaconf import ListConfig
 from ..http import session
 from ..identity import canonical_doi, normalize_doi
 from ..protocol import Paper
+from ..abstracts import inverted_abstract
 from .journal_retriever import clean_text
 
 API = 'https://api.openalex.org'
@@ -34,18 +35,7 @@ def get_json(client, path, params=None):
 
 
 def abstract_text(index):
-    if not isinstance(index, dict):
-        return ''
-    # Sort sparse positions: do not allocate an array sized by untrusted offsets.
-    words = {}
-    for word, positions in index.items():
-        if not isinstance(word, str) or not isinstance(positions, list):
-            continue
-        for position in positions:
-            if type(position) is int and 0 <= position < 100000:
-                words.setdefault(position, word)
-    return clean_text(' '.join(words[pos] for pos in sorted(words)))
-
+    return inverted_abstract(index)
 
 def publication_date(item):
     try:
@@ -61,8 +51,8 @@ class OpenAlexResearchSquare:
         self.sources = string_list(config.get('source_ids'), 'source_ids')
         if len(self.sources) > 100 or any(not re.fullmatch(r'S\d+', s) for s in self.sources):
             raise ValueError('Research Square source_ids must contain at most 100 OpenAlex S IDs')
-        self.types = string_list(config.get('type'), 'type')
-        if self.types != ['preprint']:
+        configured_types = string_list(config.get('type'), 'type')
+        if configured_types != ['preprint']:
             raise ValueError('Research Square OpenAlex currently supports type: [preprint] only')
         self.subfields = string_list(config.get('subfield'), 'subfield')
         if len(self.subfields) > 100:

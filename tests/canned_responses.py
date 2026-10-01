@@ -10,8 +10,6 @@ from zotero_arxiv_daily.protocol import CorpusPaper, Paper
 # OpenAI client stub
 # ---------------------------------------------------------------------------
 
-_AFFILIATION_MARKER = "You are an assistant who perfectly extracts affiliations"
-_AFFILIATION_RESPONSE = '["TsingHua University","Peking University"]'
 _TLDR_RESPONSE = "Hello! How can I assist you today?"
 
 
@@ -33,10 +31,6 @@ def make_chat_response(content: str, model='test-model') -> SimpleNamespace:
 
 
 def _stub_chat_create(**kwargs):
-    messages = kwargs.get("messages", [])
-    request_str = str(messages)
-    if _AFFILIATION_MARKER in request_str:
-        return make_chat_response(_AFFILIATION_RESPONSE, kwargs.get('model'))
     return make_chat_response(_TLDR_RESPONSE, kwargs.get('model'))
 
 
@@ -53,8 +47,8 @@ def _stub_embeddings_create(**kwargs):
 def make_stub_openai_client():
     """Return a SimpleNamespace that quacks like openai.OpenAI().
 
-    chat.completions.create() and embeddings.create() behave identically
-    to the Docker mock_openai server that CI previously relied on.
+    chat.completions.create() and embeddings.create() provide deterministic
+    in-process responses without external mock servers.
     """
     return SimpleNamespace(
         max_retries=0,

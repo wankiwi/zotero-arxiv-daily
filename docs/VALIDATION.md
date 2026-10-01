@@ -83,3 +83,14 @@ Application credentials were excluded from the test environment. SMTP, Zotero an
 The daily workflow now accepts an optional single-run `recipient` that overrides configured recipients without changing repository secrets or the scheduled recipient. It logs SMTP acceptance counts and generated RSS item counts; SMTP acceptance is not proof of inbox delivery. Future Test runs retain generated RSS as a `test-rss` artifact and have a 90-minute timeout. The existing Test run at the pre-fix commit is unaffected by these changes.
 
 A formal daily workflow run with `output=both`, the explicitly confirmed recipient and the repaired branch is still required. At validation time, the saved environment's GitHub CLI API request returned `Forbidden`; the available connector could read run state but exposed no workflow-dispatch operation. No new live run or email was initiated by this review.
+
+
+## Repository-wide redundancy audit — 2026-10-01
+
+Reviewed all tracked source modules, scripts, tests/fixtures, workflows, configuration, documentation and declared dependencies, with an independent reference audit. Removed the unreachable non-budget prompt paths and GPT tokenizer, unused old empty-email renderer, unused affiliation mock response, retired Docker test servers and unsupported Docker deployment guide. Consolidated equivalent word normalization, sparse abstract decoding, Research Square DOI version identity and repeated cached journal construction. Removed unused imports/locals and superseded email previews; current preview render caveats are retained in `docs/previews/README.md`.
+
+The shared scientific abstract decoder also repairs a reproduced Research Square defect: encoded/plain inequalities must survive (`T<Tc and x>0`), while formatting tags and missing-abstract placeholders are handled explicitly. Regression tests cover this intentional correction. Unicode identity normalization remains casefold plus word extraction, without new NFKC normalization or historical-key changes.
+
+Removed runtime declarations `tiktoken`, `gitignore-parser` and `aiosmtpd`; the lock also drops unused `atpublic` and `attrs`. All retained dependency versions are unchanged. Kept registry imports, model/PEFT/full-text dependencies, public configuration aliases and compatibility fields, local RSS support, the no-spend affiliations method, delivery-state migration and every budget/privacy/error guard.
+
+Before/after comparisons produced identical request payloads and complete Paper results in seven abstract/full-text/Unicode/fallback cases. Ruff F401/F821/F841 passed across source/scripts/tests, checksum-verified actionlint passed, and regenerated current synthetic HTML/plain-text previews were byte-identical. The complete suite passed in a fresh frozen environment: **418 tests, 92% source coverage**, including actual local embedding inference. No application credentials or real transports were used by tests.

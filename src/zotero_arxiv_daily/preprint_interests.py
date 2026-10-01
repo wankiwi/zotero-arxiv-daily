@@ -2,6 +2,7 @@
 import re
 from collections.abc import Mapping
 from omegaconf import DictConfig, ListConfig
+from .identity import title_key
 
 PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')
 
@@ -87,7 +88,7 @@ def categories_for(config, name):
 
 
 def keyword_text(value):
-    return ' '.join(re.findall(r'\w+', value.casefold()))
+    return title_key(value)
 
 
 def matches_keywords(paper, spec):

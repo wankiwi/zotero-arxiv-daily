@@ -47,7 +47,7 @@ class JournalRetriever(BaseRetriever):
         self.failures = []
 
     def _catalog(self):
-        cached = {}
+        cached, discovered = {}, {}
         if self.cache_path.exists():
             try:
                 cached = json.loads(self.cache_path.read_text())
@@ -56,15 +56,13 @@ class JournalRetriever(BaseRetriever):
                 updated = cached.get('updated', 0)
                 if not isinstance(updated, (int, float)) or not math.isfinite(updated):
                     raise ValueError('invalid catalogue timestamp')
-                for key, value in cached.get('nature', {}).items():
-                    Journal(value['id'], value['title'], tuple(value.get('issns', [])), value.get('rss'))
+                discovered = {key: Journal(value['id'], value['title'], tuple(value.get('issns', [])), value.get('rss'))
+                              for key, value in cached.get('nature', {}).items()}
                 for key, value in cached.get('issns', {}).items():
                     Journal(key, key, tuple(value))
             except (ValueError, TypeError, KeyError, AttributeError) as exc:
                 logger.warning(f'Ignoring invalid journal catalogue cache; rebuilding: {exc}')
-                cached = {}
-        discovered = {k: Journal(v['id'], v['title'], tuple(v.get('issns', [])), v.get('rss'))
-                      for k, v in cached.get('nature', {}).items()}
+                cached, discovered = {}, {}
         needs_nature = 'nature_family' in self.retriever_config.get('presets', [])
         if needs_nature and self.retriever_config.get('discover_nature', True) and time.time() - cached.get('updated', 0) > 7 * 86400:
             try:

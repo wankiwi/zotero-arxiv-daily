@@ -43,10 +43,6 @@ __CONTENT__
 </td></tr></table></body></html>'''
 
 
-def get_empty_html():
-    return '<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;font-size:20px;font-weight:bold;">No new recommendations</p><p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;line-height:1.7;">No new papers were selected after filtering and deduplication. Take a rest!</p>'
-
-
 def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summary_label='AI summary',
                    *, number=None, metadata='', basis='abstract', article_url=None, doi=None, original_abstract=None):
     ordinal = f'{number}. ' if number is not None else ''

@@ -131,3 +131,14 @@ def test_researchsquare_filter_cannot_resurrect_older_matching_version(config, m
         {'message': {'items': [rs_item(title=['Soft matter']), rs_item('10.21203/rs.3.rs-123/v2', title=['Unrelated topic'])], 'total-results': 2}},
     ])
     assert ResearchSquareRetriever(config).retrieve_papers() == []
+
+
+@pytest.mark.parametrize('text,expected',[
+    ('Straße / SOFT-matter','strasse soft matter'),
+    ('ＡＩ and AI','ａｉ and ai'),
+    ('x_y / molecular dynamics','x_y molecular dynamics'),
+])
+def test_keyword_and_identity_normalization_preserve_existing_unicode(text,expected):
+    from zotero_arxiv_daily.identity import title_key
+    from zotero_arxiv_daily.preprint_interests import keyword_text
+    assert title_key(text)==keyword_text(text)==expected

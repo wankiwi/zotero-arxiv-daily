@@ -172,3 +172,16 @@ def test_all_missing_sources_do_not_query_works(config, monkeypatch):
         retriever.retrieve_papers()
     assert len(retriever.failures)==2
     assert not any(url.endswith('/works') for url,_ in calls)
+
+
+@pytest.mark.parametrize('index,expected',[
+    ({'T&lt;Tc':[0],'and':[1],'x&gt;0':[2]},'T<Tc and x>0'),
+    ({'T<Tc':[0],'and':[1],'x>0':[2]},'T<Tc and x>0'),
+    ({'<p>Molecular</p>':[0],'dynamics':[1]},'Molecular dynamics'),
+    ({'No':[0],'abstract':[1],'available':[2]},''),
+    ({'valid':[1],'bad':[True,-1,100000],'next':[3]},'valid next'),
+])
+def test_shared_abstract_decoder_preserves_science_and_placeholders(index,expected):
+    from zotero_arxiv_daily.abstracts import inverted_abstract
+    from zotero_arxiv_daily.retriever.openalex_researchsquare import abstract_text
+    assert abstract_text(index)==inverted_abstract(index)==expected

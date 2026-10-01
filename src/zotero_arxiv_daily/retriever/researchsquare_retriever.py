@@ -5,7 +5,7 @@ import re
 from .base import BaseRetriever, register_retriever
 from .journal_retriever import clean_text, crossref_date
 from ..http import session
-from ..identity import deduplicate, normalize_doi
+from ..identity import canonical_doi, deduplicate, normalize_doi
 from ..protocol import Paper
 from .openalex_researchsquare import OpenAlexResearchSquare
 
@@ -79,7 +79,7 @@ class ResearchSquareRetriever(BaseRetriever):
         results.sort(key=version, reverse=True)
         newest = {}
         for item in results:
-            key = re.sub(r'/v\d+$', '', normalize_doi(item['DOI']))
+            key = canonical_doi(item['DOI'])
             newest.setdefault(key, item)
         return list(newest.values())
 

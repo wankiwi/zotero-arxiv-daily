@@ -1,6 +1,6 @@
 """Tests for zotero_arxiv_daily.construct_email: render_email, get_block_html."""
 
-from zotero_arxiv_daily.construct_email import render_email, get_block_html, get_empty_html
+from zotero_arxiv_daily.construct_email import render_email, get_block_html
 from tests.canned_responses import make_sample_paper
 
 
@@ -55,11 +55,6 @@ def test_get_block_html_contains_all_fields():
     assert "Summary" in html
     assert "http://pdf.url" in html
     assert "MIT" in html
-
-
-def test_get_empty_html():
-    html = get_empty_html()
-    assert "No new recommendations" in html
 
 
 def test_numbering_scores_links_and_plain_text():

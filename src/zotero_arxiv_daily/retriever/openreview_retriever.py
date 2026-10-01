@@ -1,7 +1,6 @@
 """Public OpenReview API v2 submissions with explicit venue/subject/keyword gates."""
 from datetime import datetime, timedelta, timezone
 from collections.abc import Mapping
-import re
 import os
 import time
 from urllib.parse import quote

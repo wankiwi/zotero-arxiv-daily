@@ -1,7 +1,6 @@
 """Tests for BaseRetriever: error handling, serial execution, registration."""
 
 import io
-from types import SimpleNamespace
 from urllib.error import HTTPError
 
 from omegaconf import open_dict

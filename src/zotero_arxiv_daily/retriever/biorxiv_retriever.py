@@ -58,7 +58,7 @@ class BiorxivRetriever(BaseRetriever):
         until = datetime.now(timezone.utc).date()
         since = until - timedelta(days=days)
         categories = set(self.categories)
-        records, cursor = [], 0
+        records = []
         with session() as client:
             for category in sorted(categories):
                 cursor = 0
