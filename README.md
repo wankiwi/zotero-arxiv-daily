@@ -54,7 +54,7 @@ uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.ena
 
 ## 当前配置的脱敏示例
 
-以下为本次核对的设置与本分支拟生效的每日策略。已替换 collection 名称、用户标识与所有凭据；`archive/**` **是示例，不是用户真实排除路径**。参考名称存在不证明 secret 内容正确或模型可用。GitHub 不能读回已有 secret。核对时 CUSTOM_CONFIG 的 LLM 为 false、全局上限50、RSS为true；随后用户批准LLM=true、RSS=false、每日¥0.20；RSS变量已关闭，LLM变量等待守卫生效后开启。下面展示批准目标，只有预算守卫已生效时才应将在线变量中的LLM打开；定时策略在本分支改为45与三组配额，并继续强制RSS关闭。这里故意展示有效投递策略，避免复制过时开关。
+以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、25/15/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM尚未进行付费试调用，不声称模型密钥已实测可用。GitHub不能读回已有secret，所有凭据继续由用户管理。
 
 ```yaml
 zotero:
