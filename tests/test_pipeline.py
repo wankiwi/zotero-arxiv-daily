@@ -90,6 +90,33 @@ def test_partial_source_failure_is_not_reported_as_success(pipeline, monkeypatch
         executor.run()
 
 
+def test_abstract_recovery_budget_targets_selected_papers(pipeline, monkeypatch):
+    with open_dict(pipeline):
+        pipeline.executor.max_paper_num = 1
+        pipeline.abstracts = {'enabled': True, 'max_papers': 1}
+    executor = Executor(pipeline)
+    papers = [make_sample_paper(title=f'Candidate {i}', abstract='',
+              doi=f'10.1234/paper{i}', url=f'https://example.org/{i}') for i in range(60)]
+    monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: papers)
+    def rank(items, corpus):
+        assert all(not p.abstract for p in items)
+        for i, p in enumerate(items):
+            p.score, p.scoring_basis = i, 'title only'
+        return list(reversed(items))
+    monkeypatch.setattr(executor.reranker, 'rerank', rank)
+    looked_up = []
+    def recover(items, config):
+        assert config.max_papers == 1 and len(items) == 1
+        looked_up.extend(items)
+        items[0].abstract = 'Recovered original abstract'
+    monkeypatch.setattr('zotero_arxiv_daily.executor.recover_abstracts', recover)
+    executor.run()
+    assert looked_up == [papers[-1]]
+    saved = next(iter(State(pipeline.state.path).records.values()))['paper']
+    assert saved['abstract'] == 'Recovered original abstract'
+    assert saved['scoring_basis'] == 'title only'
+
+
 def test_missing_zotero_collection_and_abstract_are_handled(pipeline, monkeypatch):
     items = [{'data': {'title': 'Title', 'dateAdded': '2026-03-02T00:00:00Z', 'abstractNote': 'Useful', 'collections': ['missing']}},
              {'data': {'title': 'No abstract', 'dateAdded': '2026-03-02T00:00:00Z'}}]

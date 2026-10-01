@@ -205,13 +205,15 @@ class Executor:
                       and title_key(p.title) not in (self.library_titles_without_doi if paper_doi(p) else self.library_titles)]
         unique = [p for p in unique if not state.has(p)]
         logger.info(f'{len(candidates)} candidates, {len(unique)} new papers after deduplication')
-        recover_abstracts(unique, self.config.get('abstracts', {}))
         ranked = self.reranker.rerank(unique, corpus) if unique else []
         minimum = float(self.config.executor.get('min_score', -10))
         ranked = [p for p in ranked if p.score >= minimum]
         quotas = quotas_for(self.config.executor)
         pending = state.pending('email') if self.config.get('output', {}).get('email', {}).get('enabled', True) else []
         ranked = select_papers(ranked, quotas, pending)[:maximum]
+        # Spend the bounded metadata lookup allowance on papers actually selected.
+        # Ranking remains based on original metadata (title-only when missing).
+        recover_abstracts(ranked, self.config.get('abstracts', {}))
         if ranked and self.config.llm.get('enabled', True):
             try:
                 self.model_requests = prepare_budget(self.config.llm)

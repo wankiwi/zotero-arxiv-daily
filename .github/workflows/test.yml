@@ -3,15 +3,15 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Isolated tests or read-only OpenReview authentication validation
+        description: Isolated tests, OpenReview checks, or one guarded paid LLM summary (no email)
         type: choice
-        options: [tests, openreview, openreview_full]
+        options: [tests, openreview, openreview_full, llm]
         default: tests
 permissions:
   contents: read
 jobs:
   isolated-tests:
-    if: ${{ inputs.mode != 'openreview' && inputs.mode != 'openreview_full' }}
+    if: ${{ inputs.mode == 'tests' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,3 +42,19 @@ jobs:
           else
             uv run --frozen python scripts/validate_openreview.py
           fi
+  llm-validation:
+    if: ${{ inputs.mode == 'llm' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # Only the existing durable daily budget ledger is updated.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Validate one Chinese summary without delivery
+        env:
+          CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: uv run --frozen python scripts/validate_llm.py

@@ -75,7 +75,7 @@ llm:
   input_mode: abstract
   api:
     key: ${oc.env:OPENAI_API_KEY}
-    base_url: ${oc.env:OPENAI_API_BASE}
+    base_url: https://api.siliconflow.cn/v1
   generation_kwargs:
     model: deepseek-ai/DeepSeek-V4-Flash  # 配置值，尚未实测可用性
 executor:
@@ -175,7 +175,7 @@ preprint_interests:
 | `source.journals.require_live_catalog` | base=false，journals及派生preset=true；刷新失败时显式报错而非声称完整覆盖 |
 | `source.journals.catalog_cache` | data/journal_catalog.json；目录及ISSN缓存 |
 | `source.journals.mailto` | null；Crossref请求联系邮箱，勿将私人邮箱写入公共示例 |
-| `abstracts.enabled`, `max_papers`, `mailto` | base=false、50、null；interests/定时启用。最多对50个缺摘要且有DOI候选查询两个元数据源；401/403/429后跳过该provider，保留警告 |
+| `abstracts.enabled`, `max_papers`, `mailto` | base=false、50、null；interests/定时启用。排名与配额选择后，最多对50篇已选中、缺摘要且有DOI的论文查询两个元数据源；缺摘要候选仍按标题排名，补回摘要不重新排名；401/403/429后跳过该provider，保留警告 |
 
 ### OpenReview 的真实范围与限制
 
@@ -195,7 +195,7 @@ preprint_interests:
 | `llm.budget.enabled`, `daily_cny` | true、0.20；所有Actions强制启用且上限0.20，不能被CUSTOM_CONFIG绕过。本地将其设为false也只会禁止模型调用，不会开放无限额调用 |
 | `llm.input_mode` | `abstract`（默认）或 `full_text`。abstract不为摘要下载全文；full_text尝试来源支持的合法全文，发送完整提取文本，若不可得/超上下文/超预算输入界限则明确回退abstract，邮件和日志注明原因 |
 | `llm.language` | Chinese；prompt明确要求一句话，失败不将英文原摘要冒称中文摘要 |
-| `llm.api.key`, `base_url` | OpenAI兼容服务key/URL；环境引用，不输出值 |
+| `llm.api.key`, `base_url` | OpenAI兼容服务key/URL；key保留环境引用，当前URL显式为 `https://api.siliconflow.cn/v1`，须与预算验证记录一致 |
 | `llm.generation_kwargs` | 保留model选择；其他历史参数不再原样透传。受控请求固定max_tokens=96、n=1、enable_thinking=false，不允许额外参数绕过预约。历史max_tokens=16384不会生效 |
 | `email.sender`, `receiver`, `sender_password` | 发件人、单收件人、SMTP授权码/密码；工作流从secrets解析 |
 | `email.smtp_server`, `smtp_port` | 如smtp.qq.com/465，当前配置为mail.cstnet.cn/994；465/994使用SMTP_SSL，其他端口要求STARTTLS |
@@ -263,3 +263,7 @@ llm:
 `mode=openreview_full` 执行完整的有界覆盖诊断：所有已发现的当前/前一年会场及下一年ICLR，按投稿邀请分页，每页1000条、最多160次请求，逐阶段输出公开ACL、日期、关键词和主题计数。使用官方Notes分页参数；不以创建日期截断，避免漏掉早投稿而新公开的论文。生产检索也完整分页后应用原日期窗口，达到页数上限会明确报错。历史正例诊断只在内存中评估相同主题条件，不改变生产日期窗口，不输出论文或账号内容。
 
 2026-10-01公开API验证：55,589条公开记录、129条在原7天窗口内、1条TMLR同时匹配日期/关键词/主题，历史同主题正例1,164条。各会场并非每天发布新稿；不能把每组10条最近修改记录的小样本零命中解释为生产零结果，配额不足仍按实际合格数量投递。
+
+### 单篇 LLM 验证（不发送邮件）
+
+手动运行 **Test → mode=llm**：先验证预算记录中的服务地址与模型，再通过只读模型列表检查凭据与模型可用性，然后为 UTC 当日预留整个 ¥0.20 额度，只对一篇已投递、包含公开原始摘要的论文生成一句中文总结。使用生产摘要函数、96-token 输出限制、关闭思考和零自动重试；日志仅保留状态与 token 用量，不输出论文内容、账户信息或密钥。此模式没有 SMTP 凭据，不写入投递历史，不发送或重发邮件。即使验证失败或仅用掉一小部分预算，当天额度也不会返还；同日后续任务保留原始摘要。401/403 在预留预算前停止，需要通过 GitHub Secrets 安全更新 `OPENAI_API_KEY`。
