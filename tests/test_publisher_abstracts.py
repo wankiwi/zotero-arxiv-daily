@@ -121,6 +121,40 @@ def test_publisher_transport_has_no_automatic_retries():
         assert client.get_adapter('https://journals.aps.org').max_retries.total == 0
 
 
+def test_real_requests_redirect_preparation_never_reads_oversized_body():
+    import io
+    import requests
+    from requests.adapters import BaseAdapter
+    from urllib3.response import HTTPResponse
+
+    class CountingBody(io.BytesIO):
+        consumed = 0
+        def read(self, size=-1):
+            result = super().read(size)
+            self.consumed += len(result)
+            return result
+    oversized = CountingBody(b'x' * (module.MAX_BYTES + 1_000_000))
+    final = CountingBody(page(section='<div id="Abs1-content">' + ABSTRACT.replace('<','&lt;') + '</div>').encode())
+    class Adapter(BaseAdapter):
+        calls = 0
+        def send(self, request, **kwargs):
+            self.calls += 1
+            response = requests.Response()
+            response.request, response.url = request, request.url
+            response.status_code = 302 if self.calls == 1 else 200
+            response.headers = {'Location':'https://www.nature.com/articles/synthetic-test'} if self.calls == 1 else {'Content-Type':'text/html'}
+            response.raw = HTTPResponse(body=oversized if self.calls == 1 else final, preload_content=False)
+            return response
+        def close(self): pass
+    adapter = Adapter()
+    with module.publisher_session() as client:
+        client.mount('https://', adapter)
+        result = module.recover_publisher(make_sample_paper(doi=DOI), client, set())
+    assert result[0] == ABSTRACT and adapter.calls == 2
+    assert oversized.consumed == 0 and oversized.closed
+    assert final.consumed < module.MAX_BYTES
+
+
 def test_recovery_pipeline_bounds_publisher_calls_and_records_provenance(monkeypatch):
     from contextlib import nullcontext
     from zotero_arxiv_daily import abstracts

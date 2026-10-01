@@ -12,6 +12,7 @@ abstracts:
   max_papers: 50 # Bound missing-abstract metadata requests per run.
   publisher_fallback: true # DOI-verified public Nature/PRL abstract sections, never paywall bypass.
   publisher_max_papers: 10 # Additional publisher lookups within max_papers, 0-50; <=4 GETs/paper.
+  aps_metadata_max_papers: 10 # 0 disables; <=50 APS DOI lookups in public Semantic Scholar/arXiv metadata.
   mailto: null
 
 source:

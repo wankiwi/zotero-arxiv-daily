@@ -107,6 +107,15 @@ def test_rss_xml_and_unknown_dates(config):
     assert papers[0].abstract == 'Useful & clear'
 
 
+def test_aps_official_feed_excerpts_are_not_full_abstracts(config):
+    retriever = JournalRetriever(config)
+    assert CORE['prl'].rss == 'https://feeds.aps.org/rss/recent/prl.xml'
+    content = b'<rss version="2.0"><channel><item><title>Research</title><link>https://doi.org/10.1103/example</link><description>Author(s): Names. Truncated abstr...</description><pubDate>Mon, 02 Mar 2026 00:00:00 GMT</pubDate></item></channel></rss>'
+    client = SimpleNamespace(get=lambda *a,**kw:SimpleNamespace(content=content,raise_for_status=lambda:None))
+    papers = retriever._rss(CORE['prl'],client,datetime(2026,3,1,tzinfo=timezone.utc),datetime(2026,3,5,tzinfo=timezone.utc))
+    assert len(papers)==1 and papers[0].abstract==''
+
+
 def test_exact_issn_resolution_rejects_similar_titles(config):
     retriever = JournalRetriever(config)
     client = SimpleNamespace(get=lambda *a, **kw: response({'items': [

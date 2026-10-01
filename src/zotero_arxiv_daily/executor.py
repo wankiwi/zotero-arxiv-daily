@@ -16,7 +16,7 @@ from openai import OpenAI
 from .llm import ModelRequests
 from .budget import prepare_budget, BudgetUnavailable
 from .preprint_interests import enabled_sources
-from .selection import quotas_for, select_papers, pending_batch
+from .selection import quotas_for, select_papers, pending_batch, is_cover_title
 from .abstracts import clean_abstract, recover_abstracts
 
 
@@ -197,6 +197,10 @@ class Executor:
             except Exception as exc:
                 logger.error(f'Retrieval failed for {source}: {exc}')
                 errors.append(f'{source}: {exc}')
+        covers = sum(is_cover_title(p.title) for p in candidates)
+        if covers:
+            logger.info(f'Excluded {covers} publisher cover items before ranking and quotas')
+        candidates = [p for p in candidates if not is_cover_title(p.title)]
         for paper in candidates:
             paper.abstract = clean_abstract(paper.abstract)
         unique = deduplicate(candidates)

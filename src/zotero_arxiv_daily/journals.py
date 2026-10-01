@@ -29,7 +29,7 @@ CORE = {
     'mlst': Journal('mlst', 'Machine Learning: Science and Technology', ('2632-2153',), None),
     'jacs': Journal('jacs', 'Journal of the American Chemical Society', ('0002-7863', '1520-5126'), 'https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jacsat'),
     'jctc': Journal('jctc', 'Journal of Chemical Theory and Computation', ('1549-9618', '1549-9626'), 'https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jctcce'),
-    'prl': Journal('prl', 'Physical Review Letters', ('0031-9007', '1079-7114'), 'https://journals.aps.org/rss/recent/prl.xml'),
+    'prl': Journal('prl', 'Physical Review Letters', ('0031-9007', '1079-7114'), 'https://feeds.aps.org/rss/recent/prl.xml'),
     'nature': Journal('nature', 'Nature', ('0028-0836', '1476-4687'), 'https://www.nature.com/nature.rss'),
     'science': Journal('science', 'Science', ('0036-8075', '1095-9203'), 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science'),
     'science_advances': Journal('science_advances', 'Science Advances', ('2375-2548',), 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=advances'),

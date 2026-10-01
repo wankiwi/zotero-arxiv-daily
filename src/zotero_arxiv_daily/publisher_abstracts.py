@@ -85,8 +85,15 @@ def publisher_url(paper):
     return None
 
 
+class PublisherSession(requests.Session):
+    def resolve_redirects(self, response, request, **kwargs):
+        # Requests normally consumes response.content while preparing Response.next,
+        # even with allow_redirects=False. Manual redirects must discard that body.
+        return iter(())
+
+
 def publisher_session():
-    client = requests.Session()  # Zero automatic retries, especially on 403/429.
+    client = PublisherSession()  # Zero automatic retries, especially on 403/429.
     client.headers['User-Agent'] = 'zotero-arxiv-daily/1.0 (public abstract metadata)'
     return client
 

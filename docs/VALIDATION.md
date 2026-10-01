@@ -103,3 +103,14 @@ Desktop (1440px) and mobile (390px) browser checks confirm three vertically stac
 Real metadata checks on the ten previously missing abstracts identified two publisher cover items, now excluded by precise front/back-cover labels. Of the eight research papers, three abstracts were recovered through DOI-verified OpenAlex metadata and two through DOI-verified public Nature abstract sections. Nature's ordinary anonymous authorize/transit redirects are supported within four GETs and a 2MB page limit. Three APS abstracts exist publicly, but ordinary HTTP returned 403 in the verification environment; the implementation records access-blocked status and does not bypass it or substitute a title-matched preprint. Neither the probe nor previews modified delivery history or sent email.
 
 The user-updated SiliconFlow key passed isolated validation run [36838849520](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/36838849520): one Chinese sentence, 91 prompt tokens and 48 completion tokens (139 total), one paid request, and unchanged delivery-history blob containing 95 records. The existing whole-day-no-refund guard reserved CNY0.20 for the UTC day; no subsequent paid validation or email was triggered.
+
+
+## APS metadata and cover eligibility follow-up
+
+Cover labels are now filtered across all sources before ranking and quota assignment, including random and pending batches. Research titles discussing covers/surfaces without a publisher-label delimiter remain eligible. History records are not deleted.
+
+A real Requests adapter regression test reproduces a 3MB redirect response. The publisher-only session prevents Requests from eagerly consuming redirect bodies while preparing `Response.next`; manual redirect responses are closed unread. DOI/host checks and final-page limits remain enforced.
+
+Official PRL accepted/recent feeds returned HTTP200 and exact DOI metadata, but the descriptions are truncated excerpts. The configured input now uses the official feeds.aps.org domain and does not treat these excerpts as full abstracts. APS Harvest documentation supports metadata access but the tested item requires authorization; no credential or identity substitution is attempted.
+
+Public indexed/manuscript alternatives require exact DOI and normalized title. arXiv search only locates up to three candidates, and a match must carry the DOI and an explicit version. Its single-connection spacing is at least three seconds. Live verification recovered the DOI-linked arXiv v2 abstract for 10.1103/9cdj-fp6x; it is labeled manuscript metadata, not a publisher original. Semantic Scholar was blocked in this execution environment and stopped without retry. The b28p-yb2t preprint without the related DOI remains rejected. Of eight previously missing research-paper abstracts, the live check now recovers six (three OpenAlex, two Nature, one arXiv v2); two remain unavailable here. No email, paid model call, or history write occurred.

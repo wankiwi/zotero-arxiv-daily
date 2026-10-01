@@ -79,6 +79,10 @@ def email_summary(paper):
     if paper.tldr_status == 'generated' and not paper.tldr_error and isinstance(paper.tldr, str) and paper.tldr.strip():
         return paper.tldr.strip(), 'AI summary'
     if paper.abstract:
+        if paper.abstract_recovery_status == 'recovered_indexed_abstract':
+            return paper.abstract, 'Indexed abstract (Semantic Scholar; version unverified)'
+        if paper.abstract_recovery_status == 'recovered_doi_linked_manuscript':
+            return paper.abstract, f'Manuscript abstract ({paper.abstract_source})'
         if paper.tldr_status == 'not_generated' and not paper.tldr_error:
             return paper.abstract, 'Original abstract (AI summary not generated)'
         return paper.abstract, 'Original abstract (AI summary unavailable)'

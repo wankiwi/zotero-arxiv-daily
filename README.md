@@ -94,6 +94,7 @@ abstracts:
   max_papers: 50
   publisher_fallback: true
   publisher_max_papers: 10
+  aps_metadata_max_papers: 10
 output:
   email: {enabled: true}
   rss: {enabled: false}
@@ -180,6 +181,7 @@ preprint_interests:
 | `source.journals.mailto` | null；Crossref请求联系邮箱，勿将私人邮箱写入公共示例 |
 | `abstracts.enabled`, `max_papers`, `mailto` | base=false、50、null；interests/定时启用。排名与配额选择后，最多对50篇已选中、缺摘要且有DOI的论文查询两个元数据源；缺摘要候选仍按标题排名，补回摘要不重新排名；401/403/429后跳过该provider，保留警告 |
 | `abstracts.publisher_fallback`, `publisher_max_papers` | true、10；Crossref/OpenAlex均未返回摘要时，最多为10篇已选论文尝试Nature或PRL公开摘要页（范围0–50，且受max_papers限制）。每篇最多4次GET（含重定向）、页面最多2MB；只访问HTTPS白名单出版社及Nature的匿名authorize/transit重定向，验证最终文章页面DOI，仅抽取摘要区或明确的citation_abstract。遇401/403/429或挑战页立即停止该站点，不绕过付费墙、不取全文或宣传描述代替摘要 |
+| `abstracts.aps_metadata_max_papers` | 10；范围0–50，0关闭。对仍缺摘要的APS DOI，最多处理10篇已选论文，先查Semantic Scholar精确DOI元数据，再用arXiv标题定位最多3个候选并强制验证DOI、标题与明确版本号。每站每篇最多一次GET，2MB上限，不跟随重定向；401/403/429停止该站点。arXiv单连接、请求间隔至少3秒。索引摘要明确标注版本未核实，arXiv标注具体版本及“DOI-linked manuscript”，不覆盖出版社日期或冒称出版社原摘要 |
 | `email.affiliation_max_chars` | 180；HTML/纯文本中作者单位总显示字符上限，包含末尾省略号 `…`，范围20–1000。例：`email: {affiliation_max_chars: 120}`；不修改内部完整单位信息 |
 
 ### OpenReview 的真实范围与限制
@@ -273,4 +275,6 @@ llm:
 
 手动运行 **Test → mode=llm**：先验证预算记录中的服务地址与模型，再通过只读模型列表检查凭据与模型可用性，然后为 UTC 当日预留整个 ¥0.20 额度，只对一篇已投递、包含公开原始摘要的论文生成一句中文总结。使用生产摘要函数、96-token 输出限制、关闭思考和零自动重试；日志仅保留状态与 token 用量，不输出论文内容、账户信息或密钥。此模式没有 SMTP 凭据，不写入投递历史，不发送或重发邮件。即使验证失败或仅用掉一小部分预算，当天额度也不会返还；同日后续任务保留原始摘要。401/403 在预留预算前停止，需要通过 GitHub Secrets 安全更新 `OPENAI_API_KEY`。
 
-出版社封面（明确以“Outside Front Cover:”等封面标签开头）不作为研究论文推荐；研究标题中正常提到cover或surface不会被排除。恢复后的摘要记录来源URL与状态，出版社拒绝普通HTTP访问时保留缺失状态和警告，不用标题相似的预印本或其他版本替代。
+所有来源在排名和配额计算前排除明确封面标签（Inside/Outside/Front/Back/Supplementary Cover、Cover Image/Picture/Feature/Profile/Art、Frontispiece，标签后须为冒号、括号、分隔破折号或标题结束）；待投递与随机池同样排除，不删除历史。研究标题中正常提到cover或surface不会被排除。恢复后的摘要记录来源URL与状态，出版社拒绝普通HTTP访问时保留缺失状态和警告，不用标题相似的预印本或其他版本替代。
+
+APS使用[官方公布的RSS输入](https://journals.aps.org/feeds)，与已禁用的RSS输出无关。Feed中的截断片段不冒充完整摘要。出版社网页受限时可以使用上述明确标注来源的DOI匹配索引或稿件摘要；只有标题相同、DOI缺失或版本不明的arXiv结果一律拒绝。官方[Harvest API](https://harvest.aps.org/docs/harvest-api)对部分内容要求APS授权；本程序不自动申请授权、不绕过401，也不使用账户/代理替换重试。

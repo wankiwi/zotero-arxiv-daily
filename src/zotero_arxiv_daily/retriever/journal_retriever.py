@@ -18,15 +18,11 @@ from ..http import session
 from ..identity import deduplicate, normalize_doi
 from ..journals import Journal, discover_nature, selected_journals
 from ..protocol import Paper
+from ..selection import is_cover_title
 
 
 def clean_text(value):
     return ' '.join(unescape(re.sub(r'<[^>]+>', ' ', value or '')).split())
-
-
-def is_cover_title(title):
-    """Publisher cover labels, not research titles mentioning covers or surfaces."""
-    return bool(re.match(r'^(?:(?:inside|outside)\s+)?(?:front|back)\s+cover\s*(?:$|[:(])', title, re.I))
 
 
 def crossref_date(item):
@@ -198,7 +194,8 @@ class JournalRetriever(BaseRetriever):
                     raise ValueError('article link must be an absolute HTTP(S) URL')
                 authors = [a.get('name', '') for a in entry.get('authors', []) if a.get('name')]
                 results.append(Paper(source='journals', title=title, authors=authors,
-                    abstract=clean_text(entry.get('summary') or entry.get('description')),
+                    # APS feeds publish excerpts with author/date boilerplate, not full abstracts.
+                    abstract='' if urlsplit(journal.rss).hostname == 'feeds.aps.org' else clean_text(entry.get('summary') or entry.get('description')),
                     url=url, doi=doi, journal=journal.title, issns=list(journal.issns), published=published))
             except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
                 self.failures.append(journal.title)

@@ -1,10 +1,19 @@
 """Quota selection shared by new recommendations and durable pending deliveries."""
 import random
+import re
+from html import unescape
 from collections.abc import Mapping
 from loguru import logger
 from omegaconf import DictConfig
 
 GROUPS = ('journals', 'preprints', 'random')
+
+
+def is_cover_title(title):
+    """Explicit publisher cover labels only; ordinary cover/surface research stays eligible."""
+    title = ' '.join(unescape(title).split())
+    label = r'(?:(?:(?:(?:inside|outside)[ -]+)?(?:front|back)|inside|outside|supplementary)[ -]+cover(?:[ -]+art)?|cover[ -]+(?:image|picture|feature|profile|art)|frontispiece)'
+    return bool(re.match(label + r'(?:\s*$|\s*[:：(\[]|\s+[-–—]\s+)', title, re.I))
 
 
 def quotas_for(config):
@@ -30,6 +39,8 @@ def paper_group(paper):
 
 def select_papers(ranked, quotas, pending=(), rng=None):
     """Reserve quota slots for pending deliveries; sample remaining candidates once."""
+    ranked = [p for p in ranked if not is_cover_title(p.title)]
+    pending = [p for p in pending if not is_cover_title(p.title)]
     if quotas is None:
         return list(ranked)
     slots = {group: max(0, count - sum(paper_group(p) == group for p in pending))
@@ -55,6 +66,7 @@ def select_papers(ranked, quotas, pending=(), rng=None):
 
 
 def pending_batch(papers, quotas, maximum):
+    papers = [p for p in papers if not is_cover_title(p.title)]
     if quotas is None:
         return papers[:maximum]
     return [p for group, limit in quotas.items() for p in [p for p in papers if paper_group(p) == group][:limit]]
