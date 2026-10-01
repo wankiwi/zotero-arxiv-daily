@@ -1,0 +1,78 @@
+{
+  "checked_at": "2026-10-01T10:13:20.809314+00:00",
+  "environment": "WSL Ubuntu-22.04",
+  "results": [
+    {
+      "doi": "10.1103/b28p-yb2t",
+      "provider": "Crossref",
+      "url": "https://api.crossref.org/works/10.1103%2Fb28p-yb2t",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    },
+    {
+      "doi": "10.1103/b28p-yb2t",
+      "provider": "OpenAlex",
+      "url": "https://api.openalex.org/works/https://doi.org/10.1103%2Fb28p-yb2t",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    },
+    {
+      "doi": "10.1103/k9sp-h4c3",
+      "provider": "Crossref",
+      "url": "https://api.crossref.org/works/10.1103%2Fk9sp-h4c3",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    },
+    {
+      "doi": "10.1103/k9sp-h4c3",
+      "provider": "OpenAlex",
+      "url": "https://api.openalex.org/works/https://doi.org/10.1103%2Fk9sp-h4c3",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    },
+    {
+      "doi": "10.1103/9cdj-fp6x",
+      "provider": "Crossref",
+      "url": "https://api.crossref.org/works/10.1103%2F9cdj-fp6x",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    },
+    {
+      "doi": "10.1103/9cdj-fp6x",
+      "provider": "OpenAlex",
+      "url": "https://api.openalex.org/works/https://doi.org/10.1103%2F9cdj-fp6x",
+      "http_status": 200,
+      "doi_verified": true,
+      "title_verified": true,
+      "abstract_present": false,
+      "abstract_chars": 0,
+      "version": "not supplied",
+      "status": "metadata_received"
+    }
+  ]
+}
