@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from omegaconf import OmegaConf
 from zotero_arxiv_daily.protocol import Paper
+from tests.canned_responses import make_budget_guard, make_chat_response
 from zotero_arxiv_daily.selection import select_papers, pending_batch, quotas_for, paper_group
 from zotero_arxiv_daily.abstracts import clean_abstract, recover_abstracts
 from zotero_arxiv_daily.construct_email import render_email, email_plain_text
@@ -143,9 +144,9 @@ def test_chinese_prompt_without_live_llm(monkeypatch):
     requests=[]
     def create(**kwargs):
         requests.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='该研究提出了分子模拟方法。'))])
+        return make_chat_response('该研究提出了分子模拟方法。', model=kwargs.get('model'))
     client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-    p=paper(1);p.generate_tldr(client,{'language':'Chinese','generation_kwargs':{'model':'test'}})
+    p=paper(1);p.generate_tldr(client,{'language':'Chinese','generation_kwargs':{'model':'test'}},make_budget_guard())
     assert p.tldr_status=='generated' and len(requests)==1
     assert 'exactly one sentence in Chinese' in requests[0]['messages'][0]['content']
 
@@ -168,7 +169,7 @@ def test_original_abstract_always_preserved(group,status,abstract):
     ('abstract','Entire full text','abstract',None),
     ('full_text','Entire full text','full_text',None),
     ('full_text',None,'abstract','full_text_unavailable'),
-    ('full_text','Long text '*10000,'abstract','full_text_exceeds_context_limit'),
+    ('full_text','Long text '*10000,'abstract','full_text_exceeds_budget_input_bound'),
 ])
 def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,reason,monkeypatch):
     import zotero_arxiv_daily.protocol as module
@@ -176,10 +177,10 @@ def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,
     monkeypatch.setattr(module,'truncate_prompt',lambda text,limit:text[:limit])
     def create(**kwargs):
         calls.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='该研究提出新方法。'))])
+        return make_chat_response('该研究提出新方法。', model=kwargs.get('model'))
     client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=paper(1,full_text=full_text)
-    p.generate_tldr(client,{'input_mode':mode})
+    p.generate_tldr(client,{'input_mode':mode,'generation_kwargs':{'model':'test'}},make_budget_guard())
     assert p.summary_input_source==expected and p.summary_input_fallback==reason
     assert len(calls)==1
     prompt=calls[0]['messages'][1]['content']
@@ -194,7 +195,7 @@ def test_full_text_budget_fallback_is_one_call(config):
     calls=[]
     def create(**kwargs):
         calls.append(kwargs)
-        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='该研究提出新方法。'))])
+        return make_chat_response('该研究提出新方法。', model=kwargs.get('model'))
     client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     p=paper(1,full_text='Full paper '*10000)
     p.generate_tldr(client,config.llm,BudgetRequests(Decimal('.20'),Decimal('.004608'),utc_day()))
@@ -238,3 +239,60 @@ def test_invalid_summary_mode_fails_before_source_or_api_setup(config):
     from zotero_arxiv_daily.executor import Executor
     config.llm.input_mode='prefix'
     with pytest.raises(ValueError,match='input_mode'):Executor(config)
+
+@pytest.mark.parametrize('text,expected',[
+    ('We analyze T<Tc and predict ordering.','We analyze T<Tc and predict ordering.'),
+    ('We analyze T&lt;Tc and predict ordering.','We analyze T<Tc and predict ordering.'),
+    ('We analyze x<y and y>z for stability.','We analyze x<y and y>z for stability.'),
+    ('We analyze x&lt;y and y&gt;z for stability.','We analyze x<y and y>z for stability.'),
+    ('<jats:p>For T&lt;Tc, <italic>x</italic> increases.</jats:p>','For T<Tc, x increases.'),
+    ('Compare p<q and q>r.','Compare p<q and q>r.'),
+])
+def test_abstract_cleaner_preserves_scientific_inequalities(text,expected):
+    assert clean_abstract(text)==expected
+
+def test_dedup_adopts_abstract_provenance_without_overwriting():
+    from zotero_arxiv_daily.identity import deduplicate
+    a=paper(1,doi='10.1000/same');a.abstract=''
+    b=paper(1,'openreview',doi='10.1000/same',abstract_source='OpenReview')
+    merged=deduplicate([a,b])[0]
+    assert merged.abstract==b.abstract and merged.abstract_source=='OpenReview'
+    c=paper(1,doi='10.1000/same',abstract_source='Crossref');c.abstract='Published abstract'
+    merged=deduplicate([c,b])[0]
+    assert merged.abstract=='Published abstract' and merged.abstract_source=='Crossref'
+
+def test_openreview_malformed_content_does_not_drop_valid_neighbors(config,monkeypatch):
+    r=retriever(config)
+    good=note(r);bad=('TMLR','TMLR',dict(good[2],id='bad',content=None))
+    good2=('TMLR','TMLR',dict(good[2],id='second'))
+    monkeypatch.setattr(r,'_retrieve_raw_papers',lambda:[good,bad,good2])
+    assert len(r.retrieve_papers())==2
+    assert any('malformed submission' in error for error in r.failures)
+
+@pytest.mark.parametrize('venue,status,pdate,kind,group',[
+    ('TMLR','TMLR',True,'journal','journals'),
+    ('TMLR','TMLR/Under_Review',False,'preprint','preprints'),
+    ('TMLR','TMLR/Decision_Pending',False,'preprint','preprints'),
+    ('TMLR','TMLR',False,'preprint','preprints'),
+    ('ICLR','ICLR.cc/2026/Conference',True,'conference','preprints'),
+    ('TMLR','unknown',True,'preprint','preprints'),
+])
+def test_verified_publication_classification(config,venue,status,pdate,kind,group):
+    from zotero_arxiv_daily.selection import publication_group
+    r=retriever(config);identity='TMLR' if venue=='TMLR' else 'ICLR.cc/2026/Conference'
+    r.venue_ids[identity]={'accepted':identity,'under_review':identity+'/Under_Review','decision_pending':identity+'/Decision_Pending'}
+    raw=note(r,venueid=status);raw=(venue,identity,raw[2])
+    if pdate:raw[2]['pdate']=raw[2]['odate']
+    p=r.convert_to_paper(raw)
+    assert p.publication_kind==kind and publication_group(p)==group
+    assert f'Type: {kind}' in render_email([p])
+
+def test_newly_published_tmlr_uses_publication_date(config):
+    r=retriever(config)
+    r.venue_ids['TMLR']={'accepted':'TMLR'}
+    raw=note(r,venueid='TMLR');raw=('TMLR','TMLR',raw[2])
+    raw[2]['pdate']=raw[2]['odate']
+    raw[2]['odate']=raw[2]['cdate']
+    p=r.convert_to_paper(raw)
+    assert p and p.publication_kind=='journal'
+    assert p.published.timestamp()==raw[2]['pdate']/1000

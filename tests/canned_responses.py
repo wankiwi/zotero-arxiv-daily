@@ -15,7 +15,7 @@ _AFFILIATION_RESPONSE = '["TsingHua University","Peking University"]'
 _TLDR_RESPONSE = "Hello! How can I assist you today?"
 
 
-def _make_chat_response(content: str) -> SimpleNamespace:
+def make_chat_response(content: str, model='test-model') -> SimpleNamespace:
     return SimpleNamespace(
         choices=[
             SimpleNamespace(
@@ -26,7 +26,8 @@ def _make_chat_response(content: str) -> SimpleNamespace:
         ],
         id="chatcmpl-stub",
         created=1765197615,
-        model="gpt-4o-mini-2024-07-18",
+        model=model,
+        usage=SimpleNamespace(prompt_tokens=64, completion_tokens=16, total_tokens=80, completion_tokens_details=SimpleNamespace(reasoning_tokens=0)),
         object="chat.completion",
     )
 
@@ -35,8 +36,8 @@ def _stub_chat_create(**kwargs):
     messages = kwargs.get("messages", [])
     request_str = str(messages)
     if _AFFILIATION_MARKER in request_str:
-        return _make_chat_response(_AFFILIATION_RESPONSE)
-    return _make_chat_response(_TLDR_RESPONSE)
+        return make_chat_response(_AFFILIATION_RESPONSE, kwargs.get('model'))
+    return make_chat_response(_TLDR_RESPONSE, kwargs.get('model'))
 
 
 def _stub_embeddings_create(**kwargs):
@@ -229,3 +230,10 @@ SAMPLE_BIORXIV_API_RESPONSE = {
         },
     ],
 }
+
+
+def make_budget_guard():
+    """Synthetic allowance for fake clients only; never reserves a remote ledger."""
+    from decimal import Decimal
+    from zotero_arxiv_daily.budget import BudgetRequests, utc_day
+    return BudgetRequests(Decimal('0.20'), Decimal('0.001'), utc_day())

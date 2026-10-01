@@ -118,8 +118,6 @@ class Executor:
         if self.openai_client:
             if not paper.tldr:
                 paper.generate_tldr(self.openai_client, self.config.llm, self.model_requests)
-            if paper.affiliations is None and paper.full_text and not self.config.llm.get('budget', {}).get('enabled', False):
-                paper.generate_affiliations(self.openai_client, self.config.llm, self.model_requests)
         elif not paper.tldr:
             paper.tldr_status, paper.tldr_error = 'not_generated', None
             if getattr(self, 'llm_blocked_reason', None):

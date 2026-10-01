@@ -63,11 +63,13 @@ def deduplicate(papers):
         if previous is not None:
             # Prefer the published record while preserving useful preprint text.
             if paper.journal and not previous.journal:
-                for field in ('doi', 'journal', 'issns', 'published', 'url', 'source'):
+                for field in ('doi', 'journal', 'issns', 'published', 'url', 'source', 'publication_kind', 'publication_status', 'publication_venue'):
                     setattr(previous, field, getattr(paper, field))
             for field in ('abstract', 'full_text', 'pdf_url', 'doi'):
                 if not getattr(previous, field) and getattr(paper, field):
                     setattr(previous, field, getattr(paper, field))
+                    if field == 'abstract':
+                        previous.abstract_source = paper.abstract_source
             keys[key] = previous
             keys[paper_id(previous)] = previous
         else:

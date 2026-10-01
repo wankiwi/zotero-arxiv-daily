@@ -33,7 +33,6 @@ def _base_config():
                 "email.smtp_server=localhost",
                 "email.smtp_port=1025",
                 "email.sender_password=test",
-                "llm.budget.enabled=false",  # Stubbed model only; never credentials.
                 "llm.api.key=sk-fake",
                 "llm.api.base_url=http://localhost:30000/v1",
                 "llm.generation_kwargs.model=gpt-4o-mini",
@@ -57,6 +56,6 @@ def config(_base_config, monkeypatch):
     Safe to mutate inside any test without polluting other tests.
     """
     # Pipeline unit tests stub providers; no remote budget writes may occur.
-    from zotero_arxiv_daily.llm import ModelRequests
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', lambda _: ModelRequests())
+    from tests.canned_responses import make_budget_guard
+    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', lambda _: make_budget_guard())
     return copy.deepcopy(_base_config)

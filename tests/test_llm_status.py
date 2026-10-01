@@ -10,7 +10,7 @@ from openai import NotFoundError
 from omegaconf import open_dict
 import pytest
 
-from tests.canned_responses import make_sample_paper, make_stub_openai_client
+from tests.canned_responses import make_sample_paper, make_stub_openai_client, make_budget_guard
 from tests.test_pipeline import pipeline  # noqa: F401 -- reuse the isolated pipeline fixture
 from zotero_arxiv_daily.construct_email import render_email
 from zotero_arxiv_daily.executor import Executor
@@ -33,10 +33,10 @@ def test_unavailable_model_stops_parallel_summary_and_affiliation_requests():
     def unavailable(**kwargs):
         calls.append(kwargs)
         raise not_found('This model is unavailable for free. Use paid version instead.')
-    client, guard = client_with(unavailable), ModelRequests()
+    client, guard = client_with(unavailable), make_budget_guard()
     papers = [make_sample_paper(title=f'Paper {i}') for i in range(8)]
     with ThreadPoolExecutor(max_workers=4) as pool:
-        list(pool.map(lambda p: p.generate_tldr(client, {}, guard), papers))
+        list(pool.map(lambda p: p.generate_tldr(client, {'generation_kwargs': {'model': 'test-model'}}, guard), papers))
     papers[0].generate_affiliations(client, {}, guard)
     assert len(calls) == 1
     assert all(p.tldr_status == 'fallback' and p.tldr_error == 'model_unavailable' for p in papers)
@@ -52,10 +52,10 @@ def test_other_errors_do_not_disable_later_summaries(error):
         if len(calls) == 1:
             raise error
         return success.chat.completions.create(**kwargs)
-    client, guard = client_with(create), ModelRequests()
+    client, guard = client_with(create), make_budget_guard()
     first, second = make_sample_paper(), make_sample_paper()
-    first.generate_tldr(client, {}, guard)
-    second.generate_tldr(client, {}, guard)
+    first.generate_tldr(client, {'generation_kwargs': {'model': 'test-model'}}, guard)
+    second.generate_tldr(client, {'generation_kwargs': {'model': 'test-model'}}, guard)
     assert len(calls) == 2 and not guard.unavailable
     assert first.tldr_status == 'fallback' and second.tldr_status == 'generated'
 
@@ -70,7 +70,7 @@ def test_model_not_found_code_is_recognized():
 def test_empty_summary_is_not_reported_as_generated():
     response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='  '))])
     paper = make_sample_paper()
-    paper.generate_tldr(client_with(lambda **kw: response), {})
+    paper.generate_tldr(client_with(lambda **kw: response), {'generation_kwargs': {'model': 'test-model'}}, make_budget_guard())
     assert paper.tldr_status == 'fallback' and paper.tldr == paper.abstract
 
 

@@ -20,8 +20,12 @@ def quotas_for(config):
     return dict(quotas)
 
 
+def publication_group(paper):
+    return 'journals' if paper.source == 'journals' or paper.publication_kind == 'journal' else 'preprints'
+
+
 def paper_group(paper):
-    return paper.recommendation_group or ('journals' if paper.source == 'journals' else 'preprints')
+    return paper.recommendation_group or publication_group(paper)
 
 
 def select_papers(ranked, quotas, pending=(), rng=None):
@@ -32,7 +36,7 @@ def select_papers(ranked, quotas, pending=(), rng=None):
              for group, count in quotas.items()}
     selected, remaining = [], []
     for paper in ranked:
-        group = 'journals' if paper.source == 'journals' else 'preprints'
+        group = publication_group(paper)
         if slots[group]:
             paper.recommendation_group = group
             selected.append(paper)

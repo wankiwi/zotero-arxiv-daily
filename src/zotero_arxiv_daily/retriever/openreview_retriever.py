@@ -1,5 +1,6 @@
 """Public OpenReview API v2 submissions with explicit venue/subject/keyword gates."""
 from datetime import datetime, timedelta, timezone
+from collections.abc import Mapping
 import re
 from urllib.parse import quote
 from loguru import logger
@@ -47,6 +48,7 @@ class OpenReviewRetriever(BaseRetriever):
         if type(self.days) is not int or not 1 <= self.days <= 90 or type(self.max_pages) is not int or self.max_pages < 1:
             raise ValueError('OpenReview requires window_days 1-90 and positive max_pages')
         self.failures = []
+        self.venue_ids = {}
         self.fallback_count = 0
 
     def _get(self, client, path, params):
@@ -68,6 +70,13 @@ class OpenReviewRetriever(BaseRetriever):
                 if not invitation and isinstance(name, str): invitation = identity + '/-/' + name
                 if not isinstance(invitation, str) or not invitation.startswith(identity + '/-/'):
                     raise ValueError(f'{identity}: missing supported submission invitation metadata')
+                self.venue_ids[identity] = {
+                    'under_review': value(content, 'under_review_venue_id'),
+                    'decision_pending': value(content, 'decision_pending_venue_id'),
+                    # API v2 accepted-paper queries use content.venueid=<venue>.
+                    # Require pdate as separate acceptance/publication evidence.
+                    'accepted': value(content, 'accepted_venue_id') or identity,
+                }
                 yield identity, invitation
 
     def _retrieve_raw_papers(self):
@@ -110,13 +119,25 @@ class OpenReviewRetriever(BaseRetriever):
 
     def convert_to_paper(self, raw):
         venue, group, note = raw
-        content = note.get('content', {})
+        if not isinstance(note, Mapping) or not isinstance(note.get('content'), Mapping):
+            raise ValueError('OpenReview note content must be a mapping')
+        content = note['content']
         if note.get('ddate') or 'everyone' not in note.get('readers', ['everyone']): return None
         if 'withdraw' in str(value(content, 'venue', '')).casefold(): return None
         title, abstract = clean_abstract(value(content, 'title', '')), clean_abstract(value(content, 'abstract', ''))
         if not title: return None
+        status_ids = self.venue_ids.get(group, {})
+        venue_id = value(content, 'venueid')
+        status, kind = 'unverified', 'preprint'
+        if venue_id and venue_id == status_ids.get('under_review'):
+            status = 'under_review'
+        elif venue_id and venue_id == status_ids.get('decision_pending'):
+            status = 'decision_pending'
+        elif venue_id and venue_id == status_ids.get('accepted') and type(note.get('pdate')) is int and note['pdate'] > 0:
+            status = 'published'
+            kind = 'journal' if venue == 'TMLR' else 'conference'
         # odate is first public visibility. Older schemas may expose only cdate.
-        timestamp = note.get('odate') or note.get('cdate') or note.get('tcdate')
+        timestamp = note['pdate'] if status == 'published' else note.get('odate') or note.get('cdate') or note.get('tcdate')
         if not timestamp: raise ValueError('OpenReview submission has no public/creation timestamp')
         published = datetime.fromtimestamp(timestamp / 1000, timezone.utc)
         if not self.since <= published <= self.until: return None
@@ -139,7 +160,9 @@ class OpenReviewRetriever(BaseRetriever):
         return Paper(source='openreview', title=title, abstract=abstract,
                      authors=strings(value(content, 'authors', [])), url='https://openreview.net/forum?id=' + identity,
                      pdf_url='https://openreview.net/pdf?id=' + identity if value(content, 'pdf') else None,
-                     published=published, subject_match_reason=reason, abstract_source='OpenReview' if abstract else None)
+                     published=published, subject_match_reason=reason, abstract_source='OpenReview' if abstract else None,
+                     publication_kind=kind, publication_status=status, publication_venue=group,
+                     journal='Transactions on Machine Learning Research' if kind == 'journal' else None)
 
     def retrieve_papers(self):
         # Keyword filtering includes author keywords, unlike the common title/abstract filter.

@@ -72,7 +72,7 @@ def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summa
 
 
 def render_email(papers: list[Paper]) -> str:
-    labels = {'journals': '期刊 / Journals', 'preprints': '预印本 / Preprints', 'random': '随机推荐 / Random'}
+    labels = {'journals': '期刊 / Journals', 'preprints': '预印本 / Preprints（含会议论文）', 'random': '随机推荐 / Random'}
     columns = []
     for group in GROUPS:
         selected = [p for p in papers if paper_group(p) == group]
@@ -84,6 +84,8 @@ def render_email(papers: list[Paper]) -> str:
                 affiliations += ', ...'
             date = p.published.strftime('%Y-%m-%d') if p.published else 'Date unavailable'
             metadata = f'{p.journal or p.source} · {date} · Source: {p.source}'
+            if p.publication_kind:
+                metadata += f' · Type: {p.publication_kind} / {p.publication_status or "unverified"}'
             if group == 'random':
                 metadata += ' · Random selection'
             if p.summary_input_source:

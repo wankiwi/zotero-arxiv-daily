@@ -10,7 +10,8 @@ from zotero_arxiv_daily import budget
 from zotero_arxiv_daily.protocol import Paper
 
 
-def test_production_pricing_is_fail_closed(config):
+def test_production_pricing_is_fail_closed(config,monkeypatch):
+    monkeypatch.setattr(budget,"VERIFIED_PRICING",None)
     config.llm.budget.enabled=True
     with pytest.raises(budget.BudgetUnavailable,match='not verified'):
         budget.budget_plan(config.llm)
@@ -21,7 +22,7 @@ def test_verified_plan_rejects_unknown_endpoint_model_and_limit(config,monkeypat
     monkeypatch.setattr(budget,'VERIFIED_PRICING',{'host':'test.example','model':'test-model','valid_through':'2099-01-01','input_cny_per_million':'3','output_cny_per_million':'9'})
     config.llm.api.base_url='https://test.example/v1';config.llm.generation_kwargs.model='test-model'
     cap,cost=budget.budget_plan(config.llm)
-    assert cap==Decimal('0.20') and cost*45<=Decimal('0.21')
+    assert cap==Decimal('0.20') and cost*45<=Decimal('0.20')
     config.llm.api.base_url='https://unknown.example/v1'
     with pytest.raises(budget.BudgetUnavailable,match='Endpoint'):budget.budget_plan(config.llm)
     config.llm.budget.daily_cny=0.21
@@ -46,13 +47,17 @@ def test_concurrent_calls_timeouts_and_day_rollover(monkeypatch):
     assert guard.remaining==before
 
 
-def make_git(tmp_path, monkeypatch):
+def make_git(tmp_path, monkeypatch, initialize_ledger=True):
     remote=tmp_path/'origin.git';checkout=tmp_path/'checkout'
     def git(*args,cwd=None):return subprocess.run(['git',*args],cwd=cwd,check=True,capture_output=True).stdout
     git('init','--bare',str(remote));git('init','-b','main',str(checkout))
     git('config','user.name','Test',cwd=checkout);git('config','user.email','test@example.org',cwd=checkout)
+    if initialize_ledger:
+        (checkout/'llm_budget.json').write_text('{"version":1,"days":{}}')
     (checkout/'recommendations.json').write_text('{"version":1,"records":{"sent":"preserved"}}')
-    git('add','recommendations.json',cwd=checkout);git('commit','-m','Initial state',cwd=checkout)
+    git('add','recommendations.json',cwd=checkout)
+    if initialize_ledger:git('add','llm_budget.json',cwd=checkout)
+    git('commit','-m','Initial state',cwd=checkout)
     git('remote','add','origin',str(remote),cwd=checkout);git('push','origin','HEAD:paper-state',cwd=checkout)
     monkeypatch.chdir(checkout)
     return git,checkout,remote
@@ -114,7 +119,7 @@ def test_unicode_prompt_bound_and_reasoning_stops_calls(config,monkeypatch):
     assert len(request['messages'][1]['content'].encode())<=budget.PROMPT_BYTES
     assert len(request['messages'][0]['content'].encode())<=budget.SYSTEM_BYTES
     assert 'Abstract:' in request['messages'][1]['content']
-    assert request['n']==1 and request['max_tokens']==128 and request['extra_body']=={'enable_thinking':False}
+    assert request['n']==1 and request['max_tokens']==96 and request['extra_body']=={'enable_thinking':False}
     p.generate_tldr(client,config.llm,guard)
     assert len(calls)==1
 
@@ -142,3 +147,76 @@ def test_executor_fail_closed_retains_abstract_without_client(config,monkeypatch
     selected=executor._recommend(State(tmp_path/'state.json'),[],10,1)
     assert selected and selected[0].tldr==p.abstract
     assert selected[0].tldr_error=='budget_unavailable'
+
+@pytest.mark.parametrize('problem',['model','missing_usage','invalid_usage','reasoning_tokens','reasoning_content'])
+def test_response_violation_aborts_queued_calls(problem):
+    from threading import Barrier
+    from tests.canned_responses import make_chat_response
+    barrier=Barrier(6);calls=[]
+    guard=budget.BudgetRequests(Decimal('.20'),Decimal('.001'),budget.utc_day())
+    def create(**kwargs):
+        calls.append(kwargs)
+        response=make_chat_response('中文摘要。',kwargs['model'])
+        if problem=='model':response.model='wrong'
+        elif problem=='missing_usage':response.usage=None
+        elif problem=='invalid_usage':response.usage.completion_tokens=1000
+        elif problem=='reasoning_tokens':response.usage.completion_tokens_details.reasoning_tokens=10
+        else:response.choices[0].message.reasoning_content='Unexpected'
+        return response
+    client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    def worker(i):
+        barrier.wait()
+        p=Paper('journals',str(i),[],'Scientific abstract','https://example.org')
+        p.generate_tldr(client,{'generation_kwargs':{'model':'test'}},guard)
+        return p
+    with ThreadPoolExecutor(max_workers=6) as pool:papers=list(pool.map(worker,range(6)))
+    assert len(calls)==1 and guard.remaining==0
+    assert all(p.tldr_error=='budget_unavailable' for p in papers)
+
+def test_missing_ledger_never_bootstraps_during_claim(tmp_path,monkeypatch):
+    git,checkout,remote=make_git(tmp_path,monkeypatch)
+    # Remove from the test index while keeping the file, without filesystem deletion.
+    git('update-index','--force-remove','llm_budget.json');git('commit','-m','Simulate missing ledger');git('push','origin','HEAD:paper-state')
+    before=git('rev-parse','refs/heads/paper-state',cwd=remote)
+    with pytest.raises(budget.BudgetUnavailable,match='explicit audited bootstrap'):
+        budget.reserve_day(Decimal('.20'))
+    assert git('rev-parse','refs/heads/paper-state',cwd=remote)==before
+
+def test_endpoint_port_must_match_verified_origin(config,monkeypatch):
+    monkeypatch.setattr(budget,'VERIFIED_PRICING',{'host':'test.example','model':'test-model','valid_through':'2099-01-01','input_cny_per_million':'3','output_cny_per_million':'9'})
+    config.llm.api.base_url='https://test.example:444/v1';config.llm.generation_kwargs.model='test-model'
+    with pytest.raises(budget.BudgetUnavailable,match='Endpoint'):budget.budget_plan(config.llm)
+
+
+def test_explicit_bootstrap_is_separate_and_preserves_state(tmp_path,monkeypatch):
+    git,checkout,remote=make_git(tmp_path,monkeypatch,initialize_ledger=False)
+    with pytest.raises(budget.BudgetUnavailable,match='explicit audited bootstrap'):budget.reserve_day(Decimal('.20'))
+    budget.bootstrap_ledger()
+    head=git('rev-parse','refs/heads/paper-state',cwd=remote).decode().strip()
+    assert b'preserved' in git('show',head+':recommendations.json',cwd=remote)
+    with pytest.raises(budget.BudgetUnavailable,match='already exists'):budget.bootstrap_ledger()
+    assert budget.reserve_day(Decimal('.20'))==budget.utc_day()
+
+
+def test_deleted_historical_ledger_cannot_be_reinitialized(tmp_path,monkeypatch):
+    git,checkout,remote=make_git(tmp_path,monkeypatch)
+    git('update-index','--force-remove','llm_budget.json');git('commit','-m','Missing ledger fixture');git('push','origin','HEAD:paper-state')
+    with pytest.raises(budget.BudgetUnavailable,match='existed in history'):budget.bootstrap_ledger()
+
+
+def test_ledger_read_error_is_not_an_empty_balance(tmp_path,monkeypatch):
+    git,checkout,remote=make_git(tmp_path,monkeypatch)
+    original=budget.git
+    def broken(*args,**kwargs):
+        if args[0]=='show':raise budget.BudgetUnavailable('simulated read failure')
+        return original(*args,**kwargs)
+    monkeypatch.setattr(budget,'git',broken)
+    with pytest.raises(budget.BudgetUnavailable,match='read failure'):budget.reserve_day(Decimal('.20'))
+
+
+def test_reviewed_deepseek_peak_price_fits_45(config,monkeypatch):
+    monkeypatch.setattr(budget,'utc_day',lambda:'2026-10-01')
+    config.llm.api.base_url='https://api.siliconflow.cn/v1'
+    config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'
+    cap,cost=budget.budget_plan(config.llm)
+    assert cost==Decimal('0.00432') and cost*45==Decimal('0.19440') and cost*45<=cap

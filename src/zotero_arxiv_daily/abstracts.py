@@ -1,30 +1,23 @@
 """Public DOI metadata recovery; never invent an abstract or scrape a paywall."""
 from html import unescape
-from html.parser import HTMLParser
 import re
 from urllib.parse import quote
 from loguru import logger
 from .http import session
 from .identity import paper_doi, canonical_doi
 
-class _Text(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.parts, self.hidden = [], 0
-    def handle_starttag(self, tag, attrs):
-        if tag in ('script', 'style'): self.hidden += 1
-        if tag in ('p', 'br', 'div', 'jats:p', 'jats:title'): self.parts.append(' ')
-    def handle_endtag(self, tag):
-        if tag in ('script', 'style'): self.hidden = max(0, self.hidden - 1)
-        self.parts.append(' ')
-    def handle_data(self, text):
-        if not self.hidden: self.parts.append(text)
+# Strip only known formatting tags. Unknown '<Tc' and '<y ...>' sequences
+# are scientific plaintext, not HTML. Decode entities once, never reparse them
+# as arbitrary tags; mathematical inequalities must survive cleaning.
+_MARKUP = re.compile(r"</?(?:jats:)?(?:p|title|abstract|sec|div|span|br|i|b|em|strong|italic|bold|sup|sub|a|ul|ol|li|h[1-6]|table|tr|td|th|tbody|thead|xref|ext-link)(?:\s+[\w:-]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s<>]+))*\s*/?>", re.I)
+
 
 def clean_abstract(value):
-    if not isinstance(value, str): return ''
-    parser = _Text()
-    parser.feed(unescape(value))
-    text = ' '.join(''.join(parser.parts).split())
+    if not isinstance(value, str):
+        return ''
+    text = unescape(value)
+    text = re.sub(r'<(script|style)\b[^>]*>.*?</\1\s*>', '', text, flags=re.I | re.S)
+    text = ' '.join(_MARKUP.sub(' ', text).split())
     if text.casefold().strip(' .') in {'', 'no abstract', 'no abstract available', 'abstract unavailable', 'n/a'}:
         return ''
     return text
