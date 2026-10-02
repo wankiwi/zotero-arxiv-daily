@@ -4,7 +4,7 @@ import re
 from urllib.parse import quote
 from loguru import logger
 from .http import session
-from .identity import paper_doi, canonical_doi
+from .identity import paper_doi, canonical_doi, normalize_doi, title_key
 from .publisher_abstracts import publisher_session, publisher_url, recover_publisher
 from .aps_metadata import semantic_scholar, arxiv_manuscript
 
@@ -33,6 +33,43 @@ def inverted_abstract(index):
                 if type(pos) is int and 0 <= pos < 100000: words.setdefault(pos, word)
     return clean_abstract(' '.join(words[pos] for pos in sorted(words)))
 
+def recover_researchsquare(paper, client, blocked):
+    """Use the cited version for metadata; recommendation deduplication stays versionless."""
+    import json
+    from .aps_metadata import fetch
+    doi = normalize_doi(paper.doi) or normalize_doi(paper.url)
+    if not doi or not re.fullmatch(r'10\.21203/rs\.\d+\.rs-\d+/v[1-9]\d*', doi):
+        paper.abstract_recovery_status = 'researchsquare_version_unverified'
+        return
+    paper.abstract_recovery_status = 'researchsquare_abstract_unavailable'
+    for provider, base in [('Crossref', 'https://api.crossref.org/works/'),
+                           ('OpenAlex', 'https://api.openalex.org/works/https://doi.org/')]:
+        url = base + quote(doi, safe='')
+        try:
+            raw = fetch(client, url, provider, blocked)
+            if raw is None:
+                continue
+            data = json.loads(raw)
+            if provider == 'Crossref':
+                data = data.get('message', {})
+                found_doi, titles = data.get('DOI'), data.get('title') or []
+                found_title = titles[0] if isinstance(titles, list) and titles else ''
+                abstract = clean_abstract(data.get('abstract'))
+            else:
+                found_doi, found_title = data.get('doi'), data.get('title') or data.get('display_name') or ''
+                abstract = inverted_abstract(data.get('abstract_inverted_index'))
+            if normalize_doi(found_doi) != doi or title_key(found_title) != title_key(paper.title):
+                logger.warning(f'{provider} Research Square DOI/version/title mismatch; metadata rejected')
+                continue
+            if len(abstract) >= 40 and not abstract.rstrip().endswith(('…', '...')):
+                paper.abstract, paper.abstract_source = abstract, provider
+                paper.abstract_source_url, paper.abstract_recovery_status = url, 'recovered'
+                return
+        except Exception as exc:
+            logger.warning(f'{provider} Research Square abstract lookup failed ({type(exc).__name__})')
+    logger.warning('Research Square exact-version abstract unavailable; retaining missing-abstract status')
+
+
 def recover_abstracts(papers, config):
     if not config.get('enabled', False): return
     limit = config.get('max_papers', 50)
@@ -52,6 +89,9 @@ def recover_abstracts(papers, config):
         metadata_blocked, aps_attempts = set(), 0
         for paper in missing[:limit]:
             doi = paper_doi(paper)
+            if doi.startswith('10.21203/rs.'):
+                recover_researchsquare(paper, publisher, blocked)
+                continue
             for provider, url in [('Crossref', 'https://api.crossref.org/works/' + quote(doi, safe='')),
                                   ('OpenAlex', 'https://api.openalex.org/works/https://doi.org/' + quote(doi, safe=''))]:
                 if provider in blocked: continue
