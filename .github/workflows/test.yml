@@ -5,8 +5,12 @@ on:
       mode:
         description: Isolated tests, OpenReview checks, or one guarded paid LLM summary (no email)
         type: choice
-        options: [tests, openreview, openreview_full, llm]
+        options: [tests, openreview, openreview_full, llm, zotero_readonly]
         default: tests
+      collection_name_sha256:
+        description: SHA256 of the exact target collection name (read-only inspection)
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -58,3 +62,23 @@ jobs:
           CUSTOM_CONFIG: ${{ vars.CUSTOM_CONFIG }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: uv run --frozen python scripts/validate_llm.py
+
+  zotero-readonly-inspection:
+    if: ${{ inputs.mode == 'zotero_readonly' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Read permission names and target collection existence only
+        env:
+          ZOTERO_KEY: ${{ secrets.ZOTERO_KEY }}
+          ZOTERO_ID: ${{ secrets.ZOTERO_ID }}
+          TARGET_COLLECTION_SHA256: ${{ inputs.collection_name_sha256 }}
+        run: uv run --frozen python scripts/inspect_zotero_access.py

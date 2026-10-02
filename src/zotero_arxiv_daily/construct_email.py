@@ -1,5 +1,6 @@
 """Table-based email cards inspired by TideDra/zotero-arxiv-daily."""
 from .protocol import Paper
+from .zotero_action import confirmation_origin, confirmation_link
 from .budget import pricing_warning
 from .selection import GROUPS, paper_group
 from html import escape
@@ -44,11 +45,12 @@ __CONTENT__
 
 
 def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summary_label='AI summary',
-                   *, number=None, metadata='', basis='abstract', article_url=None, doi=None, original_abstract=None):
+                   *, number=None, metadata='', basis='abstract', article_url=None, doi=None, original_abstract=None, zotero_url=None):
     ordinal = f'{number}. ' if number is not None else ''
     heading = escape(ordinal + title)
     details = escape(metadata)
     buttons = link('PDF', pdf_url, True) + link('Article', article_url, not safe_url(pdf_url))
+    buttons += link('保存到 Zotero（需登录确认）', zotero_url)
     doi_url = 'https://doi.org/' + quote(doi, safe='/') if doi else None
     doi_line = (f'<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:10px 0 0;font-size:12px;overflow-wrap:anywhere;word-break:break-word;">'
                 f'<a style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#526174;" href="{escape(doi_url, quote=True)}">DOI: {escape(doi)}</a></p>') if doi else ''
@@ -89,8 +91,9 @@ def email_summary(paper):
     return 'No abstract available', 'Abstract unavailable'
 
 
-def render_email(papers: list[Paper], *, affiliation_max_chars=180) -> str:
+def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_action_origin=None) -> str:
     shorten_affiliations([], affiliation_max_chars)  # Validate even an empty digest.
+    zotero_action_origin = confirmation_origin(zotero_action_origin)
     labels = {'journals': '期刊 / Journals', 'preprints': '预印本 / Preprints（含会议论文）', 'random': '随机推荐 / Random'}
     sections = []
     for group in GROUPS:
@@ -114,7 +117,8 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180) -> str:
             summary, summary_label = email_summary(p)
             block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',
                                    summary, p.pdf_url, affiliations, summary_label, number=number,
-                                   metadata=metadata, basis=p.scoring_basis, article_url=p.url, doi=p.doi)
+                                   metadata=metadata, basis=p.scoring_basis, article_url=p.url, doi=p.doi,
+                                   zotero_url=confirmation_link(p, zotero_action_origin))
             parts.append('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:0 0 16px;">' + block + '</td></tr>')
         if not parts:
             parts.append('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px;background:#ffffff;">No new recommendations in this group.</td></tr>')
