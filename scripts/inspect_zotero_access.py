@@ -42,8 +42,11 @@ def inspect(client, key, user_id, collection_hash):
             seen.add(identity)
             matches+=hashlib.sha256(name.encode()).hexdigest()==collection_hash
         total=headers.get('Total-Results')
-        if total is not None and len(seen)>=int(total):break
-        if len(records)<100:break
+        if total is not None:
+            if len(seen)==int(total):break
+            if len(seen)>int(total) or len(records)<100:
+                raise ReadOnlyError('Incomplete collection pagination')
+        elif len(records)<100:break
     else:raise ReadOnlyError('Collection pagination limit reached')
     return {'user_matches':True,'personal_library_permissions':permissions,'target_collection_matches':matches,
             'target_collection_unique':matches==1,'library_writes':0}

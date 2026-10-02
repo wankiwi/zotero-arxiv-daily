@@ -58,3 +58,8 @@ def test_inspection_job_has_no_write_permission_or_delivery_keys():
     assert job['steps'][0]['with']['persist-credentials']=='false'
     env=job['steps'][-1]['env']
     assert set(env)=={'ZOTERO_KEY','ZOTERO_ID','TARGET_COLLECTION_SHA256'}
+
+
+def test_incomplete_collection_page_is_not_reported_as_absent():
+    client=Client([Response({'userID':123}),Response([],headers={'Total-Results':'5'})])
+    with pytest.raises(ReadOnlyError,match='Incomplete'):inspect(client,'secret-key','123',TARGET)

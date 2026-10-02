@@ -12,7 +12,7 @@ Live verification of all 14 affected papers recovered 14 abstracts from Crossref
 
 `email.zotero_action_origin` defaults to `null`. If a future approved service is configured, use an HTTPS origin such as `https://papers.example.org` (no path, user information, query, or fragment). Email cards then link to `/zotero/confirm?paper=<public-paper-id-hash>` with an explicit login/confirmation label. The hash is a public deterministic lookup identifier, **not authorization**. No Zotero key, GitHub token, collection name/key, or bearer capability is included. HTML/plain-text rendering is tested; existing single-column and summary behavior remains intact.
 
-There is no deployed service or Zotero-write implementation in this change. Keep this setting disabled until the architecture and permissions have been approved and the following server contract has been implemented and tested:
+The user approved the authenticated confirmation architecture. An undeployed, mock-tested Python save core is now included; it is not wired to an HTTP listener or credentials. Keep the email setting disabled until a specific collection, hosting identity adapter, runtime credential handoff, and deployment have been verified. The server contract is:
 
 1. Every GET is read-only, including requests from email link scanners. Require authenticated user sessions and authorize that user against the configured library before showing a paper.
 2. Resolve only identifiers from the approved digest metadata. Never fetch arbitrary URLs from query parameters. Render an escaped preview of citation, original URL, and the server-configured target collection.
@@ -28,3 +28,17 @@ A lower-setup alternative is opening the paper and using the official Zotero Con
 The manual Test workflow has a `zotero_readonly` mode. Supply `collection_name_sha256` as the SHA-256 of the exact target collection name; no collection name is included in public examples. The existing `ZOTERO_KEY` and `ZOTERO_ID` stay inside the runner. The script uses header authentication to `GET /keys/current`, verifies the configured owner, and paginates collections with a fixed bound. Output includes only personal-library permission booleans and the target-match count, never keys, IDs, names, bodies, or exception representations. Duplicate collection names are reported as ambiguous. No write API is present.
 
 References: [Zotero read API](https://www.zotero.org/support/dev/web_api/v3/basics), [write API](https://www.zotero.org/support/dev/web_api/v3/write_requests).
+
+## Validation outcome
+
+The isolated runner inspection (`36962803688`) succeeded. The configured key owner matched; personal-library `library`, `notes`, `write`, and `files` flags were true. **Two collections matched the requested name**, so no target was selected and the email action must remain disabled until a specific collection is identified privately. Existing permission does not authorize this change to perform a live write. No credential was exported and the inspection performed zero library writes.
+
+The initial draft passed 529 isolated tests and CI `36962773751`; an additional regression now rejects incomplete collection pagination rather than misreporting absence. Current delivery history contains 140 records (including the 45 from the latest scheduled run); verification must preserve that current state, not restore the older 95-record snapshot.
+
+## Save core and hosting boundary
+
+`zotero_save.py` implements an authenticated-session contract, same-origin POST plus session CSRF validation, trusted-digest-only paper lookup, bounded exact-identity Zotero search, collection-only PATCH preserving other memberships, citation creation with original URL and no attachments, and item/library version conflict guards. Durable SQLite reservations precede remote writes. Repeated successful POSTs return the recorded item; ambiguous responses are reconciled by reads and never blindly repeated. No arbitrary collection or library ID is accepted from a request. A host must supply verified sessions from its own authenticated session store; the Python dataclass is not an HTTP authentication mechanism.
+
+Sites capabilities were inspected without creating a Site. Private ChatGPT sign-in, server-side user identity and D1 are documented, and runtime environment tools support secret entries. However, the exposed environment-update tool requires the secret value as an argument; a user-only secure credential-entry handoff has **not** been verified. GitHub secrets cannot be retrieved and must not be exported. Do not claim a Sites settings UI or credential-provisioning route until it is confirmed.
+
+The Python core is a tested reference implementation for the current repository. A Sites Worker deployment would need its host adapter and a D1-compatible durable reservation implementation (including atomic cross-request claiming); Python SQLite cannot simply run inside that Worker. One Site owner should implement and verify that integration after the provisioning route and exact collection are settled. No Site has been created or deployed by this task.
