@@ -92,3 +92,21 @@ def test_prompt_definition_change_invalidates(config, encoder):
     ranker._encoder.prompts['document']='New document role: '
     ranker.get_similarity_score(['a'],['b'])
     assert len(ranker._encoder.calls)==2
+
+
+def test_interest_weights_reuse_vectors_new_phrase_encodes_only_new_text(config, encoder):
+    from omegaconf import OmegaConf
+    from tests.canned_responses import make_sample_paper, make_sample_corpus
+    config.interest_profile = OmegaConf.create({'keywords':['water'], 'keyword_weight':0.6, 'zotero_weight':0.4})
+    ranker = LocalReranker(config)
+    papers, corpus = [make_sample_paper()], make_sample_corpus(1)
+    ranker.rerank(papers, corpus)
+    assert len(ranker._encoder.calls) == 1
+    config.interest_profile.keyword_weight = 0.9
+    ranker.rerank(papers, corpus)
+    assert len(ranker._encoder.calls) == 1
+    assert papers[0].interest_keyword_weight == pytest.approx(0.9/1.3)
+    config.interest_profile.keywords = ['proton transfer']
+    ranker.rerank(papers, corpus)
+    assert ranker._encoder.calls[-1] == ['proton transfer']
+    assert -10 <= papers[0].score <= 10

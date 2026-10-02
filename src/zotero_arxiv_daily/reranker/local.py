@@ -1,3 +1,4 @@
+from ..interest_profile import interest_profile
 from .base import BaseReranker, register_reranker
 from .embedding_cache import EmbeddingCache, digest
 import logging
@@ -106,5 +107,12 @@ class LocalReranker(BaseReranker):
                 self._cache.put(text, vector)
                 lookup[text] = vector
             logger.info(f'Embedded {len(missing)} texts in {perf_counter()-started:.2f}s')
-        sim = encoder.similarity(np.stack([lookup[t] for t in s1]), np.stack([lookup[t] for t in s2]))
+        left, right = np.stack([lookup[t] for t in s1]), np.stack([lookup[t] for t in s2])
+        profile = interest_profile(self.config)
+        if profile.keywords and profile.keyword_weight:
+            # Both components use cosine, even if a model config selects dot product.
+            left = left / np.linalg.norm(left, axis=1, keepdims=True)
+            right = right / np.linalg.norm(right, axis=1, keepdims=True)
+            return left @ right.T
+        sim = encoder.similarity(left, right)
         return sim.cpu().numpy()

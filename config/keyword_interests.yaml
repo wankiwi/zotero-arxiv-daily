@@ -1,0 +1,14 @@
+defaults:
+  - interests
+  - _self_
+
+interest_profile:
+  keywords:
+    - machine learning force field
+    - interfacial water
+    - electric double layer
+    - droplet
+    - proton transfer
+    - enhanced sampling
+  keyword_weight: 0.6
+  zotero_weight: 0.4

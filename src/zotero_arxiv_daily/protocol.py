@@ -32,6 +32,10 @@ class Paper:
     abstract_recovery_status: Optional[str] = None
     subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
+    keyword_score: Optional[float] = None
+    zotero_score: Optional[float] = None
+    interest_keyword_weight: float = 0.0
+    interest_zotero_weight: float = 1.0
     summary_input_source: Optional[str] = None
     summary_input_fallback: Optional[str] = None
     tldr_status: Optional[str] = None

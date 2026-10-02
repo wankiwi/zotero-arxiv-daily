@@ -119,3 +119,9 @@ state:
   enabled: false
   path: data/recommendations.json
   retention_days: 90
+
+# Optional semantic ranking interests; empty preserves Zotero-only ranking.
+interest_profile:
+  keywords: []
+  keyword_weight: 0.6
+  zotero_weight: 0.4
