@@ -10,6 +10,7 @@ from .identity import canonical_doi, paper_doi, title_key, deduplicate
 from .state import State
 from .output import write_rss
 from .reranker import get_reranker_cls
+from .interest_profile import interest_profile
 from .construct_email import render_email
 from .utils import send_email
 from openai import OpenAI
@@ -187,8 +188,9 @@ class Executor:
 
     def _recommend(self, state, errors, maximum, workers):
         corpus = self.filter_corpus(self.fetch_zotero_corpus())
+        interest_profile(self.config).effective_weights(bool(corpus))
         if not corpus:
-            raise ValueError('No Zotero papers with abstracts matched the configured interest profile')
+            logger.warning('No Zotero papers with abstracts matched; ranking by configured keywords only')
         candidates = []
         for source, retriever in self.retrievers.items():
             try:

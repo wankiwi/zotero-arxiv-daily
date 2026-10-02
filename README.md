@@ -281,3 +281,39 @@ llm:
 APS使用[官方公布的RSS输入](https://journals.aps.org/feeds)，与已禁用的RSS输出无关。Feed中的截断片段不冒充完整摘要。出版社网页受限时可以使用上述明确标注来源的DOI匹配索引或稿件摘要；只有标题相同、DOI缺失或版本不明的arXiv结果一律拒绝。官方[Harvest API](https://harvest.aps.org/docs/harvest-api)对部分内容要求APS授权；本程序不自动申请授权、不绕过401，也不使用账户/代理替换重试。
 
 Research Square abstract recovery preserves the cited DOI version and verifies both DOI/version and title; the versionless identifier is used only for recommendation deduplication. See [verification and Zotero action proposal](docs/RESEARCHSQUARE_ZOTERO.md).
+
+
+## 可编辑的语义关键词兴趣
+
+可在 Actions variable `CUSTOM_CONFIG` 的现有 YAML **合并**以下顶层块，不要用它覆盖整个配置。它只影响已通过来源筛选、去重和投递历史过滤的候选排序，不会扩大 arXiv 类别、OpenReview subject/keyword 条件或其他来源范围。以下是待启用示例，不代表线上已经启用：
+
+```yaml
+interest_profile:
+  keywords:
+    - machine learning force field
+    - interfacial water
+    - electric double layer
+    - droplet
+    - proton transfer
+    - enhanced sampling
+  keyword_weight: 0.6
+  zotero_weight: 0.4
+```
+
+也可在本地显式选择 `--config-name keyword_interests`；此 preset 继承 `interests`。定时工作流仍使用 `interests`，因此定时运行需要通过 CUSTOM_CONFIG 合并此块。启动完整应用会执行配置中的输出；验证配置时不要直接启动生产投递。
+
+| 参数 | 默认值与规则 |
+| --- | --- |
+| `interest_profile.keywords` | `[]`，保持原来的 Zotero 排序；最多 100 个字符串，每个最多 250 字符。空白项忽略，Unicode NFKC、大小写、空白及连字符形式归一后去重。 |
+| `interest_profile.keyword_weight` | `0.6`，关键词分数系数。必须为有限非负数字。 |
+| `interest_profile.zotero_weight` | `0.4`，Zotero 分数系数。必须为有限非负数字；两项之和必须有限且大于零。6/4 与 0.6/0.4 等效。 |
+
+关键词和候选摘要使用同一本地 embedding 模型；摘要缺失时使用标题并在邮件标记。模型可匹配近义表达，但不会生成或反复加权同义词列表，也不保证覆盖每个专业同义词。不同意思相近但写法不同的手工词仍是独立兴趣，建议避免重复罗列同一主题。
+
+关键词分数 K 是各唯一词组与候选的**余弦相似度平均值**；Zotero 分数 Z 是按加入时间由新到旧、权重 `1/(1+log10(i+1))` 归一后的余弦相似度加权平均值（i 从 0 开始）。最终分数为 `10 × (w_keyword × K + w_zotero × Z)`，有效权重归一为总和 1。两个分量使用同一余弦尺度，通常在 -10 到 10 之间，不做依赖本批候选的 min-max/百分位归一化。权重不是概率，也不能保证两个分量的实际分布/影响完全相同。平均值避免长同义词列表重复放大，但某论文只匹配一个主题时会被其他主题稀释。
+
+某一参考集为空时，它的有效权重变为 0，另一个非空且正权重的参考集使用权重 1；显式零权重不会被恢复。无可用正权重参考集会报错。Zotero 读取/鉴权失败仍报错，不视为空库；即使 Zotero 权重为 0，仍读取库以排除已有论文。关键词为空时，原 Zotero 时间衰减排序保持不变。
+
+修改关键词只新增所需文本向量，修改权重立即重新计算分数并复用向量；本地持久缓存继续按模型、不可变 revision、prompt/encode 参数和运行环境隔离。无需新增付费 API 或 LLM；若另行选择既有 `api` reranker，仍遵循其外部服务成本。邮件卡片标注实际关键词/库权重，历史未启用关键词的待发卡片保留原说明。
+
+`executor.min_score` 在融合后执行，原阈值可能需重新评估。期刊 25、预印本 15 依融合分数选择；random 5 仍从剩余合格未见候选无放回抽样，与前两组不重叠，不再按关键词重排随机组。候选不足的组保持缺额，不借用其他组填满。来源筛选、已有条目排除、投递历史、摘要恢复、中文摘要预算和发送流程均继续生效。

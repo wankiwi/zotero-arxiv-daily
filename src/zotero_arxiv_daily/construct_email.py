@@ -45,7 +45,7 @@ __CONTENT__
 
 
 def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summary_label='AI summary',
-                   *, number=None, metadata='', basis='abstract', article_url=None, doi=None, original_abstract=None, zotero_url=None):
+                   *, number=None, metadata='', basis='abstract', article_url=None, doi=None, original_abstract=None, zotero_url=None, interest_reference="your library"):
     ordinal = f'{number}. ' if number is not None else ''
     heading = escape(ordinal + title)
     details = escape(metadata)
@@ -63,7 +63,7 @@ def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summa
 <h2 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 12px;color:#253244;font-size:18px;line-height:1.4;">{heading}</h2>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 5px;color:#526174;font-size:13px;line-height:1.7;">{escape(authors or 'Authors unavailable')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 16px;color:#687589;font-size:12px;line-height:1.6;">{escape(affiliations or 'Unknown Affiliation')}</p>
-<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}</strong><br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">Scored using {escape(basis)} similarity to your library.</span></p>
+<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}</strong><br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">Scored using {escape(basis)} similarity to {escape(interest_reference)}.</span></p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:12px;font-weight:bold;color:#526174;">{escape(summary_label)}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">{escape(tldr or 'No abstract available').replace(chr(10), '<br>')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;">{buttons}</p>{doi_line}
@@ -118,6 +118,8 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
             block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',
                                    summary, p.pdf_url, affiliations, summary_label, number=number,
                                    metadata=metadata, basis=p.scoring_basis, article_url=p.url, doi=p.doi,
+                                   interest_reference=(f"keywords ({p.interest_keyword_weight:.0%}) and your library ({p.interest_zotero_weight:.0%})"
+                                                       if p.interest_keyword_weight else "your library"),
                                    zotero_url=confirmation_link(p, zotero_action_origin))
             parts.append('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:0 0 16px;">' + block + '</td></tr>')
         if not parts:
@@ -132,7 +134,11 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
                    'background:#fff3cd;color:#713f12;border:2px solid #b7791f;font-size:14px;line-height:1.7;">'
                    '<strong>LLM 费用提醒 / Pricing warning</strong><br>' + escape(warning) + '</td></tr>') + content
     count = f'{len(papers)} recommendation'  + ('' if len(papers) == 1 else 's')
-    return framework.replace('__COUNT__', count).replace('__CONTENT__', content)
+    template = framework
+    if any(p.interest_keyword_weight for p in papers):
+        template = template.replace('Relevance uses text similarity weighted by when papers were added to your library.',
+                                    'Relevance combines semantic keyword similarity and library similarity at the weights shown on each card; library papers are weighted by when they were added.')
+    return template.replace('__COUNT__', count).replace('__CONTENT__', content)
 
 
 class _PlainEmail(HTMLParser):
