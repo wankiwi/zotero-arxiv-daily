@@ -145,15 +145,16 @@ def test_only_explicit_preprint_relations_are_equivalent():
 
 
 @pytest.mark.parametrize('enabled',[False,True])
-def test_schedule_explicit_opt_in_preserves_other_source_filters(tmp_path,enabled):
+@pytest.mark.parametrize('keywords',['[molecular]','[]'])
+def test_schedule_explicit_opt_in_preserves_other_source_filters(tmp_path,enabled,keywords):
     from scripts.prepare_workflow import prepare
     root=Path(__file__).resolve().parents[1]
     shutil.copytree(root/'config',tmp_path/'config',ignore=shutil.ignore_patterns('runtime.yaml','private.yaml'))
-    custom='preprint_interests:\n  chemrxiv:\n    enabled: '+str(enabled).lower()+'\n    keywords: [molecular]\n'
+    custom='preprint_interests:\n  chemrxiv:\n    enabled: '+str(enabled).lower()+'\n    categories: ["*"]\n    keywords: '+keywords+'\n'
     prepare(tmp_path,{'GITHUB_EVENT_NAME':'schedule','CUSTOM_CONFIG':custom})
     with initialize_config_dir(config_dir=str(tmp_path/'config'),version_base=None):cfg=compose(config_name='runtime')
     assert ('chemrxiv' in cfg.executor.source)==enabled
-    assert list(cfg.preprint_interests.chemrxiv.keywords)==['molecular']
+    assert list(cfg.preprint_interests.chemrxiv.keywords)==(['molecular'] if keywords=='[molecular]' else [])
     assert list(cfg.preprint_interests.openreview.venues)==['ICLR','NeurIPS','ICML','TMLR','CoRL']
     assert dict(cfg.executor.quotas)=={'journals':25,'preprints':15,'random':5}
     assert not cfg.output.rss.enabled and cfg.llm.budget.daily_cny==0.2
@@ -197,3 +198,11 @@ def test_publication_alias_matches_older_preprint_history(tmp_path):
 @pytest.mark.parametrize('relation',[None, [], {'has-preprint':None}, {'has-preprint':[None,42]}, {'has-preprint':'invalid'}])
 def test_malformed_optional_relations_do_not_invent_identities(relation):
     assert crossref_equivalent_dois({'DOI':DOI,'relation':relation})==[]
+
+
+def test_explicit_empty_keyword_list_means_all_chemistry(config,monkeypatch):
+    config.preprint_interests={'chemrxiv':{'enabled':True,'keywords':[],'categories':['*']}}
+    r=module.ChemRxivRetriever(config)
+    r.since=datetime(2026,10,2,tzinfo=timezone.utc);r.until=datetime(2026,10,3,tzinfo=timezone.utc)
+    transport(monkeypatch,[{'message':{'items':[item()],'total-results':1}}])
+    assert len(r.retrieve_papers())==1
