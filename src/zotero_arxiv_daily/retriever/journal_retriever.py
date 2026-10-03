@@ -1,5 +1,6 @@
 """Publisher feeds plus precise, paginated Crossref journal queries."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ..identity import crossref_equivalent_dois
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from html import unescape
@@ -146,6 +147,7 @@ class JournalRetriever(BaseRetriever):
                             authors=[clean_text(' '.join(filter(None, [a.get('given'), a.get('family')]))) for a in item.get('author', [])],
                             abstract=clean_text(item.get('abstract')), url=f'https://doi.org/{doi}',
                             pdf_url=links[0] if links else None, doi=doi, journal=journal.title,
+                            related_dois=crossref_equivalent_dois(item),
                             issns=list(journal.issns), published=published,
                             affiliations=list(dict.fromkeys(clean_text(a.get('name')) for person in item.get('author', []) for a in person.get('affiliation', []) if a.get('name'))) or None))
                     except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:

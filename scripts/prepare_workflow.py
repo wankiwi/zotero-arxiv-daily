@@ -25,12 +25,15 @@ def prepare(root: Path, environ=os.environ):
         raise ValueError('Invalid preprint profile')
     if profile == 'interests':
         preferences = OmegaConf.load(root / 'config' / 'interests.yaml').preprint_interests
+        chemrxiv = OmegaConf.select(config, 'preprint_interests.chemrxiv')
         config.preprint_interests = preferences  # Replace legacy keyword approximations too.
+        if chemrxiv is not None:
+            config.preprint_interests.chemrxiv = OmegaConf.merge(preferences.chemrxiv, chemrxiv)
     sources = 'all' if scheduled else environ.get('SOURCE_MODE', 'configured')
     if sources not in ('configured', 'all', 'journals'):
         raise ValueError('Invalid sources mode')
     if sources != 'configured':
-        selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']
+        selected = ['journals'] if sources == 'journals' else ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']
         config = OmegaConf.merge(config, {'executor': {'source': selected}})
     llm_mode = environ.get('LLM_MODE', 'configured')
     if llm_mode not in ('configured', 'disabled'):
@@ -62,7 +65,7 @@ def prepare(root: Path, environ=os.environ):
         if not days.isdigit() or not 1 <= int(days) <= 90:
             raise ValueError('window_days must be between 1 and 90')
         config = OmegaConf.merge(config, {'source': {name: {'window_days': int(days)}
-                                                   for name in ('journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')}})
+                                                   for name in ('journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv')}})
     # Workflow history lives in paper-state; never rely on an immutable cache key.
     config = OmegaConf.merge(config, {'state': {'enabled': True, 'path': 'data/recommendations.json'}})
     config = OmegaConf.merge(config, {'output': {'rss': {'path': 'public/feed.xml'}}})

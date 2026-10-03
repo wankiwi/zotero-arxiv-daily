@@ -162,8 +162,9 @@ def recover_abstracts(papers, config, context=None):
             if doi.startswith('10.21203/rs.'):
                 recover_researchsquare(paper, publisher, blocked)
                 continue
-            for provider, url in [('Crossref', 'https://api.crossref.org/works/' + quote(doi, safe='')),
-                                  ('OpenAlex', 'https://api.openalex.org/works/https://doi.org/' + quote(doi, safe=''))]:
+            metadata_doi = normalize_doi(paper.doi) or normalize_doi(paper.url) or doi
+            for provider, url in [('Crossref', 'https://api.crossref.org/works/' + quote(metadata_doi, safe='')),
+                                  ('OpenAlex', 'https://api.openalex.org/works/https://doi.org/' + quote(metadata_doi, safe=''))]:
                 if context.expired():
                     record_attempt(paper, provider, 'pre_rank_time_limit')
                     continue

@@ -6,7 +6,7 @@ from .retriever import get_retriever_cls
 from .protocol import CorpusPaper
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
-from .identity import canonical_doi, paper_doi, title_key, deduplicate
+from .identity import canonical_doi, paper_doi, paper_dois, title_key, deduplicate
 from .state import State
 from .output import write_rss
 from .reranker import get_reranker_cls
@@ -209,7 +209,7 @@ class Executor:
             paper.abstract = clean_abstract(paper.abstract)
         unique = deduplicate(candidates)
         if self.config.executor.get('exclude_existing', True):
-            unique = [p for p in unique if paper_doi(p) not in self.library_dois
+            unique = [p for p in unique if not (paper_dois(p) & self.library_dois)
                       and title_key(p.title) not in (self.library_titles_without_doi if paper_doi(p) else self.library_titles)]
         unique = [p for p in unique if not state.has(p)]
         logger.info(f'{len(candidates)} candidates, {len(unique)} new papers after deduplication')

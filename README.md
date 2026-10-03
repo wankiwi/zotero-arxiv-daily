@@ -373,3 +373,41 @@ reranker:
 历史中记录 `raw_score`（当次未惩罚融合分数）、`score`（当次最终分数）、`missing_abstract_factor`（实际应用值；有摘要为1）、`scoring_basis`，以及 `selection_score`（入选时分数）。重复评分始终从文本相似度重新计算，不在旧分数上叠加。补回摘要后会编码新摘要、重算正常分数并将实际系数恢复为1；引用向量继续复用缓存。最终投递阶段补全后的展示分数可能不同于入选分数，甚至跨过自定义阈值，但不追溯重新选取、填充配额或重抽随机组；卡片会标明变化。若希望摘要影响入选决策，可另行启用上述有界预排序补全选项。
 
 修改系数不清空向量缓存、不改模型、不改关键词权重，也不发起 LLM 调用。旧历史缺少新字段时兼容加载，既有投递记录不重发。
+
+## ChemRxiv 预印本来源
+
+ChemRxiv 使用 [Crossref 官方元数据 API](https://api.crossref.org/works?filter=prefix:10.26434,type:posted-content&rows=1)。不抓取 ChemRxiv 页面或 RSS，不绕过其 API 的 403。Crossref 入库可能延迟或缺少字段，不能视为 ChemRxiv 网站的完整实时索引。默认查询全化学范围，交由现有本地 embedding 兴趣排序，不额外强制关键词筛选。
+
+该来源只接受 DOI 前缀 `10.26434`、`chemrxiv` DOI 命名、Crossref member `316`、publisher `American Chemical Society (ACS)`、类型 `posted-content/preprint`，且主资源指向 `chemrxiv.org` 的记录。未知注册者/命名会被排除，来源变更需要重新核验。官方分类接口当前访问被拒绝；不能把自定义关键词当成官方分类 ID，也不承诺官方 subject taxonomy 筛选。
+
+现有定时配置默认关闭 ChemRxiv。发布此代码后，如需启用，把以下块**合并**入原 `CUSTOM_CONFIG` 的 `preprint_interests`，保留其他配置：
+
+```yaml
+preprint_interests:
+  chemrxiv:
+    enabled: true
+    categories: ["*"]
+    keywords: []
+```
+
+`--config-name chemrxiv` 是继承现有 `interests` 的启用预设；`all` / `preprints` 的可选来源也包含 ChemRxiv，最终是否启用仍受 interests 开关控制。ChemRxiv 不是独占运行其他来源的模式。
+
+| 参数 | 默认值与作用 |
+| --- | --- |
+| `preprint_interests.chemrxiv.enabled` | `interests` 中 `false`；显式启用后加入已有预印本候选池。定时任务保留此独立覆盖。 |
+| `preprint_interests.chemrxiv.categories` | 继承 `source.chemrxiv.category: ["*"]`；仅支持全范围 `*`，其他值明确报错。 |
+| `preprint_interests.chemrxiv.keywords` | `[]`，不作硬筛选；非空时按已有平台规则，对标题或摘要进行大小写不敏感的短语 OR 匹配（短语不跨字段）。不匹配即排除，区别于 `interest_profile.keywords` 的 embedding 语义排序。 |
+| `source.chemrxiv.window_days` | `1`，整数 1–90；筛选 UTC 今日减 N 天至今日，两个日期边界均包含。元数据只有日精度，因此 1 表示昨天和今天两个日期，不是滚动 24 小时。工作流的 `WINDOW_DAYS` 同样作用于该来源。 |
+| `source.chemrxiv.page_size` | `50`，整数 1–100，每页记录数。 |
+| `source.chemrxiv.max_pages` | `20`，整数 1–100；超过上限视为不完整检索并报错，丢弃该来源部分结果，不伪装检索成功。 |
+| `source.chemrxiv.mailto` | `null`；可选 Crossref 联系邮箱（会传给 Crossref User-Agent），不要填 API 密钥。 |
+
+例如，希望只保留字面命中分子动力学或材料主题的候选时，可设 `keywords: [molecular dynamics, materials]`；这会收窄召回范围，不保证覆盖同义词。默认空列表更适合让现有兴趣模型决定相关性。ChemRxiv 沿用实际配置中的关键词/Zotero 融合权重、缺摘要系数、恢复限额及投递设置，不另设排序模型或 LLM。
+
+API 在服务端按 `posted` 日期过滤，按 `indexed` 排序以兼容 cursor；客户端逐页读取，不因遇到窗口外日期提前停止，并再次核验完整发布日期。HTTP 401/403/429 不重试；重定向、重复页、无有效后续游标、畸形响应和页数上限均明确报错。单页上限 2 MB，连接/读取超时 5/20 秒，沿用 Crossref 串行限速。结果不是跨请求事务快照，服务端并发更新仍可能影响边界覆盖。
+
+ChemRxiv 计入现有**预印本 15** 配额；期刊 25、剩余合格未见候选无放回 random 5 不变，三组不重叠。候选不足时留缺额，不重复、不放宽过滤、不从其他组强行补足。来源失败保留明确失败状态，其他来源继续按原流程处理。
+
+同一家族的 ChemRxiv 版本共享推荐身份，当前检索中优先最新版本，但摘要查询始终使用精确版本 DOI。Crossref 明确提供 `is-preprint-of` / `has-preprint` DOI 关系时，可跨来源、Zotero 库和投递历史去重，并优先保留发表记录；不同版本或预印本/发表版之间不移植摘要。缺少 DOI 关系时无法保证识别改题发表的稿件，不会仅凭相似标题声称它们相同。历史新增可选 `related_dois`，旧记录兼容读取。
+
+原始摘要优先使用该版本的 Crossref deposit，缺失时走既有合法元数据恢复；不拼接正文充当摘要、不访问受限全文。仍缺摘要时按现有 `missing_abstract_factor`（默认 0.8）降分。此来源未实现全文提取，已有全文总结模式会按原规则回退到摘要。

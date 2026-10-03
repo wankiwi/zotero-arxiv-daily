@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from omegaconf import DictConfig, ListConfig
 from .identity import title_key
 
-PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')
+PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv')
 
 
 def _terms(value, path, categories=False, platform=None):

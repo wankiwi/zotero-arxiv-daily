@@ -23,6 +23,7 @@ class Paper:
     selection_score: Optional[float] = None
     missing_abstract_factor: float = 1.0
     doi: Optional[str] = None
+    related_dois: list[str] = field(default_factory=list)
     journal: Optional[str] = None
     issns: list[str] = field(default_factory=list)
     published: Optional[datetime] = None
