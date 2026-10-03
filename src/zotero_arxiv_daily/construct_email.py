@@ -88,7 +88,35 @@ def email_summary(paper):
         if paper.tldr_status == 'not_generated' and not paper.tldr_error:
             return paper.abstract, 'Original abstract (AI summary not generated)'
         return paper.abstract, 'Original abstract (AI summary unavailable)'
-    return 'No abstract available', 'Abstract unavailable'
+    reasons = {
+        'access_blocked': 'access blocked; no bypass attempted',
+        'http_401': 'HTTP 401 access denied', 'http_403': 'HTTP 403 access denied',
+        'http_429': 'HTTP 429 rate limited', 'not_found': 'metadata not found',
+        'doi_version_mismatch': 'DOI/version mismatch; rejected',
+        'title_mismatch': 'title mismatch; rejected',
+        'abstract_absent': 'metadata contains no abstract',
+        'correction_no_standalone_abstract': 'correction/erratum; checked metadata provides no standalone abstract',
+        'abstract_incomplete': 'truncated abstract rejected',
+        'abstract_absent_or_identity_mismatch': 'no usable abstract or identity mismatch',
+        'abstract_absent_or_incomplete': 'abstract absent or incomplete',
+        'doi_version_title_mismatch': 'DOI/version/title mismatch; rejected',
+        'no_verified_abstract': 'no DOI-verified abstract found',
+        'publisher_access_blocked': 'publisher access blocked; no bypass attempted',
+        'publisher_lookup_limit': 'publisher lookup allowance exhausted',
+        'publisher_abstract_absent': 'verified publisher page provides no standalone abstract (not a request failure)',
+        'metadata_lookup_limit': 'metadata lookup allowance exhausted',
+        'metadata_abstract_unavailable': 'public metadata has no usable abstract',
+        'pre_rank_time_limit': 'pre-ranking lookup time allowance exhausted',
+        'doi_unavailable': 'no DOI available for recovery',
+    }
+    details = []
+    for attempt in paper.abstract_recovery_attempts:
+        status = attempt.get('status', '')
+        reason = reasons.get(status, ('request timed out' if 'Timeout' in status else 'lookup failed') if status.startswith('request_failed_') else status.replace('_', ' '))
+        details.append(f"{attempt.get('provider', 'Metadata')}: {reason}")
+    if paper.abstract_recovery_status and not details:
+        details.append(reasons.get(paper.abstract_recovery_status, paper.abstract_recovery_status.replace('_', ' ')))
+    return 'No abstract available' + ('. ' + '; '.join(details) if details else ''), 'Abstract unavailable'
 
 
 def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_action_origin=None) -> str:
@@ -114,6 +142,10 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
                     metadata += f' ({p.summary_input_fallback})'
             if p.abstract_source:
                 metadata += f' · Abstract: {p.abstract_source}'
+            if p.raw_score is not None and p.missing_abstract_factor < 1:
+                metadata += f' · Missing-abstract factor: {p.missing_abstract_factor:g}; unadjusted relevance: {p.raw_score:.1f}'
+            if p.selection_score is not None and p.score is not None and p.selection_score != p.score:
+                metadata += f' · Selected at relevance {p.selection_score:.1f}; updated after abstract recovery'
             summary, summary_label = email_summary(p)
             block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',
                                    summary, p.pdf_url, affiliations, summary_label, number=number,
@@ -138,6 +170,10 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
     if any(p.interest_keyword_weight for p in papers):
         template = template.replace('Relevance uses text similarity weighted by when papers were added to your library.',
                                     'Relevance combines semantic keyword similarity and library similarity at the weights shown on each card; library papers are weighted by when they were added.')
+    if any(p.missing_abstract_factor < 1 for p in papers):
+        template = template.replace('Scores are shown to one decimal place.',
+            'For title-only scores, positive values multiply by the stated factor; negative values divide by it with a floor of -10. '
+            'A factor of zero sets the score to -10. Scores are shown to one decimal place.')
     return template.replace('__COUNT__', count).replace('__CONTENT__', content)
 
 

@@ -8,7 +8,7 @@ import requests
 from .identity import canonical_doi, paper_doi
 
 MAX_BYTES = 2_000_000
-HOSTS = {'www.nature.com', 'journals.aps.org'}
+HOSTS = {'www.nature.com', 'journals.aps.org', 'pubs.acs.org'}
 
 
 class AbstractPage(HTMLParser):
@@ -35,7 +35,7 @@ class AbstractPage(HTMLParser):
         self.stack.append(tag)
         depth = len(self.stack)
         if self.active is None and (attrs.get('id') == 'Abs1-content' or
-                'abstract' in attrs.get('class', '').split() or attrs.get('id') == 'abstract'):
+                bool({'abstract', 'article_abstract', 'hlFld-Abstract'} & set(attrs.get('class', '').split())) or attrs.get('id') == 'abstract'):
             self.active = (depth, [])
         if self.active is not None and self.skip is None:
             if tag in ('script', 'style', 'h2', 'h3'):
@@ -71,7 +71,7 @@ def parse_abstract(page, doi):
     from .abstracts import clean_abstract
     for value in parser.sections + parser.metadata:
         text = clean_abstract(value)
-        if len(text) >= 40:
+        if len(text) >= 40 and not text.rstrip().endswith(('…', '...')):
             return text, 'recovered'
     return '', 'publisher_abstract_absent'
 
@@ -82,6 +82,8 @@ def publisher_url(paper):
         return 'https://www.nature.com/articles/' + doi.split('/', 1)[1]
     if doi and re.fullmatch(r'10\.1103/[a-z0-9.-]+', doi) and paper.journal == 'Physical Review Letters':
         return 'https://journals.aps.org/prl/accepted/' + doi
+    if doi and re.fullmatch(r'10\.1021/[a-z0-9.-]+', doi):
+        return 'https://pubs.acs.org/doi/' + doi
     return None
 
 

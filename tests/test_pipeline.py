@@ -99,9 +99,8 @@ def test_abstract_recovery_budget_targets_selected_papers(pipeline, monkeypatch)
               doi=f'10.1234/paper{i}', url=f'https://example.org/{i}') for i in range(60)]
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: papers)
     def rank(items, corpus):
-        assert all(not p.abstract for p in items)
         for i, p in enumerate(items):
-            p.score, p.scoring_basis = i, 'title only'
+            p.score, p.scoring_basis = i, 'abstract' if p.abstract else 'title only'
         return list(reversed(items))
     monkeypatch.setattr(executor.reranker, 'rerank', rank)
     looked_up = []
@@ -114,7 +113,8 @@ def test_abstract_recovery_budget_targets_selected_papers(pipeline, monkeypatch)
     assert looked_up == [papers[-1]]
     saved = next(iter(State(pipeline.state.path).records.values()))['paper']
     assert saved['abstract'] == 'Recovered original abstract'
-    assert saved['scoring_basis'] == 'title only'
+    assert saved['scoring_basis'] == 'abstract'
+    assert saved['selection_score'] == 59
 
 
 def test_missing_zotero_collection_and_abstract_are_handled(pipeline, monkeypatch):
@@ -215,3 +215,61 @@ def test_partial_researchsquare_results_save_delivery_without_repeat(pipeline, m
     assert len(sent)==1
     state=State(pipeline.state.path)
     assert not state.pending('email') and not state.pending('rss')
+
+
+def test_opt_in_recovery_reranks_before_selection_and_reuses_context(pipeline,monkeypatch):
+    pipeline.executor.max_paper_num=1
+    pipeline.abstracts.pre_rank_max_papers=2
+    pipeline.abstracts.enabled=True
+    executor=Executor(pipeline)
+    papers=[make_sample_paper(title='Initially preferred',abstract='',doi='10.5555/first',url='https://example.org/first'),
+            make_sample_paper(title='Better after abstract',abstract='',doi='10.5555/second',url='https://example.org/second')]
+    monkeypatch.setattr(executor.retrievers['arxiv'],'retrieve_papers',lambda:papers)
+    stages=[]
+    def rank(items,corpus):
+        stages.append('rank')
+        for i,p in enumerate(items):
+            p.score=9 if i==1 and p.abstract else 5-i
+            p.scoring_basis='abstract' if p.abstract else 'title only'
+        return sorted(items,key=lambda p:p.score,reverse=True)
+    contexts=[]
+    def recover(items,config,context=None):
+        contexts.append(context)
+        stages.append('recover')
+        if len(contexts)==1:
+            assert len(items)==2
+            items[1].abstract='Verified complete abstract about the topic.'
+    monkeypatch.setattr(executor.reranker,'rerank',rank)
+    monkeypatch.setattr('zotero_arxiv_daily.executor.recover_abstracts',recover)
+    executor.run()
+    saved=list(State(pipeline.state.path).records.values())
+    assert len(saved)==1 and saved[0]['paper']['title']=='Better after abstract'
+    assert saved[0]['paper']['scoring_basis']=='abstract'
+    assert stages==['rank','recover','rank','recover']
+    assert contexts[0] is contexts[1] and contexts[1].deadline is None
+
+
+def test_postselection_recovery_never_redraws_random_group(pipeline,monkeypatch):
+    from zotero_arxiv_daily.selection import select_papers as real_select
+    pipeline.executor.max_paper_num=7
+    pipeline.executor.quotas={'journals':1,'preprints':1,'random':5}
+    pipeline.abstracts.enabled=True
+    executor=Executor(pipeline)
+    papers=[make_sample_paper(title=f'Topic {i}',abstract='',doi=f'10.5555/{i}',
+             source='journals' if i%2 else 'arxiv',url=f'https://example.org/{i}') for i in range(12)]
+    monkeypatch.setattr(executor.retrievers['arxiv'],'retrieve_papers',lambda:papers)
+    samples=[]
+    class Rng:
+        def sample(self,pool,count):
+            samples.append([p.title for p in pool[:count]])
+            return pool[:count]
+    monkeypatch.setattr('zotero_arxiv_daily.executor.select_papers',lambda ranked,quotas,pending:real_select(ranked,quotas,pending,rng=Rng()))
+    def recover(items,config):
+        for p in items:p.abstract='Verified recovered original abstract.'
+    monkeypatch.setattr('zotero_arxiv_daily.executor.recover_abstracts',recover)
+    executor.run()
+    saved=[r['paper'] for r in State(pipeline.state.path).records.values()]
+    assert len(samples)==1 and len(samples[0])==5
+    assert [p['title'] for p in saved if p['recommendation_group']=='random']==samples[0]
+    assert all(p['score']==8 and p['missing_abstract_factor']==1 for p in saved)
+    assert all(p['selection_score']==pytest.approx(6.4) for p in saved)

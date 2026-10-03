@@ -18,7 +18,8 @@ from .llm import ModelRequests
 from .budget import prepare_budget, BudgetUnavailable
 from .preprint_interests import enabled_sources
 from .selection import quotas_for, select_papers, pending_batch, is_cover_title
-from .abstracts import clean_abstract, recover_abstracts
+from .abstracts import clean_abstract, recover_abstracts, RecoveryContext, recovery_shortlist
+from time import monotonic
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -213,14 +214,42 @@ class Executor:
         unique = [p for p in unique if not state.has(p)]
         logger.info(f'{len(candidates)} candidates, {len(unique)} new papers after deduplication')
         ranked = self.reranker.rerank(unique, corpus) if unique else []
+        recovery_config = self.config.get('abstracts', {})
+        pre_limit = recovery_config.get('pre_rank_max_papers', 0)
+        pre_seconds = recovery_config.get('pre_rank_seconds', 90)
+        if type(pre_limit) is not int or not 0 <= pre_limit <= recovery_config.get('max_papers', 50):
+            raise ValueError('abstracts.pre_rank_max_papers must be between 0 and max_papers')
+        if type(pre_seconds) is not int or not 1 <= pre_seconds <= 600:
+            raise ValueError('abstracts.pre_rank_seconds must be an integer from 1 to 600')
+        recovery_context = None
+        if pre_limit and recovery_config.get('enabled', False):
+            shortlist = recovery_shortlist(ranked, pre_limit)
+            recovery_context = RecoveryContext(deadline=monotonic() + pre_seconds)
+            recover_abstracts(shortlist, recovery_config, context=recovery_context)
+            recovered = sum(bool(p.abstract) for p in shortlist)
+            if recovered:
+                ranked = self.reranker.rerank(unique, corpus)
+            logger.info(f'Pre-ranking abstract recovery: {recovered}/{len(shortlist)} recovered; reranked before quotas and random sampling')
+            recovery_context.deadline = None
         minimum = float(self.config.executor.get('min_score', -10))
         ranked = [p for p in ranked if p.score >= minimum]
         quotas = quotas_for(self.config.executor)
         pending = state.pending('email') if self.config.get('output', {}).get('email', {}).get('enabled', True) else []
         ranked = select_papers(ranked, quotas, pending)[:maximum]
-        # Spend the bounded metadata lookup allowance on papers actually selected.
-        # Ranking remains based on original metadata (title-only when missing).
-        recover_abstracts(ranked, self.config.get('abstracts', {}))
+        # Freeze membership, including random draws, before delivery-only recovery.
+        # Retain eligibility/selection scores when recovered abstracts change display scores.
+        missing_at_selection = {id(p) for p in ranked if not p.abstract}
+        for paper in ranked:
+            paper.selection_score = paper.score
+        if recovery_context is None:
+            recover_abstracts(ranked, recovery_config)
+        else:
+            recover_abstracts(ranked, recovery_config, context=recovery_context)
+        restored = [p for p in ranked if id(p) in missing_at_selection and p.abstract]
+        if restored:
+            # New abstract vectors are encoded, unchanged reference vectors remain cached.
+            # This mutates scores/basis only; do not redraw random picks or refill quotas.
+            self.reranker.rerank(restored, corpus)
         if ranked and self.config.llm.get('enabled', True):
             try:
                 self.model_requests = prepare_budget(self.config.llm)

@@ -11,6 +11,8 @@ abstracts:
   enabled: false # Recover selected papers' abstracts from DOI-verified public metadata.
   max_papers: 50 # Bound missing-abstract metadata requests per run.
   publisher_fallback: true # DOI-verified public Nature/PRL abstract sections, never paywall bypass.
+  pre_rank_max_papers: 0 # Opt-in shortlist recovery before final ranking; <= max_papers.
+  pre_rank_seconds: 90 # Stop admitting lookups after this elapsed time (1-600).
   publisher_max_papers: 10 # Additional publisher lookups within max_papers, 0-50; <=4 GETs/paper.
   aps_metadata_max_papers: 10 # 0 disables; <=50 APS DOI lookups in public Semantic Scholar/arXiv metadata.
   mailto: null
@@ -76,6 +78,7 @@ llm:
   language: Chinese # Preferred language for the TL;DR. Example: English
 
 reranker:
+  missing_abstract_factor: 0.8 # Multiply positive title-only scores; divide negative scores with floor -10; 1 disables.
   local:
     revision: null # Optional immutable model revision.
     cpu_dtype: auto # Use float32 on CPUs without native BF16; same weights/model.
