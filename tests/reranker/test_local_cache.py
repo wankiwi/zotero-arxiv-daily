@@ -110,3 +110,23 @@ def test_interest_weights_reuse_vectors_new_phrase_encodes_only_new_text(config,
     ranker.rerank(papers, corpus)
     assert ranker._encoder.calls[-1] == ['proton transfer']
     assert -10 <= papers[0].score <= 10
+
+
+def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkeypatch):
+    from tests.canned_responses import make_sample_paper,make_sample_corpus
+    from omegaconf import OmegaConf
+    from zotero_arxiv_daily.protocol import Paper
+    monkeypatch.setattr(Paper,'generate_tldr',lambda *a,**kw:pytest.fail('Ranking must not call LLM'))
+    config.interest_profile=OmegaConf.create({'keywords':['water']})
+    ranker=LocalReranker(config)
+    paper=make_sample_paper(abstract='');corpus=make_sample_corpus(1)
+    ranker.rerank([paper],corpus)
+    raw=paper.raw_score;calls=len(ranker._encoder.calls)
+    config.reranker.missing_abstract_factor=0.5
+    ranker.rerank([paper],corpus)
+    assert len(ranker._encoder.calls)==calls
+    assert paper.raw_score==raw and paper.score==pytest.approx(raw*0.5)
+    paper.abstract='A newly recovered original abstract.'
+    ranker.rerank([paper],corpus)
+    assert ranker._encoder.calls[-1]==[paper.abstract]
+    assert paper.score==paper.raw_score and paper.missing_abstract_factor==1

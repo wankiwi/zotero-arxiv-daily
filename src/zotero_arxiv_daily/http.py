@@ -47,3 +47,13 @@ def session(mailto: str | None = None) -> requests.Session:
         respect_retry_after_header=True)
     client.mount('https://api.crossref.org/', CrossrefAdapter(max_retries=crossref_retry))
     return client
+
+
+def abstract_session(mailto=None):
+    """Recovery has no automatic retries; access refusals stop that provider."""
+    from .publisher_abstracts import publisher_session
+    client = publisher_session()
+    if mailto:
+        client.headers['User-Agent'] += f' (mailto:{mailto})'
+    client.mount('https://api.crossref.org/', CrossrefAdapter(max_retries=0))
+    return client

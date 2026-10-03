@@ -19,6 +19,9 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    raw_score: Optional[float] = None
+    selection_score: Optional[float] = None
+    missing_abstract_factor: float = 1.0
     doi: Optional[str] = None
     journal: Optional[str] = None
     issns: list[str] = field(default_factory=list)
@@ -30,6 +33,7 @@ class Paper:
     abstract_source: Optional[str] = None
     abstract_source_url: Optional[str] = None
     abstract_recovery_status: Optional[str] = None
+    abstract_recovery_attempts: list[dict[str, str]] = field(default_factory=list)
     subject_match_reason: Optional[str] = None
     scoring_basis: str = "abstract"
     keyword_score: Optional[float] = None

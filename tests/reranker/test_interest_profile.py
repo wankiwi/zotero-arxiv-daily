@@ -35,7 +35,8 @@ def test_keyword_normalization_does_not_repeat_weight():
     ranker = Controlled([[0.5]], keywords=[' Proton-transfer ', 'proton transfer', 'PROTON–TRANSFER', ''])
     result = ranker.rerank([make_sample_paper(abstract='')], [])
     assert ranker.references == ['proton transfer']
-    assert result[0].score == 5
+    assert result[0].raw_score == 5
+    assert result[0].score == 4
     assert result[0].scoring_basis == 'title only'
     assert result[0].interest_keyword_weight == 1
     assert result[0].zotero_score is None
