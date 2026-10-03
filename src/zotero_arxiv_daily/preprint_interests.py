@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from omegaconf import DictConfig, ListConfig
 from .identity import title_key
 
-PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview')
+PLATFORMS = ('arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv')
 
 
 def _terms(value, path, categories=False, platform=None):
@@ -65,7 +65,9 @@ def validate_interests(config):
                 if key in values:
                     spec[key] = _terms(values[key], f'{name}.{key}')
         if 'keywords' in values:
-            spec['keywords'] = _terms(values['keywords'], f'{name}.keywords')
+            # ChemRxiv explicitly supports an empty list for unrestricted semantic ranking.
+            empty_chemrxiv = name == 'chemrxiv' and isinstance(values['keywords'], (list, ListConfig)) and not values['keywords']
+            spec['keywords'] = [] if empty_chemrxiv else _terms(values['keywords'], f'{name}.keywords')
         if name == 'researchsquare':
             for key in ('backend', 'source_ids', 'type', 'subfield'):
                 if key in values:

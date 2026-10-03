@@ -13,4 +13,4 @@ source:
     category: ["*"]
     window_days: 1
 executor:
-  source: [arxiv, biorxiv, medrxiv, researchsquare]
+  source: [arxiv, biorxiv, medrxiv, researchsquare, chemrxiv]

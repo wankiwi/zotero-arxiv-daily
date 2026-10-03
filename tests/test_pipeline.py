@@ -273,3 +273,41 @@ def test_postselection_recovery_never_redraws_random_group(pipeline,monkeypatch)
     assert [p['title'] for p in saved if p['recommendation_group']=='random']==samples[0]
     assert all(p['score']==8 and p['missing_abstract_factor']==1 for p in saved)
     assert all(p['selection_score']==pytest.approx(6.4) for p in saved)
+
+
+def test_chemrxiv_pipeline_library_history_quotas_and_random(pipeline,monkeypatch):
+    from zotero_arxiv_daily.identity import canonical_doi
+    from tests.test_chemrxiv import item,transport,ranker
+    with open_dict(pipeline):
+        pipeline.interest_profile.keywords=['chemistry']
+        pipeline.interest_profile.keyword_weight=0.3
+        pipeline.interest_profile.zotero_weight=0.7
+        pipeline.executor.source=['chemrxiv']
+        pipeline.preprint_interests={'chemrxiv':{'enabled':True}}
+        pipeline.executor.quotas={'journals':25,'preprints':15,'random':5}
+        pipeline.executor.max_paper_num=45
+        pipeline.abstracts.enabled=False
+    seen=make_sample_paper(source='chemrxiv',doi='10.26434/chemrxiv.15000999/v1',title='Historic title')
+    history=State(pipeline.state.path);history.add([seen]);history.mark([seen],'rss');history.save()
+    records=[item(f'10.26434/chemrxiv.{15000000+i}/v1',title=[f'Candidate {i}']) for i in range(21)]
+    records += [item('10.26434/chemrxiv.15000999/v2',title=['Changed historic title']),
+        item('10.26434/chemrxiv.15000888/v1',relation={'is-preprint-of':[{'id':'10.1000/published','id-type':'doi'}]})]
+    transport(monkeypatch,[{'message':{'items':records,'total-results':len(records)}}])
+    executor=Executor(pipeline);executor.retrievers['chemrxiv']=ranker(pipeline)
+    def corpus():
+        executor.library_dois={canonical_doi('10.1000/published')}
+        return []
+    monkeypatch.setattr(executor,'fetch_zotero_corpus',corpus)
+    def rank(papers,corpus):
+        assert len(papers)==21
+        for p in papers:p.score=8
+        return papers
+    monkeypatch.setattr(executor.reranker,'rerank',rank)
+    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email',lambda *a:pytest.fail('No email'))
+    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI',lambda **kw:pytest.fail('No LLM'))
+    executor.run()
+    saved=State(pipeline.state.path)
+    added=[v['paper'] for k,v in saved.records.items() if k!='doi:10.26434/chemrxiv.15000999']
+    assert len(added)==20 and len({p['doi'] for p in added})==20
+    assert sum(p['recommendation_group']=='preprints' for p in added)==15
+    assert sum(p['recommendation_group']=='random' for p in added)==5

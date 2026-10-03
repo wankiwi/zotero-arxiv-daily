@@ -1,0 +1,6 @@
+defaults:
+  - interests
+  - _self_
+preprint_interests:
+  chemrxiv:
+    enabled: true

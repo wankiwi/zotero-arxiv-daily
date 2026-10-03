@@ -3,6 +3,8 @@ defaults:
   - all
   - _self_
 preprint_interests:
+  chemrxiv:
+    enabled: false # Explicit opt-in via CUSTOM_CONFIG; existing schedules stay unchanged.
   openreview:
     enabled: true
     venues: [ICLR, NeurIPS, ICML, TMLR, CoRL]

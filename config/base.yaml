@@ -18,6 +18,12 @@ abstracts:
   mailto: null
 
 source:
+  chemrxiv:
+    window_days: 1
+    page_size: 50
+    max_pages: 20
+    category: ["*"] # Crossref has no reliable ChemRxiv taxonomy; use independent keywords.
+    mailto: null
   openreview:
     enabled: true
     venues: [ICLR, NeurIPS, ICML, TMLR, CoRL]

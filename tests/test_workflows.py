@@ -74,11 +74,11 @@ def test_state_branch_roundtrip_preserves_working_branch_and_user_index(tmp_path
 
 
 @pytest.mark.parametrize('name, sources', [
-    (None, ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
-    ('', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
-    ('  ', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
-    ('default', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
-    ('preprints', ['arxiv', 'biorxiv', 'medrxiv', 'researchsquare']),
+    (None, ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']),
+    ('', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']),
+    ('  ', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']),
+    ('default', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']),
+    ('preprints', ['arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'chemrxiv']),
     ('researchsquare', ['researchsquare']), ('arxiv', ['arxiv']),
     ('biorxiv', ['biorxiv']), ('medrxiv', ['medrxiv']),
 ])
@@ -103,7 +103,7 @@ def test_mixed_source_customization_and_common_window(tmp_path):
         config = compose(config_name='runtime')
     assert list(config.executor.source) == ['journals', 'arxiv', 'researchsquare']
     assert list(config.source.arxiv.category) == ['physics.chem-ph']
-    assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview'])
+    assert all(config.source[name].window_days == 3 for name in ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv'])
 
 
 def test_explicit_run_recipient_overrides_custom_config(tmp_path):
@@ -126,7 +126,7 @@ def test_invalid_explicit_recipient_rejected(tmp_path, recipient):
 
 @pytest.mark.parametrize('sources,expected', [
     ('configured', ['arxiv', 'biorxiv']),
-    ('all', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview']),
+    ('all', ['journals', 'arxiv', 'biorxiv', 'medrxiv', 'researchsquare', 'openreview', 'chemrxiv']),
     ('journals', ['journals']),
 ])
 @pytest.mark.parametrize('llm_mode', ['configured', 'disabled'])

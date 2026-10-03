@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
-from .identity import paper_doi, paper_id, title_key
+from .identity import paper_doi, paper_dois, paper_id, title_key
 from .protocol import Paper
 
 
@@ -54,19 +54,22 @@ class State:
                     self.records[key] = record
 
         self.titles = {}
+        self.dois = set()
         for record in self.records.values():
+            self.dois.update(paper_dois(load_paper(record['paper'])))
             self.titles.setdefault(title_key(record['paper']['title']), set()).add(paper_doi(load_paper(record['paper'])))
 
     def has(self, paper):
         doi = paper_doi(paper)
         matches = self.titles.get(title_key(paper.title), set())
-        return paper_id(paper) in self.records or bool(matches and (not doi or None in matches or doi in matches))
+        return bool(paper_dois(paper) & self.dois) or paper_id(paper) in self.records or bool(matches and (not doi or None in matches or doi in matches))
 
     def pending(self, channel):
         return [load_paper(v['paper']) for v in self.records.values() if not v.get('channels', {}).get(channel)]
 
     def add(self, papers):
         for paper in papers:
+            self.dois.update(paper_dois(paper))
             self.titles.setdefault(title_key(paper.title), set()).add(paper_doi(paper))
             self.records.setdefault(paper_id(paper), {'added': utcnow().isoformat(), 'paper': paper_dict(paper), 'channels': {}})
 
