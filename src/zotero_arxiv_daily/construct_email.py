@@ -37,7 +37,7 @@ framework = '''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:11px;letter-spacing:2px;">ZOTERO · RESEARCH DIGEST</p>
 <h1 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;font-size:28px;line-height:1.2;">Daily Papers</h1>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:12px 0 0;font-size:14px;line-height:1.6;color:#dce5ee;">__COUNT__ · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers</p></td></tr>
-<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">Relevance uses text similarity weighted by when papers were added to your library. Higher scores mean a closer match, not a probability. Scores are shown to one decimal place.</td></tr>
+<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">Relevance uses text similarity weighted by when papers were added to your library. Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
 __CONTENT__
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.7;color:#526174;">Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.</td></tr>
 </table><!--[if mso]></td></tr></table><![endif]-->
@@ -63,7 +63,7 @@ def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summa
 <h2 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 12px;color:#253244;font-size:18px;line-height:1.4;">{heading}</h2>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 5px;color:#526174;font-size:13px;line-height:1.7;">{escape(authors or 'Authors unavailable')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 16px;color:#687589;font-size:12px;line-height:1.6;">{escape(affiliations or 'Unknown Affiliation')}</p>
-<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}</strong><br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">Scored using {escape(basis)} similarity to {escape(interest_reference)}.</span></p>
+<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}/100</strong><br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">Scored using {escape(basis)} similarity to {escape(interest_reference)}.</span></p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:12px;font-weight:bold;color:#526174;">{escape(summary_label)}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">{escape(tldr or 'No abstract available').replace(chr(10), '<br>')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;">{buttons}</p>{doi_line}
@@ -143,9 +143,9 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
             if p.abstract_source:
                 metadata += f' · Abstract: {p.abstract_source}'
             if p.raw_score is not None and p.missing_abstract_factor < 1:
-                metadata += f' · Missing-abstract factor: {p.missing_abstract_factor:g}; unadjusted relevance: {p.raw_score:.1f}'
+                metadata += f' · Missing-abstract factor: {p.missing_abstract_factor:g}; unadjusted relevance: {p.raw_score:.1f}/100'
             if p.selection_score is not None and p.score is not None and p.selection_score != p.score:
-                metadata += f' · Selected at relevance {p.selection_score:.1f}; updated after abstract recovery'
+                metadata += f' · Selected at relevance {p.selection_score:.1f}/100; updated after abstract recovery'
             summary, summary_label = email_summary(p)
             block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',
                                    summary, p.pdf_url, affiliations, summary_label, number=number,
@@ -172,8 +172,8 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
                                     'Relevance combines semantic keyword similarity and library similarity at the weights shown on each card; library papers are weighted by when they were added.')
     if any(p.missing_abstract_factor < 1 for p in papers):
         template = template.replace('Scores are shown to one decimal place.',
-            'For title-only scores, positive values multiply by the stated factor; negative values divide by it with a floor of -10. '
-            'A factor of zero sets the score to -10. Scores are shown to one decimal place.')
+            'Missing-abstract adjustment is applied before conversion to 0-100: in the original signed domain, positive values multiply '
+            'by the stated factor and negative values divide by it. A factor of zero yields 0/100. Scores are shown to one decimal place.')
     return template.replace('__COUNT__', count).replace('__CONTENT__', content)
 
 

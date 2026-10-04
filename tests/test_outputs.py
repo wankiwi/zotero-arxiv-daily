@@ -177,7 +177,7 @@ def test_rss_page_displays_saved_scores_without_changing_delivery_state(tmp_path
     restored = State(state.path)
     path, _ = write_rss(restored, {'path': str(tmp_path / 'feed.xml')})
     html = path.with_name('index.html').read_text()
-    assert 'Relevance: <strong>7.12</strong>' in html
+    assert 'Relevance: <strong>7.12/100</strong>' in html
     assert 'Relevance: <strong>Unknown</strong>' in html
     assert 'A &lt;script&gt; &amp; B' in html and '<script>' not in html
     assert 'href="https://example.org/paper?a=1&amp;b=2"' in html

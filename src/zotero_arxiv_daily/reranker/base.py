@@ -6,6 +6,7 @@ from typing import Type
 from numbers import Real
 import math
 from ..interest_profile import interest_profile
+from ..scores import to_display, SCORE_SCHEMA
 from .experiments import settings, paper_text, unique_corpus, aggregate
 def missing_abstract_factor(config):
     settings = config.get('reranker', {}) if config is not None else {}
@@ -40,9 +41,8 @@ class BaseReranker(ABC):
                                        len(corpus), options.keyword_prompt)
         if sim.shape != (len(candidates), len(references)) or not np.isfinite(sim).all():
             raise ValueError("Reranker returned invalid similarity scores")
-        bounded_scores = keyword_weight or (factor < 1 and any(p.scoring_basis == "title only" for p in candidates))
-        if bounded_scores and (np.abs(sim) > 1.00001).any():
-            raise ValueError("Interest fusion and missing-abstract adjustment require cosine similarity in [-1, 1]")
+        if (np.abs(sim) > 1.00001).any():
+            raise ValueError("Relevance scores require cosine similarity in [-1, 1]")
         zotero_scores = np.zeros(len(candidates))
         keyword_scores = np.zeros(len(candidates))
         if corpus:
@@ -57,12 +57,13 @@ class BaseReranker(ABC):
         scores = (keyword_weight * keyword_scores + zotero_weight * zotero_scores) * 10
         for score, keyword_score, zotero_score, candidate in zip(scores, keyword_scores, zotero_scores, candidates):
             candidate.missing_abstract_factor = factor if candidate.scoring_basis == 'title only' else 1.0
-            candidate.raw_score = (float(np.clip(score, -10, 10)) if candidate.missing_abstract_factor < 1 else float(score))
+            raw = float(np.clip(score, -10, 10))
+            candidate.raw_score = to_display(raw)
+            candidate.score_schema = SCORE_SCHEMA
             # Positive scores receive the configured multiplier. Negative scores
             # divide by it so missing evidence can never improve relevance.
             # Always start from fresh similarity, never a previously adjusted score.
             applied = candidate.missing_abstract_factor
-            raw = candidate.raw_score
             if applied == 1:
                 candidate.score = raw
             elif applied == 0:
@@ -71,8 +72,9 @@ class BaseReranker(ABC):
                 candidate.score = raw * applied
             else:
                 candidate.score = max(-10.0, raw / applied)
-            candidate.keyword_score = float(keyword_score * 10) if keywords else None
-            candidate.zotero_score = float(zotero_score * 10) if corpus else None
+            candidate.score = to_display(candidate.score)
+            candidate.keyword_score = to_display(keyword_score * 10) if keywords else None
+            candidate.zotero_score = to_display(zotero_score * 10) if corpus else None
             candidate.interest_keyword_weight = keyword_weight
             candidate.interest_zotero_weight = zotero_weight
         candidates = sorted(candidates,key=lambda x: x.score,reverse=True)

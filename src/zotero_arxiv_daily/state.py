@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .identity import paper_doi, paper_dois, paper_id, title_key
 from .protocol import Paper
+from .scores import upgrade_scores
 
 
 def utcnow():
@@ -22,7 +23,7 @@ def paper_dict(paper):
 
 
 def load_paper(data):
-    data = dict(data)
+    data = upgrade_scores(data)
     data.setdefault('tldr_status', 'legacy' if data.get('tldr') else 'not_generated')
     if data.get('published'):
         data['published'] = datetime.fromisoformat(data['published'])
@@ -45,7 +46,9 @@ class State:
                     continue
                 # Rebuild keys when identity normalization changes. Pending deliveries
                 # must still be markable without resending already delivered records.
-                key = paper_id(load_paper(record['paper']))
+                paper = load_paper(record['paper'])
+                record = dict(record, paper=paper_dict(paper))
+                key = paper_id(paper)
                 if key in self.records:
                     channels = self.records[key].setdefault('channels', {})
                     for channel, delivered in record.get('channels', {}).items():

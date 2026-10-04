@@ -15,7 +15,7 @@ def main():
                 tldr='该合成示例仅用于检验中文一句话摘要和邮件排版。' if index == 0 else None,
                 tldr_status='generated' if index == 0 else 'not_generated',
                 affiliations=['Example Institute of Molecular Science; ' * 18] if index == 0 else ['Example University'],
-                score=8-index/10, url='https://example.org/paper', recommendation_group=group))
+                score=90-index/2, url='https://example.org/paper', recommendation_group=group))
     showcase = [papers[0], papers[26], papers[42]]
     showcase[-1].tldr_status, showcase[-1].tldr_error = 'fallback', 'request_failed'
     for name, items in [('daily', papers), ('empty', []), ('shortage', papers[:2]), ('showcase', showcase)]:

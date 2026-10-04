@@ -117,10 +117,11 @@ executor:
   fetch_full_text: true # Compatibility key; llm.input_mode now controls full-text retrieval.
   enrichment_workers: 1 # Up to 8; concurrency applies when llm.input_mode=abstract.
   exclude_existing: true
-  min_score: -10
+  min_score: -10 # Legacy threshold; -10 maps to 0, 6.5 to 82.5.
+  min_score_scale: legacy # legacy preserves existing [-10,10] settings; use "0_100" explicitly for new thresholds.
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
-  max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
+  max_paper_num: 100 # Legacy maximum when quotas is null; otherwise the quota sum is authoritative. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'
 

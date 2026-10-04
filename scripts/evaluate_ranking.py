@@ -15,6 +15,7 @@ from time import perf_counter
 import numpy as np
 from omegaconf import OmegaConf
 from zotero_arxiv_daily.identity import paper_id
+from zotero_arxiv_daily.scores import SCORE_SCHEMA
 from zotero_arxiv_daily.protocol import Paper, CorpusPaper
 from zotero_arxiv_daily.reranker.local import LocalReranker
 from zotero_arxiv_daily.reranker.onnx_encoder import MODEL, REVISION
@@ -101,7 +102,7 @@ def compare(sample, output):
             'mean_absolute_rank_shift':float(np.mean([abs(i-positions[key]) for i,key in enumerate(baseline)])),
             'mean_absolute_score_delta':float(np.mean([abs(scores[key]-baseline_scores[key]) for key in baseline]))}
     groups={paper_id(p):'journals' if p.publication_kind=='journal' or p.source=='journals' else 'preprints' for p in papers}
-    report={'model_revision':REVISION,'candidate_count':len(papers),'corpus_count':len(corpus),
+    report={'score_schema':SCORE_SCHEMA,'model_revision':REVISION,'candidate_count':len(papers),'corpus_count':len(corpus),
         'corpus_role':raw.get('corpus_role','provided local corpus'), 'cold_baseline_seconds':cold,
         'weights':{'keyword':.4,'zotero':.6},'quality_labels':False,
         'warning':'Rank changes and timings do not establish recommendation quality; no winner selected.',

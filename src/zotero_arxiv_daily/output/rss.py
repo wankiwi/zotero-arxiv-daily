@@ -36,13 +36,13 @@ def write_rss(state, config):
         published = paper.published or datetime.fromisoformat(record['added'])
         ET.SubElement(item, 'pubDate').text = format_datetime(published)
         ET.SubElement(item, 'category').text = paper.journal or paper.source
-        score = f'{paper.score:.2f}' if paper.score is not None else 'Unknown'
+        score = f'{paper.score:.2f}/100' if paper.score is not None else 'Unknown'
         # RSS descriptions are HTML after XML decoding; escape third-party text
         # at the HTML layer as well as letting ElementTree escape the XML layer.
         ET.SubElement(item, 'description').text = '<br/>'.join(escape(line) for line in [
             f'Journal: {paper.journal or paper.source}', f'Authors: {", ".join(paper.authors)}',
             f'Published: {paper.published.isoformat() if paper.published else "Unknown"}',
-            f'Relevance: {score} ({paper.scoring_basis})',
+            f'Relevance: {score} ({paper.scoring_basis}; relevance, not probability or accuracy)',
             f'{paper.summary_label}: {paper.summary_text}',
             f'DOI: {paper.doi or "Unavailable"}', f'Article: {paper.url}'])
     path = Path(config.get('path', 'public/feed.xml'))
@@ -61,7 +61,7 @@ def write_rss_page(feed_path, papers):
     for paper in papers:
         if is_cover_title(paper.title):
             continue
-        score = f'{paper.score:.2f}' if paper.score is not None else 'Unknown'
+        score = f'{paper.score:.2f}/100' if paper.score is not None else 'Unknown'
         try:
             url = paper.url if urlsplit(paper.url).scheme in ('https', 'http') else '#'
         except ValueError:

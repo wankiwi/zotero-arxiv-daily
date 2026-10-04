@@ -1,3 +1,4 @@
+from .scores import SCORE_SCHEMA
 from dataclasses import dataclass, field
 from typing import Optional, TypeVar
 from datetime import datetime
@@ -19,6 +20,7 @@ class Paper:
     tldr: Optional[str] = None
     affiliations: Optional[list[str]] = None
     score: Optional[float] = None
+    score_schema: str = SCORE_SCHEMA
     raw_score: Optional[float] = None
     selection_score: Optional[float] = None
     missing_abstract_factor: float = 1.0

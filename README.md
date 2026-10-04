@@ -8,7 +8,7 @@
 2. 从出版社 RSS/Crossref、arXiv、bioRxiv、medRxiv、Research Square 和 OpenReview 获取新论文。每个源按自己的日期窗口检索；来源错误会记录并导致任务失败状态，其他成功来源及成功投递记录仍保留。
 3. DOI、URL、arXiv/Research Square 版本、规范化标题及持久历史共同去重。不同 DOI 的同名文章不会被随意合并。已有 Zotero 条目默认不再推荐。
 4. 清理 HTML/JATS/转义实体。缺少摘要的 DOI 论文可依次从 Crossref 和 OpenAlex 合法公开元数据恢复，并验证返回 DOI；不编造摘要，不绕过付费墙。失败或仍缺摘要时明确显示 `No abstract available`，排序注明 `title only`。
-5. 本地或 API embedding 与 Zotero 摘要比较，按文库加入时间加权；分数不是概率。先按相关性选 **25 篇期刊、15 篇预印本**，再从剩余符合条件且未见过的候选中**无放回随机选 5 篇**。随机组和前两组无重叠；OpenReview默认归预印本；经官方venue ID及pdate双重确认的已发表TMLR归期刊，已录用会议论文保留conference状态并归“预印本（含会议论文）”列。未知状态不猜测为已发表。
+5. 本地或 API embedding 与 Zotero 摘要比较，按文库加入时间加权；分数范围 0–100，不是概率或准确率。先按相关性选 **CUSTOM_CONFIG 指定的期刊/预印本配额（当前 25/20）**，再从剩余符合条件且未见过的候选中**按 random 配额无放回随机选择（当前 5 篇）**。随机组和前两组无重叠；OpenReview默认归预印本；经官方venue ID及pdate双重确认的已发表TMLR归期刊，已录用会议论文保留conference状态并归“预印本（含会议论文）”列。未知状态不猜测为已发表。
 6. 不足时仅发送实际候选，日志显示各组实际数/目标数，不跨组补满、不重复、不扩大领域。等待重试的投递占用对应组名额；随机结果存入历史，失败重试不重新抽样。旧历史无组标记时按来源归期刊/预印本。
 7. 邮件在电脑和手机均为单列，依次显示期刊、预印本、随机推荐三组，各组从 1 编号；纯文本保持相同顺序。使用 email-safe table、760px 最大内容宽度及 Aptos → Calibri → Arial → Helvetica → sans-serif，无需媒体查询或外部字体。
 8. LLM 按论文摘要或可获取的全文生成**中文一句话**总结。只有状态为成功、非空且没有错误的总结才显示为 AI summary；此时 HTML 和纯文本均不再重复原摘要。未生成、失败、空结果和无法验证来源的旧总结均显示原摘要，原摘要也没有时明确标为不可用。完整原摘要始终保留在内部数据。作者单位仅使用来源元数据，显示长度默认限制为180字符（含省略号），完整单位信息保留在内部数据。模型调用由每日 **¥0.20** 预算守卫管理，不付费提取作者单位。
@@ -29,7 +29,7 @@ Actions Secrets：`ZOTERO_ID`、`ZOTERO_KEY`、`SENDER`、`SENDER_PASSWORD`、`R
 
 Actions Variables：`CUSTOM_CONFIG`（YAML mapping，无 `defaults`）、`PAPER_CONFIG`（默认 all）、`SMTP_SERVER`、`SMTP_PORT`、`LLM_MODEL`、`OPENAI_API_BASE`（可由同名 secret 提供）。`RSS_SITE_URL` 仅本地 RSS 有意义。工作流中的 embedding API 密钥需用户另行配置，默认使用本地模型。
 
-**配置优先级：** preset → CUSTOM_CONFIG → 显式 dispatch overrides → 仓库投递策略。定时触发固定 `interests`、已保存兴趣列表、所有启用来源、25/15/5 配额、上限45、中文语言、强制¥0.20预算守卫（是否请求LLM遵循CUSTOM_CONFIG）、只邮件、收件人为 `RECEIVER`、历史路径为 `data/recommendations.json`。CUSTOM_CONFIG 可继续保留 SMTP、排除路径和窗口等非强制项。
+**配置优先级：** preset → CUSTOM_CONFIG → 显式 dispatch overrides → 仓库投递策略。分组配额以 CUSTOM_CONFIG 为准；仅缺省字段继承 preset（interests 默认为 25/15/5）。当前 CUSTOM_CONFIG 为 25/20/5，总量 50。非空 quotas 的合计就是总量，旧 max_paper_num 不再截断；quotas=null 才使用旧全局上限。定时运行仍使用 interests、已保存兴趣列表、启用来源、中文语言、强制 ¥0.20 预算、仅邮件、RECEIVER 和既有历史路径；不再强制覆盖配额或总量。预算不会随配额增大，额度不足的论文保留原摘要。
 
 每日 cron 为 **19:17 UTC（次日 03:17 Asia/Singapore）**，只在默认分支执行且可能延迟。推送 feature 分支不会启用其定时配置。`paper-state` 分支存储成功/待投递历史；不要清空、重置或删除。`Keep Alive` 沿用既有每30天定时，不新增任务。
 
@@ -54,7 +54,7 @@ uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.ena
 
 ## 当前配置的脱敏示例
 
-以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、25/15/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM是否成功以每次运行的生成状态及预算账本为准。GitHub不能读回已有secret，所有凭据继续由用户管理。
+以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、以 CUSTOM_CONFIG 为准的25/20/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM是否成功以每次运行的生成状态及预算账本为准。GitHub不能读回已有secret，所有凭据继续由用户管理。
 
 ```yaml
 zotero:
@@ -81,8 +81,10 @@ llm:
     model: deepseek-ai/DeepSeek-V4-Flash  # 已通过受预算约束的单篇中文验证
 executor:
   source: [journals, arxiv, biorxiv, researchsquare, openreview]
-  max_paper_num: 45
-  quotas: {journals: 25, preprints: 15, random: 5}
+  max_paper_num: 50 # quotas 非空时以配额之和为准；此字段只用于旧模式
+  min_score: -10
+  min_score_scale: legacy
+  quotas: {journals: 25, preprints: 20, random: 5}
   debug: false
   send_empty: true
 source:
@@ -128,9 +130,10 @@ preprint_interests:
 | `zotero.include_path`, `ignore_path` | null 或 glob 字符串列表；如 `["2026/reading/**"]`。排除优先，空列表不筛选。`name` 与 `name/**` 的路径含义不同，按实际 collection 层级选择 |
 | `executor.source` | 启用来源列表；journals/arxiv/biorxiv/medrxiv/researchsquare/openreview |
 | `executor.reranker` | `local`（默认）或 `api` |
-| `executor.quotas` | base=null 使用旧全局上限；interests={journals:25,preprints:15,random:5}。三个非负整数，总和>0且≤max_paper_num |
-| `executor.max_paper_num` | base=100，interests/定时=45；限制单次推荐与投递 |
-| `executor.min_score` | -10；低于该相关性分数的不参与任何组，包括随机 |
+| `executor.quotas` | base=null；interests 默认 `{journals:25, preprints:15, random:5}`，CUSTOM_CONFIG 覆盖（当前25/20/5）。键必须齐全，值为非负整数且总和正数；缺省字段由 preset 补齐。 |
+| `executor.max_paper_num` | 仅 quotas=null 时使用的旧全局上限；分组配额非空时以配额之和为准。 |
+| `executor.min_score` | 默认 -10；由 min_score_scale 声明量纲。低于阈值者不参与任何组，包括随机。旧 -10 等价新 0，旧 6.5 等价新 82.5。 |
+| `executor.min_score_scale` | `legacy`（默认，旧 [-10,10]）或字符串 `"0_100"`。不猜测重叠区间；使用新制阈值时必须显式指定。 |
 | `executor.exclude_existing` | true；排除已在整个 Zotero 文库中的论文，不只兴趣子集 |
 | `executor.send_empty` | false；允许无新论文时发空邮件，存在源错误时不会伪装成正常空结果 |
 | `executor.debug` | false；保留兼容的旧调试选项，当前SMTP不输出会话内容 |
@@ -310,13 +313,13 @@ interest_profile:
 
 关键词和候选摘要使用同一本地 embedding 模型；摘要缺失时使用标题并在邮件标记。模型可匹配近义表达，但不会生成或反复加权同义词列表，也不保证覆盖每个专业同义词。不同意思相近但写法不同的手工词仍是独立兴趣，建议避免重复罗列同一主题。
 
-关键词分数 K 是各唯一词组与候选的**余弦相似度平均值**；Zotero 分数 Z 是按加入时间由新到旧、权重 `1/(1+log10(i+1))` 归一后的余弦相似度加权平均值（i 从 0 开始）。最终分数为 `10 × (w_keyword × K + w_zotero × Z)`，有效权重归一为总和 1。两个分量使用同一余弦尺度，通常在 -10 到 10 之间，不做依赖本批候选的 min-max/百分位归一化。权重不是概率，也不能保证两个分量的实际分布/影响完全相同。平均值避免长同义词列表重复放大，但某论文只匹配一个主题时会被其他主题稀释。
+关键词分数 K 是唯一短语与候选的余弦相似度均值；Zotero 分数 Z 是按添加时间及原时间衰减权重计算的加权均值。先计算内部旧制 `s = 10 × (w_keyword × K + w_zotero × Z)`，在该有符号域施加缺摘要惩罚，再通过 `5 × s + 50` 映射到 0–100。有效权重归一为 1，不按当天候选做 min-max/百分位归一化；默认均值仍可能稀释只匹配一个兴趣的论文。0/50/100 分对应原 -10/0/10，不代表概率或准确率。
 
 某一参考集为空时，它的有效权重变为 0，另一个非空且正权重的参考集使用权重 1；显式零权重不会被恢复。无可用正权重参考集会报错。Zotero 读取/鉴权失败仍报错，不视为空库；即使 Zotero 权重为 0，仍读取库以排除已有论文。关键词为空时，原 Zotero 时间衰减排序保持不变。
 
 修改关键词只新增所需文本向量，修改权重立即重新计算分数并复用向量；本地持久缓存继续按模型、不可变 revision、prompt/encode 参数和运行环境隔离。无需新增付费 API 或 LLM；若另行选择既有 `api` reranker，仍遵循其外部服务成本。邮件卡片标注实际关键词/库权重，历史未启用关键词的待发卡片保留原说明。
 
-`executor.min_score` 在融合后执行，原阈值可能需重新评估。期刊 25、预印本 15 依融合分数选择；random 5 仍从剩余合格未见候选无放回抽样，与前两组不重叠，不再按关键词重排随机组。候选不足的组保持缺额，不借用其他组填满。来源筛选、已有条目排除、投递历史、摘要恢复、中文摘要预算和发送流程均继续生效。
+`executor.min_score` 在缺摘要调整和量纲转换后筛选，旧阈值会先映射到新量纲。期刊/预印本按 CUSTOM_CONFIG 配额和排序选择；random 从剩余合格未见候选中无放回抽取。不足时保留缺额，不跨组补齐。其他来源过滤、历史排除和预算逻辑不变。
 
 
 ## 摘要恢复、缺失原因与排序时机
@@ -342,37 +345,31 @@ abstracts:
 已验证出版社页面没有独立摘要时明确标记为“未提供独立摘要”，与访问拒绝/请求失败区分。元数据明确标为 correction/erratum 且摘要为空时保留此类型说明，不拿被更正论文摘要替代；不凭标题或新闻导语推定存在原摘要。
 
 
-## 缺少原摘要时降低匹配分数
+## 0–100 分数、缺摘要惩罚与旧数据兼容
+
+所有 `score`、`raw_score`、`selection_score`、`keyword_score`、`zotero_score` 都使用 0–100 量纲；HTML、纯文本、RSS 与历史一致。映射为 `display = 5 × signed + 50`，对合法旧 [-10,10] 分数严格单调，保留排序和同分关系。分数是相似度排序指标，不是匹配概率、准确率或人工质量标签。
+
+缺摘要时先在原有符号域 s 上应用 `reranker.missing_abstract_factor`（默认0.8，范围0–1）：正值乘以因子，负值除以因子且最低 -10；因子0直接取 -10，因子1不调整；之后才映射。不能直接拿新制分数乘因子。原摘要恢复后从相似度重新计算，不叠加旧惩罚。
+
+| 原有符号分数 | 未惩罚显示分 | 缺摘要后显示分（0.8） |
+|---|---|---|
+| 8 | 90 | 82 |
+| 5 | 75 | 70 |
+| 0 | 50 | 50 |
+| -5 | 25 | 18.75 |
+| -10 | 0 | 0 |
+
+旧配置兼容：`executor.min_score_scale: legacy` 为默认，因此旧 `min_score: -10` 仍表示全范围，旧 `6.5` 仍筛选相同论文（新制82.5）。新制阈值需明确写：
 
 ```yaml
-reranker:
-  missing_abstract_factor: 0.8
+executor:
+  min_score_scale: "0_100"
+  min_score: 82.5
 ```
 
-`reranker.missing_abstract_factor` 默认为 **0.8**，必须是 0 到 1 的有限数字，不能使用布尔值或数字字符串。1 关闭降分，0 将缺摘要论文压至分数下界 -10。判断依据是原摘要/已恢复摘要是否为空（忽略空白），与是否生成中文 LLM 总结无关；有原摘要但没有 AI 总结的论文不受惩罚。
+阈值、排序和配额选择完成后，`selection_score` 固定记录入选分；后续摘要恢复可改变展示分，但不重抽随机项、不更换已入选成员。`raw_score` 表示未惩罚的融合分（同样已映射），不是内部有符号值。
 
-先完成关键词与 Zotero 相似度融合，得到原分数 s；仅对缺摘要的论文应用一次调整，保持现有 -10 到 10 的分数尺度：
-
-- `factor = 1`：不惩罚。
-- `factor = 0`：统一设为下界 -10，包括原分数为0的情况。
-- `0 < factor < 1` 且 `s >= 0`：`final = s × factor`，正分按系数温和降低，0保持0。
-- `0 < factor < 1` 且 `s < 0`：`final = max(-10, s / factor)`，避免负分直接乘系数反而升高。
-
-默认系数0.8对正分就是降低20%；负值使用上述安全处理，不表示“相似概率降低20%”。惩罚前将容差内的浮点越界裁回 -10 到 10。有摘要论文的分数不变。
-
-| 原分数 | 缺摘要，factor=0.8 | 有摘要 |
-| --- | --- | --- |
-| 8 | 6.4 | 8 |
-| 5 | 4 | 5 |
-| 0 | 0 | 0 |
-| -5 | -6.25 | -5 |
-| -10 | -10 | -10 |
-
-`executor.min_score` 仍对**入选时的最终调整分数**应用，随后按期刊/预印本配额和原随机机制选取；默认 -10 不会因惩罚直接排除论文。自定义更高阈值可能让降分后的论文失去资格，这是阈值原有行为。随机组仍在剩余合格候选中均匀无放回抽取，不增加缺摘要权重抽样或重抽。
-
-历史中记录 `raw_score`（当次未惩罚融合分数）、`score`（当次最终分数）、`missing_abstract_factor`（实际应用值；有摘要为1）、`scoring_basis`，以及 `selection_score`（入选时分数）。重复评分始终从文本相似度重新计算，不在旧分数上叠加。补回摘要后会编码新摘要、重算正常分数并将实际系数恢复为1；引用向量继续复用缓存。最终投递阶段补全后的展示分数可能不同于入选分数，甚至跨过自定义阈值，但不追溯重新选取、填充配额或重抽随机组；卡片会标明变化。若希望摘要影响入选决策，可另行启用上述有界预排序补全选项。
-
-修改系数不清空向量缓存、不改模型、不改关键词权重，也不发起 LLM 调用。旧历史缺少新字段时兼容加载，既有投递记录不重发。
+每篇新历史记录带 `score_schema: relevance_0_100_v1`。缺少标记的旧记录按原制读取，五个分数字段只转换一次；新制记录再次读取不重复映射。容器仍为 version 1，论文身份、added 时间、渠道成功标记与待发送记录保留；读取不立即写文件，正常状态保存时才持久化转换。非有限数值和未知 schema 明确报错，不能清空历史重试。向量缓存不存推荐分数，因此量纲变化无需失效或重算 embedding；旧离线评测文件则应保留原量纲说明，不能把历史差值当新制分数。
 
 ## ChemRxiv 预印本来源
 
@@ -448,7 +445,7 @@ uv run --frozen --extra onnx python scripts/download_jina_onnx.py --backend onnx
 # onnx_directory 配置为 /private/models/jina/onnx；同 revision 的 tokenizer 须已在本地缓存。
 ```
 
-FP32 官方文件约 849 MB，量化文件约 247 MB。可选后端固定 CPU provider；其他模型/版本、不支持的 encode 参数或缺文件会报错，开启 fallback 时回退到 PyTorch。两种后端的向量命名空间隔离，回退不会把部分 ONNX 向量混入 PyTorch 缓存。默认不切换后端，不改变 25/15/5 配额、实际兴趣权重、缺摘要系数、预算、时间窗口或邮件行为。
+FP32 官方文件约 849 MB，量化文件约 247 MB。可选后端固定 CPU provider；其他模型/版本、不支持的 encode 参数或缺文件会报错，开启 fallback 时回退到 PyTorch。两种后端的向量命名空间隔离，回退不会把部分 ONNX 向量混入 PyTorch 缓存。默认不切换后端，不改变配置配额、实际兴趣权重、缺摘要系数、预算、时间窗口或邮件行为。
 
 加密包内包含所有向量文件名和 manifest；每次使用新 96-bit nonce，AES-256-GCM 认证绑定仓库/格式身份。外部 cache key 仅含固定格式版本、runner OS、run ID/attempt，不包含私人配置或文本哈希。认证通过后才检查/解包：最多 128 MiB、20000 个向量、单文件 1 MiB，拒绝路径穿越、重复成员、压缩膨胀、错误校验和和非法向量。模型/提示身份仍通过加密包内的缓存命名空间匹配。校验失败、密钥轮换或格式变化时安全重算；只在封包成功后保存新密文。密文大小和更新时间仍可见。包不可供不可信 PR 写入可信明文缓存；无正确 key 的伪造包无法通过认证。实际评分步骤只接收临时明文目录路径，不注入加密密钥。
 
@@ -488,7 +485,7 @@ reranker:
 | `top_k` | 正整数，默认 5，超过可用参考数时自动取可用数。相同分数保持原参考顺序。 |
 | `temperature` | 有限数且至少 0.000001，默认 0.1；越小越偏向最相似的参考。只影响 softmax。 |
 
-例如仅比较关键词 query：`reranker.experiments.keyword_prompt=query`。模型/提示角色/文本改变会使用独立缓存；只改聚合、权重或惩罚会复用向量。ONNX query 推理若回退到 PyTorch，会同时重新取得 PyTorch document 向量，避免混合后端。实验不会改变来源过滤、去重历史、25/15/5 配额、随机抽样、邮件和预算。
+例如仅比较关键词 query：`reranker.experiments.keyword_prompt=query`。模型/提示角色/文本改变会使用独立缓存；只改聚合、权重或惩罚会复用向量。ONNX query 推理若回退到 PyTorch，会同时重新取得 PyTorch document 向量，避免混合后端。实验不会改变来源过滤、去重历史、配置配额、随机抽样、邮件和预算。
 
 ### 私有本地盲评与成本对照
 
@@ -516,5 +513,5 @@ uv run --frozen python scripts/evaluate_ranking.py evaluate --output /private/re
 - `prepare`：默认 `--seed=20261004` 随机打乱候选，输出隐藏方法/分数的 `review.csv` 和仅本地保留的 `private-index.json`；已存在文件拒绝覆盖，CSV 文本防公式注入。
 - 人工标签：0 不相关、1 边缘相关、2 有用、3 高度相关；先固定准则再标注，不能根据方法名称或排序调整标签。缺失、重复或样本不一致会阻止评估，不把空白当成负例。
 - `compare`：固定 PyTorch FP32、4 CPU 线程、batch 16、0.4 关键词/0.6 语料、0.8 缺摘要因子。运行 baseline 及七个单因素对照；冷启动单列，各实验计时在 baseline 预热后进行，新增提示/文本可能仍需编码，因此不是独立冷启动竞赛。输出本地 `comparison.json` 成本/排名变化，以及含身份的私有 `rankings.json`。实际生产权重不被修改。
-- `evaluate`：人工标签全部完成后，分别输出期刊 top25 和预印本 top15 的 nDCG 与 Precision（≥2 视为相关）；组内不足时报告实际数，随机 5 篇不参与相关性排名指标。离线工具仅比较排序，不模拟历史过滤/每日时间窗/随机抽样，不据此宣称每日发送表现。人工标签与样本选择偏差都需保留在结论中。
+- `evaluate`：人工标签全部完成后，按固定离线评测方案输出期刊 top25 和预印本 top15 的 nDCG 与 Precision（这是原盲评基线，与现行 CUSTOM_CONFIG 的25/20/5生产配额不同）（≥2 视为相关）；组内不足时报告实际数，随机 5 篇不参与相关性排名指标。离线工具仅比较排序，不模拟历史过滤/每日时间窗/随机抽样，不据此宣称每日发送表现。人工标签与样本选择偏差都需保留在结论中。
 - 参考库重复率低时，DOI 去重可能没有效果；top-k/softmax 的排名变化不等于质量提升。没有足够人工标签时不选择“优胜算法”。BGE/SPECTER 不在本次下载或默认替换范围内。

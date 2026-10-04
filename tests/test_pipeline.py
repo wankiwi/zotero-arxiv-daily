@@ -271,8 +271,8 @@ def test_postselection_recovery_never_redraws_random_group(pipeline,monkeypatch)
     saved=[r['paper'] for r in State(pipeline.state.path).records.values()]
     assert len(samples)==1 and len(samples[0])==5
     assert [p['title'] for p in saved if p['recommendation_group']=='random']==samples[0]
-    assert all(p['score']==8 and p['missing_abstract_factor']==1 for p in saved)
-    assert all(p['selection_score']==pytest.approx(6.4) for p in saved)
+    assert all(p['score']==90 and p['missing_abstract_factor']==1 for p in saved)
+    assert all(p['selection_score']==pytest.approx(82) for p in saved)
 
 
 def test_chemrxiv_pipeline_library_history_quotas_and_random(pipeline,monkeypatch):
@@ -328,3 +328,17 @@ def test_arxiv_503_preserves_other_delivery_and_never_resends(pipeline,monkeypat
     assert len(sent)==1
     state=State(pipeline.state.path)
     assert len(state.records)==1 and not state.pending('email')
+
+
+def test_custom_fifty_paper_quota_is_not_truncated_by_legacy_maximum(pipeline,monkeypatch):
+    pipeline.executor.quotas={'journals':25,'preprints':20,'random':5}
+    pipeline.executor.max_paper_num=45
+    executor=Executor(pipeline)
+    papers=[make_sample_paper(title=f'Unique paper {i}',doi=f'10.8888/quota{i}',
+             url=f'https://example.org/quota{i}',source='journals' if i<35 else 'arxiv') for i in range(70)]
+    monkeypatch.setattr(executor.retrievers['arxiv'],'retrieve_papers',lambda:papers)
+    executor.run()
+    saved=[r['paper'] for r in State(pipeline.state.path).records.values()]
+    assert len(saved)==50
+    assert [sum(p['recommendation_group']==group for p in saved) for group in ('journals','preprints','random')]==[25,20,5]
+    assert len({p['doi'] for p in saved})==50
