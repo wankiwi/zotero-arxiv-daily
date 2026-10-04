@@ -17,6 +17,7 @@ from openai import OpenAI
 from .llm import ModelRequests
 from .budget import prepare_budget, BudgetUnavailable
 from .preprint_interests import enabled_sources
+from .scores import minimum_score
 from .selection import quotas_for, select_papers, pending_batch, is_cover_title
 from .abstracts import clean_abstract, recover_abstracts, RecoveryContext, recovery_shortlist
 from time import monotonic
@@ -142,11 +143,11 @@ class Executor:
         state = State(state_cfg.get('path', 'data/recommendations.json'),
                       enabled=state_cfg.get('enabled', False) or rss_enabled,
                       retention_days=int(state_cfg.get('retention_days', 90)))
-        maximum = int(self.config.executor.max_paper_num)
+        quotas = quotas_for(self.config.executor)
+        maximum = sum(quotas.values()) if quotas is not None else int(self.config.executor.max_paper_num)
         workers = int(self.config.executor.get('enrichment_workers', 1))
         if maximum < 1 or not 1 <= workers <= 8:
             raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
-        quotas = quotas_for(self.config.executor)
         errors = []
         self.model_requests = ModelRequests()
         try:
@@ -231,11 +232,11 @@ class Executor:
                 ranked = self.reranker.rerank(unique, corpus)
             logger.info(f'Pre-ranking abstract recovery: {recovered}/{len(shortlist)} recovered; reranked before quotas and random sampling')
             recovery_context.deadline = None
-        minimum = float(self.config.executor.get('min_score', -10))
+        minimum = minimum_score(self.config.executor)
         ranked = [p for p in ranked if p.score >= minimum]
         quotas = quotas_for(self.config.executor)
         pending = state.pending('email') if self.config.get('output', {}).get('email', {}).get('enabled', True) else []
-        ranked = select_papers(ranked, quotas, pending)[:maximum]
+        ranked = select_papers(ranked, quotas, pending)[:sum(quotas.values()) if quotas is not None else maximum]
         # Freeze membership, including random draws, before delivery-only recovery.
         # Retain eligibility/selection scores when recovered abstracts change display scores.
         missing_at_selection = {id(p) for p in ranked if not p.abstract}

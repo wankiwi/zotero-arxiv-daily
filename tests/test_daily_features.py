@@ -36,7 +36,7 @@ def test_shortage_pending_reservation_and_persistence(tmp_path):
     assert paper_group(restored.pending('email')[0])=='random'
     assert len(pending_batch([paper(i) for i in range(30)],quotas,45))==25
 
-@pytest.mark.parametrize('value',[{'journals':-1,'preprints':15,'random':5},{'journals':True,'preprints':15,'random':5},{'journals':25}, {'journals':25,'preprints':15,'random':5}])
+@pytest.mark.parametrize('value',[{'journals':-1,'preprints':15,'random':5},{'journals':True,'preprints':15,'random':5},{'journals':25}, {'journals':0,'preprints':0,'random':0}])
 def test_invalid_quotas(value):
     with pytest.raises(ValueError):quotas_for(OmegaConf.create({'quotas':value,'max_paper_num':20}))
 

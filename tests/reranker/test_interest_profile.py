@@ -23,9 +23,9 @@ def test_blend_uses_equal_keyword_mean_and_recent_library_weights():
     ranker = Controlled([[0.2, 0.8, 0.4], [0.7, 0.1, 0.3]], keywords=['water', 'sampling'])
     result = ranker.rerank([make_sample_paper(title='A'), make_sample_paper(title='B')], make_sample_corpus(1))
     assert [p.title for p in result] == ['A', 'B']
-    assert [p.score for p in result] == pytest.approx([4.4, 4.0])
-    assert result[0].keyword_score == pytest.approx(6)
-    assert result[0].zotero_score == pytest.approx(2)
+    assert [p.score for p in result] == pytest.approx([72, 70])
+    assert result[0].keyword_score == pytest.approx(80)
+    assert result[0].zotero_score == pytest.approx(60)
     html = render_email(result)
     assert 'keywords (60%) and your library (40%)' in html
     assert 'Relevance combines semantic keyword' in html
@@ -35,8 +35,8 @@ def test_keyword_normalization_does_not_repeat_weight():
     ranker = Controlled([[0.5]], keywords=[' Proton-transfer ', 'proton transfer', 'PROTON–TRANSFER', ''])
     result = ranker.rerank([make_sample_paper(abstract='')], [])
     assert ranker.references == ['proton transfer']
-    assert result[0].raw_score == 5
-    assert result[0].score == 4
+    assert result[0].raw_score == 75
+    assert result[0].score == 70
     assert result[0].scoring_basis == 'title only'
     assert result[0].interest_keyword_weight == 1
     assert result[0].zotero_score is None
@@ -63,7 +63,7 @@ def test_weight_normalization_empty_and_disabled_components():
     with pytest.raises(ValueError, match='No available'):
         interest_profile({'interest_profile': {'zotero_weight':0}}).effective_weights(True)
     ranker = Controlled([[0.2]], keywords=['ignored'], keyword_weight=0)
-    assert ranker.rerank([make_sample_paper()], make_sample_corpus(1))[0].score == 2
+    assert ranker.rerank([make_sample_paper()], make_sample_corpus(1))[0].score == 60
     assert ranker.references == ['Abstract for corpus paper 0.']
 
 
@@ -73,7 +73,7 @@ def test_legacy_score_exact_and_time_decay_preserved():
     expected = (matrix * (decay / decay.sum())).sum(axis=1)*10
     papers = [make_sample_paper(title=str(i)) for i in range(2)]
     result = Controlled(matrix).rerank(papers, make_sample_corpus(3))
-    assert np.array_equal(np.array([p.score for p in sorted(result,key=lambda p:p.title)]), expected)
+    assert np.array_equal(np.array([p.score for p in sorted(result,key=lambda p:p.title)]), expected*5+50)
 
 
 @pytest.mark.parametrize('matrix', [[[2]], [[float('nan')]], [[0.2,0.3]]])
@@ -148,14 +148,14 @@ def test_weight_edits_recompute_scores_and_state_keeps_provenance():
     ranker = Controlled([[0.2, 0.8]], keywords=['water'])
     paper = make_sample_paper()
     ranker.rerank([paper], make_sample_corpus(1))
-    assert paper.score == pytest.approx(5.6)
+    assert paper.score == pytest.approx(78)
     ranker.config.interest_profile.keyword_weight = 0.4
     ranker.config.interest_profile.zotero_weight = 0.6
     ranker.rerank([paper], make_sample_corpus(1))
-    assert paper.score == pytest.approx(4.4)
+    assert paper.score == pytest.approx(72)
     restored = load_paper(paper_dict(paper))
     assert restored.interest_keyword_weight == 0.4
-    assert restored.keyword_score == 8
+    assert restored.keyword_score == 90
     legacy = paper_dict(paper)
     for field in ('interest_keyword_weight','interest_zotero_weight','keyword_score','zotero_score'):
         legacy.pop(field)

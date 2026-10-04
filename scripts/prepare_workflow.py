@@ -49,8 +49,7 @@ def prepare(root: Path, environ=os.environ):
     config = OmegaConf.merge(config, {'output': {'email': {'enabled': True},
                                                'rss': {'enabled': False}}})
     if scheduled:
-        config = OmegaConf.merge(config, {'executor': {'quotas': {'journals': 25, 'preprints': 15, 'random': 5}, 'max_paper_num': 45},
-                                           'llm': {'language': 'Chinese'}, 'abstracts': {'enabled': True}})
+        config = OmegaConf.merge(config, {'llm': {'language': 'Chinese'}, 'abstracts': {'enabled': True}})
         # Keep the daily destination in the existing secret, never in public code
         # or a stale CUSTOM_CONFIG receiver. Resolution happens only at delivery.
         config = OmegaConf.merge(config, {'email': {'receiver': '${oc.env:RECEIVER}'}})

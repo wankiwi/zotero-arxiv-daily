@@ -24,8 +24,6 @@ def quotas_for(config):
         raise ValueError('executor.quotas requires journals, preprints, and random')
     if any(type(v) is not int or v < 0 for v in quotas.values()) or not sum(quotas.values()):
         raise ValueError('executor.quotas must be nonnegative integers with a positive total')
-    if sum(quotas.values()) > int(config.max_paper_num):
-        raise ValueError('max_paper_num must be at least the sum of executor.quotas')
     return dict(quotas)
 
 

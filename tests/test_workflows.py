@@ -213,7 +213,7 @@ preprint_interests:
     assert config.output.email.enabled and not config.output.rss.enabled
     assert config.email.receiver == 'daily@example.org'
     assert config.email.smtp_server == 'mail.cstnet.cn' and config.email.smtp_port == 994
-    assert config.executor.max_paper_num == 45 and config.state.enabled
+    assert config.executor.max_paper_num == 50 and config.state.enabled
     assert config.state.path == 'data/recommendations.json'
     assert list(config.preprint_interests.arxiv.categories) == ['physics.chem-ph', 'physics.comp-ph', 'cond-mat.mtrl-sci', 'cond-mat.soft', 'cs.LG', 'cs.AI']
     assert list(config.preprint_interests.biorxiv.categories) == ['biophysics', 'biochemistry']
@@ -232,3 +232,19 @@ def test_daily_schedule_uses_requested_utc_time():
 
     workflow = yaml.load((ROOT / '.github/workflows/main.yml').read_text(), Loader=yaml.BaseLoader)
     assert workflow['on']['schedule'] == [{'cron': '17 19 * * *'}]
+
+@pytest.mark.parametrize('event',['schedule','workflow_dispatch'])
+@pytest.mark.parametrize('override,expected',[
+    ('executor: {quotas: {journals: 25, preprints: 20, random: 5}, max_paper_num: 45}', {'journals':25,'preprints':20,'random':5}),
+    ('executor: {quotas: {preprints: 20}}', {'journals':25,'preprints':20,'random':5}),
+    ('', {'journals':25,'preprints':15,'random':5}),
+    ('executor: {quotas: null}', None),
+])
+def test_custom_quotas_override_defaults_for_scheduled_and_manual_runs(tmp_path,event,override,expected):
+    from zotero_arxiv_daily.selection import quotas_for
+    shutil.copytree(ROOT/'config',tmp_path/'config',ignore=shutil.ignore_patterns('runtime.yaml','private.yaml'))
+    prepare(tmp_path,{'GITHUB_EVENT_NAME':event,'PAPER_CONFIG':'interests','CUSTOM_CONFIG':override})
+    with initialize_config_dir(config_dir=str(tmp_path/'config'),version_base=None):
+        config=compose(config_name='runtime')
+    assert quotas_for(config.executor)==expected
+    assert config.llm.budget.daily_cny==.20 and config.state.enabled

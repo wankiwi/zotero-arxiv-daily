@@ -109,7 +109,7 @@ def test_interest_weights_reuse_vectors_new_phrase_encodes_only_new_text(config,
     config.interest_profile.keywords = ['proton transfer']
     ranker.rerank(papers, corpus)
     assert ranker._encoder.calls[-1] == ['proton transfer']
-    assert -10 <= papers[0].score <= 10
+    assert 0 <= papers[0].score <= 100
 
 
 def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkeypatch):
@@ -125,7 +125,7 @@ def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkey
     config.reranker.missing_abstract_factor=0.5
     ranker.rerank([paper],corpus)
     assert len(ranker._encoder.calls)==calls
-    assert paper.raw_score==raw and paper.score==pytest.approx(raw*0.5)
+    assert paper.raw_score==raw and paper.score==pytest.approx((raw-50)*0.5+50)
     paper.abstract='A newly recovered original abstract.'
     ranker.rerank([paper],corpus)
     assert ranker._encoder.calls[-1]==[paper.abstract]
@@ -157,3 +157,31 @@ def test_backend_namespace_and_inference_fallback(config,encoder,monkeypatch):
     ranker.get_similarity_score(['new'],['b'])
     assert ranker._backend=='torch' and ranker._cache_namespace!=namespace
     assert ranker._encoder.calls==[['new','b']]
+
+
+def test_query_role_separates_cache_and_preserves_document_reuse(config,encoder):
+    config.interest_profile.keywords=['keyword']
+    ranker=LocalReranker(config)
+    ranker.get_rank_similarity(['same'],['corpus','same'],1,'query')
+    assert ranker._encoder.calls==[['same','corpus'],['same']]
+    assert len(ranker._role_caches)==2
+    previous=len(ranker._encoder.calls)
+    ranker.get_rank_similarity(['same'],['corpus','same'],1,'query')
+    assert len(ranker._encoder.calls)==previous
+    namespaces=list(ranker._role_caches)
+    assert namespaces[0][0]!=namespaces[1][0]
+
+
+def test_query_inference_fallback_reencodes_documents(config,encoder,monkeypatch):
+    from zotero_arxiv_daily.reranker import onnx_encoder
+    config.interest_profile.keywords=['keyword']
+    class FakeOnnx(encoder):
+        def encode(self,texts,**kwargs):
+            if kwargs.get('prompt_name')=='query':raise RuntimeError('synthetic query failure')
+            return super().encode(texts,**kwargs)
+    monkeypatch.setattr(onnx_encoder,'OnnxEncoder',FakeOnnx)
+    config.reranker.local.backend='onnx_fp32'
+    ranker=LocalReranker(config)
+    score=ranker.get_rank_similarity(['doc'],['corpus','keyword'],1,'query')
+    assert ranker._backend=='torch' and np.isfinite(score).all()
+    assert ranker._encoder.calls==[['keyword'],['doc','corpus']]

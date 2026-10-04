@@ -37,6 +37,24 @@ class LocalReranker(BaseReranker):
     def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
         if not s1 or not s2:
             return np.empty((len(s1), len(s2)))
+        vectors = self._encode_texts(s1+s2)
+        return self._similarity(vectors[:len(s1)], vectors[len(s1):])
+
+    def get_rank_similarity(self, s1, s2, corpus_count, keyword_prompt):
+        if keyword_prompt == 'document' or len(s2) == corpus_count:
+            return self.get_similarity_score(s1, s2)
+        if not s1 or not s2:
+            return np.empty((len(s1), len(s2)))
+        documents = self._encode_texts(s1+s2[:corpus_count], prompt_name='document')
+        backend = self._backend
+        queries = self._encode_texts(s2[corpus_count:], prompt_name='query')
+        if self._backend != backend:
+            # Query inference may fall back: never mix document/query backends.
+            documents = self._encode_texts(s1+s2[:corpus_count], prompt_name='document')
+        references = np.concatenate([documents[len(s1):], queries])
+        return self._similarity(documents[:len(s1)], references)
+
+    def _encode_texts(self, texts, prompt_name=None):
         import torch
         from sentence_transformers import SentenceTransformer
         local = self.config.reranker.local
@@ -97,6 +115,12 @@ class LocalReranker(BaseReranker):
         kwargs = OmegaConf.to_container(local.encode_kwargs, resolve=True) if local.encode_kwargs else {}
         kwargs = dict(kwargs)
         kwargs.pop('show_progress_bar', None)
+        if prompt_name is not None:
+            if prompt_name not in encoder.prompts:
+                raise ValueError('Experimental keyword query requires named document/query prompts')
+            if kwargs.get('prompt') is not None:
+                raise ValueError('Experimental named prompts cannot override an explicit prompt')
+            kwargs['prompt_name'] = prompt_name
         if kwargs.get('precision', 'float32') != 'float32' or kwargs.get('output_value', 'sentence_embedding') != 'sentence_embedding':
             raise ValueError('Local ranking requires floating sentence embeddings')
         kwargs['convert_to_numpy'] = True
@@ -114,12 +138,17 @@ class LocalReranker(BaseReranker):
             logger.warning('Persistent embedding cache disabled: model has no resolved immutable revision')
             directory = None
         namespace_key = digest(namespace)
-        if getattr(self, '_cache_namespace', None) != namespace_key or getattr(self, '_cache_directory', None) != directory:
-            self._cache = EmbeddingCache(namespace, directory, dimension=dimension, dtype='float32')
-            self._cache_namespace, self._cache_directory = namespace_key, directory
+        if not hasattr(self, '_role_caches'):
+            self._role_caches = {}
+        cache_key = (namespace_key, directory)
+        if cache_key not in self._role_caches:
+            self._role_caches[cache_key] = EmbeddingCache(namespace, directory, dimension=dimension, dtype='float32')
+        self._cache = self._role_caches[cache_key]
+        self._cache_namespace, self._cache_directory = namespace_key, directory
         # This pool is PRIVATE: even public-paper membership reflects user filtering.
         # Never export this directory as a public candidate cache.
-        texts = list(dict.fromkeys(s1 + s2))
+        requested = texts
+        texts = list(dict.fromkeys(texts))
         lookup_started = perf_counter()
         stats_before = dict(self._cache.stats)
         lookup = {text: self._cache.get(text) for text in texts}
@@ -142,24 +171,23 @@ class LocalReranker(BaseReranker):
                 logger.warning(f'Optional ONNX inference failed ({type(exc).__name__}); recomputing with PyTorch')
                 self._failed_onnx_identity = identity
                 self._model_identity = None
-                return self.get_similarity_score(s1, s2)
+                return self._encode_texts(requested, prompt_name)
             if len(features) != len(missing):
                 raise ValueError('Local encoder returned incomplete embeddings')
             for text, vector in zip(missing, features):
                 self._cache.put(text, vector)
                 lookup[text] = vector
             logger.info(f'Embedded {len(missing)} texts in {perf_counter()-started:.2f}s')
+        return np.stack([lookup[t] for t in requested])
+
+    def _similarity(self, left, right):
         similarity_started = perf_counter()
-        left, right = np.stack([lookup[t] for t in s1]), np.stack([lookup[t] for t in s2])
         profile = interest_profile(self.config)
         if profile.keywords and profile.keyword_weight:
-            # Both components use cosine, even if a model config selects dot product.
             left = left / np.linalg.norm(left, axis=1, keepdims=True)
             right = right / np.linalg.norm(right, axis=1, keepdims=True)
             result = left @ right.T
-            logger.info(f'Embedding similarity: seconds={perf_counter()-similarity_started:.3f}, candidates={len(s1)}, references={len(s2)}')
-            return result
-        sim = encoder.similarity(left, right)
-        result = sim.cpu().numpy()
-        logger.info(f'Embedding similarity: seconds={perf_counter()-similarity_started:.3f}, candidates={len(s1)}, references={len(s2)}')
+        else:
+            result = self._encoder.similarity(left, right).cpu().numpy()
+        logger.info(f'Embedding similarity: seconds={perf_counter()-similarity_started:.3f}, candidates={len(left)}, references={len(right)}')
         return result
