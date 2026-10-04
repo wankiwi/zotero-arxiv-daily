@@ -459,3 +459,60 @@ uv run --frozen --extra onnx python scripts/benchmark_embeddings.py --onnx-direc
 ```
 
 该对照使用固定合成文本、独立子进程和相同输入/提示，报告缓存冷暖耗时、cosine 差异和 top-10 重叠；不含人工质量标签，不能据此宣称推荐准确性提升。默认后端仍为 PyTorch。
+
+### 可选推荐算法实验（默认关闭）
+
+`reranker.experiments` 的默认值逐项保留当前算法；实际使用的兴趣权重仍由 `interest_profile` 决定，不被实验开关覆盖。可以一次只改一个参数进行对照：
+
+```yaml
+reranker:
+  experiments:
+    keyword_prompt: document
+    text_mode: abstract
+    deduplicate_corpus: false
+    corpus_aggregation: mean
+    keyword_aggregation: mean
+    top_k: 5
+    temperature: 0.1
+```
+
+| 参数 | 说明与实验值 |
+|---|---|
+| `keyword_prompt` | 默认 `document` 沿用原 encode 配置。`query` 只把兴趣关键词编码为 query，候选和语料使用 document；要求本地模型具备同名 prompts，不支持的 API 后端报错。显式 `encode_kwargs.prompt` 与此实验冲突时拒绝运行。 |
+| `text_mode` | `abstract` 使用摘要、缺失时回退标题；`title_abstract` 用 `标题 + 两个换行 + 摘要` 编码候选和语料。缺失摘要仍只用标题并应用原 0.8 惩罚，绝不假装有摘要。 |
+| `deduplicate_corpus` | `false` 保留全部参考记录。`true` 仅合并完全相同的规范化 DOI，保留添加日期最新的一条；无 DOI、不同 DOI、只有相同标题的记录不合并，不跨论文版本猜测身份。 |
+| `corpus_aggregation` | `mean` 为原时间衰减加权均值；`top_k` 对每个候选只取最高的 k 个相似度，并在这些参考记录上重新归一化原时间权重；`softmax` 权重为 `原时间权重 × exp((相似度−最大值)/temperature)` 后归一化。 |
+| `keyword_aggregation` | 同样支持 `mean/top_k/softmax`，但关键词先验为均匀权重，与语料开关独立。 |
+| `top_k` | 正整数，默认 5，超过可用参考数时自动取可用数。相同分数保持原参考顺序。 |
+| `temperature` | 有限数且至少 0.000001，默认 0.1；越小越偏向最相似的参考。只影响 softmax。 |
+
+例如仅比较关键词 query：`reranker.experiments.keyword_prompt=query`。模型/提示角色/文本改变会使用独立缓存；只改聚合、权重或惩罚会复用向量。ONNX query 推理若回退到 PyTorch，会同时重新取得 PyTorch document 向量，避免混合后端。实验不会改变来源过滤、去重历史、25/15/5 配额、随机抽样、邮件和预算。
+
+### 私有本地盲评与成本对照
+
+`scripts/evaluate_ranking.py` 只进行本地模型排序，不调用 Zotero、SMTP、LLM 或网络下载。先缓存指定版本的现有 Jina 模型。输入 JSON 包含 **200–300 条固定且身份唯一的候选**、参考语料和关键词，保存在访问受限的本地目录，不提交、不上传 Library、Actions artifacts 或公共缓存。不要把真实收藏夹路径、账号或密钥放入输入。
+
+输入结构如下（示例仅说明结构，需填入足量真实候选）：
+
+```json
+{
+  "corpus_role": "local evaluation corpus; describe sampling limitations",
+  "keywords": ["interfacial water", "proton transfer"],
+  "candidates": [{"source":"journals","title":"Paper title","abstract":"Original abstract","authors":[],"url":"https://example.org/paper","doi":"10.1234/example","publication_kind":"journal"}],
+  "corpus": [{"title":"Reference title","abstract":"Reference abstract","doi":"10.1234/reference","added_date":"2026-01-01T00:00:00"}]
+}
+```
+
+```bash
+# Use a private local directory; never publish these generated files.
+uv run --frozen python scripts/evaluate_ranking.py prepare --sample /private/sample.json --output /private/review
+uv run --frozen python scripts/evaluate_ranking.py compare --sample /private/sample.json --output /private/review
+# Fill every relevance_0_to_3 cell in review.csv, without looking at rankings.json.
+uv run --frozen python scripts/evaluate_ranking.py evaluate --output /private/review
+```
+
+- `prepare`：默认 `--seed=20261004` 随机打乱候选，输出隐藏方法/分数的 `review.csv` 和仅本地保留的 `private-index.json`；已存在文件拒绝覆盖，CSV 文本防公式注入。
+- 人工标签：0 不相关、1 边缘相关、2 有用、3 高度相关；先固定准则再标注，不能根据方法名称或排序调整标签。缺失、重复或样本不一致会阻止评估，不把空白当成负例。
+- `compare`：固定 PyTorch FP32、4 CPU 线程、batch 16、0.4 关键词/0.6 语料、0.8 缺摘要因子。运行 baseline 及七个单因素对照；冷启动单列，各实验计时在 baseline 预热后进行，新增提示/文本可能仍需编码，因此不是独立冷启动竞赛。输出本地 `comparison.json` 成本/排名变化，以及含身份的私有 `rankings.json`。实际生产权重不被修改。
+- `evaluate`：人工标签全部完成后，分别输出期刊 top25 和预印本 top15 的 nDCG 与 Precision（≥2 视为相关）；组内不足时报告实际数，随机 5 篇不参与相关性排名指标。离线工具仅比较排序，不模拟历史过滤/每日时间窗/随机抽样，不据此宣称每日发送表现。人工标签与样本选择偏差都需保留在结论中。
+- 参考库重复率低时，DOI 去重可能没有效果；top-k/softmax 的排名变化不等于质量提升。没有足够人工标签时不选择“优胜算法”。BGE/SPECTER 不在本次下载或默认替换范围内。

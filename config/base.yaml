@@ -84,6 +84,14 @@ llm:
   language: Chinese # Preferred language for the TL;DR. Example: English
 
 reranker:
+  experiments: # Defaults exactly preserve the existing ranking baseline.
+    keyword_prompt: document # query encodes only interest keywords with the local query prompt.
+    text_mode: abstract # title_abstract applies to candidates and corpus; missing abstract still penalized.
+    deduplicate_corpus: false # Newest exact normalized DOI only; no title-only merging.
+    corpus_aggregation: mean # mean, top_k or softmax; retains normalized recency prior.
+    keyword_aggregation: mean # Independent ablation; uniform prior.
+    top_k: 5 # Positive; clipped to available references; stable ties.
+    temperature: 0.1 # Softmax temperature >= 0.000001.
   missing_abstract_factor: 0.8 # Multiply positive title-only scores; divide negative scores with floor -10; 1 disables.
   local:
     revision: ac5d898c8d382b17167c33e5c8af644a3519b47d # Verified immutable Jina revision.

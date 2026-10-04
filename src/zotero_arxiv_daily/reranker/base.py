@@ -6,6 +6,7 @@ from typing import Type
 from numbers import Real
 import math
 from ..interest_profile import interest_profile
+from .experiments import settings, paper_text, unique_corpus, aggregate
 def missing_abstract_factor(config):
     settings = config.get('reranker', {}) if config is not None else {}
     value = settings.get('missing_abstract_factor', 0.8)
@@ -19,19 +20,24 @@ class BaseReranker(ABC):
         self.config = config
         interest_profile(config)
         missing_abstract_factor(config)
+        settings(config)
 
     def rerank(self, candidates:list[Paper], corpus:list[CorpusPaper]) -> list[Paper]:
         if not candidates:
             return []
         factor = missing_abstract_factor(self.config)
+        options = settings(self.config)
+        if options.deduplicate_corpus:
+            corpus = unique_corpus(corpus)
         profile = interest_profile(self.config)
         keyword_weight, zotero_weight = profile.effective_weights(bool(corpus))
         corpus = sorted(corpus, key=lambda x: x.added_date, reverse=True) if zotero_weight else []
         keywords = list(profile.keywords) if keyword_weight else []
-        references = [c.abstract.strip() or c.title for c in corpus] + keywords
+        references = [paper_text(c, options.text_mode) for c in corpus] + keywords
         for candidate in candidates:
             candidate.scoring_basis = "abstract" if candidate.abstract.strip() else "title only"
-        sim = self.get_similarity_score([c.abstract.strip() or c.title for c in candidates], references)
+        sim = self.get_rank_similarity([paper_text(c, options.text_mode) for c in candidates], references,
+                                       len(corpus), options.keyword_prompt)
         if sim.shape != (len(candidates), len(references)) or not np.isfinite(sim).all():
             raise ValueError("Reranker returned invalid similarity scores")
         bounded_scores = keyword_weight or (factor < 1 and any(p.scoring_basis == "title only" for p in candidates))
@@ -41,9 +47,13 @@ class BaseReranker(ABC):
         keyword_scores = np.zeros(len(candidates))
         if corpus:
             decay = 1 / (1 + np.log10(np.arange(len(corpus)) + 1))
-            zotero_scores = (sim[:, :len(corpus)] * (decay / decay.sum())).sum(axis=1)
+            zotero_scores = aggregate(sim[:, :len(corpus)], decay/decay.sum(), options.corpus_aggregation,
+                                      options.top_k, options.temperature)
         if keywords:
-            keyword_scores = np.clip(sim[:, len(corpus):], -1, 1).mean(axis=1)
+            values = np.clip(sim[:, len(corpus):], -1, 1)
+            # Keep the baseline operation order bit-for-bit when disabled.
+            keyword_scores = values.mean(axis=1) if options.keyword_aggregation == 'mean' else aggregate(
+                values, np.ones(len(keywords))/len(keywords), options.keyword_aggregation, options.top_k, options.temperature)
         scores = (keyword_weight * keyword_scores + zotero_weight * zotero_scores) * 10
         for score, keyword_score, zotero_score, candidate in zip(scores, keyword_scores, zotero_scores, candidates):
             candidate.missing_abstract_factor = factor if candidate.scoring_basis == 'title only' else 1.0
@@ -68,6 +78,11 @@ class BaseReranker(ABC):
         candidates = sorted(candidates,key=lambda x: x.score,reverse=True)
         return candidates
     
+    def get_rank_similarity(self, s1, s2, corpus_count, keyword_prompt):
+        if keyword_prompt != 'document' and len(s2) > corpus_count:
+            raise ValueError('keyword_prompt=query requires a local encoder with named prompts')
+        return self.get_similarity_score(s1, s2)
+
     @abstractmethod
     def get_similarity_score(self, s1:list[str], s2:list[str]) -> np.ndarray:
         raise NotImplementedError
