@@ -75,6 +75,10 @@ class EmbeddingCache:
                         checksum = str(stored['checksum'].item())
                     if not self.valid(vector) or hashlib.sha256(vector.tobytes()).hexdigest() != checksum:
                         raise ValueError('Invalid cached embedding')
+                    try:
+                        os.utime(path, None)  # Encrypted snapshots retain recently used vectors.
+                    except OSError:
+                        pass
                     self.memory[key] = vector
                     self.stats["disk_hits"] += 1
                     return vector
