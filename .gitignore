@@ -24,3 +24,7 @@ config/private.yaml
 config/runtime.yaml
 .coverage
 .ruff_cache/
+
+# Only ciphertext is cached; never commit local caches or review output
+.embedding-cache/
+private-evaluation/

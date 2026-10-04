@@ -86,7 +86,10 @@ llm:
 reranker:
   missing_abstract_factor: 0.8 # Multiply positive title-only scores; divide negative scores with floor -10; 1 disables.
   local:
-    revision: null # Optional immutable model revision.
+    revision: ac5d898c8d382b17167c33e5c8af644a3519b47d # Verified immutable Jina revision.
+    backend: torch # torch, onnx_fp32 or onnx_int8; experimental ONNX requires local official files.
+    onnx_directory: null # Directory containing verified .onnx and .onnx_data files; never auto-download.
+    onnx_fallback: true # Fall back to PyTorch on optional-runtime/load/inference failure.
     cpu_dtype: auto # Use float32 on CPUs without native BF16; same weights/model.
     cpu_threads: null # Respect CPU affinity and cgroup quota.
     cache_dir: null # Optional LOCAL ONLY directory; contains private vectors. Never upload.

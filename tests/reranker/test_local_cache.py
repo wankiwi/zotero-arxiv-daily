@@ -130,3 +130,30 @@ def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkey
     ranker.rerank([paper],corpus)
     assert ranker._encoder.calls[-1]==[paper.abstract]
     assert paper.score==paper.raw_score and paper.missing_abstract_factor==1
+
+
+def test_optional_onnx_load_failure_falls_back_and_never_mixes_cache(config,encoder,tmp_path,monkeypatch):
+    from zotero_arxiv_daily.reranker.onnx_encoder import OnnxEncoder
+    config.reranker.local.backend='onnx_fp32';config.reranker.local.cache_dir=str(tmp_path)
+    def fail(*a,**k):raise OSError('synthetic unavailable')
+    monkeypatch.setattr(OnnxEncoder,'__init__',fail)
+    ranker=LocalReranker(config);score=ranker.get_similarity_score(['a'],['b'])
+    assert ranker._backend=='torch' and np.isfinite(score).all()
+    assert ranker._failed_onnx_identity==ranker._model_identity
+    assert ranker._cache.directory.parent.name=='private'
+    config.reranker.local.onnx_fallback=False
+    with pytest.raises(OSError):LocalReranker(config).get_similarity_score(['a'],['b'])
+
+
+def test_backend_namespace_and_inference_fallback(config,encoder,monkeypatch):
+    from zotero_arxiv_daily.reranker import onnx_encoder
+    class FakeOnnx(encoder):
+        def __init__(self,*a,**kw):super().__init__();self.artifact_identity={'graph':'verified'}
+    monkeypatch.setattr(onnx_encoder,'OnnxEncoder',FakeOnnx)
+    config.reranker.local.backend='onnx_fp32'
+    ranker=LocalReranker(config);ranker.get_similarity_score(['a'],['b']);namespace=ranker._cache_namespace
+    def fail(*a,**k):raise RuntimeError('synthetic inference failure')
+    ranker._encoder.encode=fail
+    ranker.get_similarity_score(['new'],['b'])
+    assert ranker._backend=='torch' and ranker._cache_namespace!=namespace
+    assert ranker._encoder.calls==[['new','b']]
