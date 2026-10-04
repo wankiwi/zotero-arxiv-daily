@@ -31,7 +31,7 @@ Actions Variables：`CUSTOM_CONFIG`（YAML mapping，无 `defaults`）、`PAPER_
 
 **配置优先级：** preset → CUSTOM_CONFIG → 显式 dispatch overrides → 仓库投递策略。定时触发固定 `interests`、已保存兴趣列表、所有启用来源、25/15/5 配额、上限45、中文语言、强制¥0.20预算守卫（是否请求LLM遵循CUSTOM_CONFIG）、只邮件、收件人为 `RECEIVER`、历史路径为 `data/recommendations.json`。CUSTOM_CONFIG 可继续保留 SMTP、排除路径和窗口等非强制项。
 
-每日 cron 为 **20:17 UTC（次日 04:17 Asia/Singapore）**，只在默认分支执行且可能延迟。推送 feature 分支不会启用其定时配置。`paper-state` 分支存储成功/待投递历史；不要清空、重置或删除。`Keep Alive` 沿用既有每30天定时，不新增任务。
+每日 cron 为 **19:17 UTC（次日 03:17 Asia/Singapore）**，只在默认分支执行且可能延迟。推送 feature 分支不会启用其定时配置。`paper-state` 分支存储成功/待投递历史；不要清空、重置或删除。`Keep Alive` 沿用既有每30天定时，不新增任务。
 
 手工 Actions → Send emails daily 的参数：
 
@@ -411,3 +411,9 @@ ChemRxiv 计入现有**预印本 15** 配额；期刊 25、剩余合格未见候
 同一家族的 ChemRxiv 版本共享推荐身份，当前检索中优先最新版本，但摘要查询始终使用精确版本 DOI。Crossref 明确提供 `is-preprint-of` / `has-preprint` DOI 关系时，可跨来源、Zotero 库和投递历史去重，并优先保留发表记录；不同版本或预印本/发表版之间不移植摘要。缺少 DOI 关系时无法保证识别改题发表的稿件，不会仅凭相似标题声称它们相同。历史新增可选 `related_dois`，旧记录兼容读取。
 
 原始摘要优先使用该版本的 Crossref deposit，缺失时走既有合法元数据恢复；不拼接正文充当摘要、不访问受限全文。仍缺摘要时按现有 `missing_abstract_factor`（默认 0.8）降分。此来源未实现全文提取，已有全文总结模式会按原规则回退到摘要。
+
+## arXiv 临时故障与启动时间
+
+定时启动时间为 UTC **19:17**（北京时间次日 **03:17**），GitHub 调度可能延迟，不能保证准点发信。arXiv API 每页 100 条，正常翻页至少间隔 3 秒；连接/读取超时分别为 5/20 秒。对连接超时、连接失败及 HTTP 500/502/503/504，单页最多额外重试 3 次，等待 15/30/60 秒；关闭 SDK 的第二层重试。服务端 Retry-After 需要更长等待时遵守其要求，但超过 60 秒或格式无效就停止本次来源检索，不提前重试。401/403/429 和重定向不重试，不更换域名绕过。
+
+持续故障或中途翻页失败仍作为来源失败报告，不交付不完整的 arXiv 候选集。其他来源可以正常投递并保存历史，因此 Actions 显示失败不等于邮件没发出；先检查 SMTP 接受日志及已保存投递状态，不要为了验证而重复运行发信。

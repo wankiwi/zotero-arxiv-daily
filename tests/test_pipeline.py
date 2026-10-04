@@ -311,3 +311,20 @@ def test_chemrxiv_pipeline_library_history_quotas_and_random(pipeline,monkeypatc
     assert len(added)==20 and len({p['doi'] for p in added})==20
     assert sum(p['recommendation_group']=='preprints' for p in added)==15
     assert sum(p['recommendation_group']=='random' for p in added)==5
+
+
+def test_arxiv_503_preserves_other_delivery_and_never_resends(pipeline,monkeypatch):
+    import arxiv
+    pipeline.output.email.enabled=True
+    pipeline.executor.send_empty=False
+    sent=[]
+    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email',lambda *args:sent.append(args))
+    def fail():raise arxiv.HTTPError('https://export.arxiv.org/api/query',0,503)
+    for _ in range(2):
+        executor=Executor(pipeline)
+        executor.retrievers={'arxiv':SimpleNamespace(retrieve_papers=fail),
+            'journals':SimpleNamespace(retrieve_papers=lambda:[make_sample_paper(source='journals',doi='10.1000/other')])}
+        with pytest.raises(RuntimeError,match='arxiv:.*HTTP 503'):executor.run()
+    assert len(sent)==1
+    state=State(pipeline.state.path)
+    assert len(state.records)==1 and not state.pending('email')

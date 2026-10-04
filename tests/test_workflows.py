@@ -231,4 +231,4 @@ def test_daily_schedule_uses_requested_utc_time():
     import yaml
 
     workflow = yaml.load((ROOT / '.github/workflows/main.yml').read_text(), Loader=yaml.BaseLoader)
-    assert workflow['on']['schedule'] == [{'cron': '17 20 * * *'}]
+    assert workflow['on']['schedule'] == [{'cron': '17 19 * * *'}]
