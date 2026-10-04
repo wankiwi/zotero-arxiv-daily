@@ -87,3 +87,23 @@ def test_array_header_cannot_request_unbounded_allocation(tmp_path):
         archive.writestr('checksum.npy', checksum.getvalue())
     with pytest.raises(ValueError, match='allocation'):
         validate_array_archive(io.BytesIO(buffer.getvalue()), 1024*1024)
+
+def test_bounded_snapshot_keeps_recent_hits_and_preserves_private_timestamps(tmp_path,monkeypatch):
+    import os
+    source=tmp_path/'source'
+    cache=EmbeddingCache({'model':'retention'},source,dimension=2,dtype='float32')
+    cache.put('older',np.array([1,2],dtype=np.float32))
+    cache.put('recent',np.array([2,3],dtype=np.float32))
+    older=cache.directory/(cache.key('older')+'.npz')
+    recent=cache.directory/(cache.key('recent')+'.npz')
+    os.utime(older,ns=(100,100));os.utime(recent,ns=(200,200))
+    monkeypatch.setattr(module,'MAX_FILES',1)
+    target=tmp_path/'target'
+    assert module.unseal(module.seal(source,KEY),KEY,target)==1
+    restored=EmbeddingCache({'model':'retention'},target,dimension=2,dtype='float32')
+    assert not (restored.directory/(cache.key('older')+'.npz')).exists()
+    restored_recent=restored.directory/(cache.key('recent')+'.npz')
+    assert restored_recent.stat().st_mtime_ns==200
+    assert restored.get('recent') is not None
+    assert restored_recent.stat().st_mtime_ns>200
+    assert older.exists() and recent.exists()  # Snapshot retention never deletes source cache.
