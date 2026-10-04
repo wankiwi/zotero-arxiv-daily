@@ -15,6 +15,9 @@ from queue import Empty
 from typing import Any, Callable, TypeVar
 from loguru import logger
 import requests
+from contextlib import contextmanager
+from time import sleep
+from email.utils import parsedate_to_datetime
 
 T = TypeVar("T")
 
@@ -22,6 +25,53 @@ DOWNLOAD_TIMEOUT = (10, 60)
 PDF_EXTRACT_TIMEOUT = 180
 TAR_EXTRACT_TIMEOUT = 180
 
+
+
+class ArxivSession(requests.Session):
+    """Bounded transient retries; never retry an access refusal or change endpoints."""
+    def get(self, url, **kwargs):
+        kwargs.setdefault('timeout', (5, 20))
+        kwargs['allow_redirects'] = False
+        for attempt in range(4):
+            response = None
+            try:
+                response = super().get(url, **kwargs)
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt == 3:
+                    raise
+            else:
+                if response.status_code not in (500, 502, 503, 504) or attempt == 3:
+                    return response
+            delay = 15 * 2 ** attempt
+            if response is not None:
+                retry_after = response.headers.get('Retry-After')
+                response.close()
+                if retry_after:
+                    try:
+                        requested = float(retry_after)
+                    except ValueError:
+                        try:
+                            requested = (parsedate_to_datetime(retry_after) - datetime.now(timezone.utc)).total_seconds()
+                        except (TypeError, ValueError, OverflowError):
+                            raise requests.exceptions.RetryError('Invalid arXiv Retry-After; stopping retries') from None
+                    if not 0 <= requested <= 60:
+                        raise requests.exceptions.RetryError('arXiv Retry-After exceeds bounded retry allowance')
+                    delay = max(delay, requested)
+            logger.warning(f'arXiv temporary transport failure; retry {attempt+1}/3 in {delay:g}s')
+            sleep(delay)
+
+
+@contextmanager
+def api_client():
+    # The pinned arxiv client otherwise repeats every HTTP error at a fixed 3s
+    # interval and supplies no request timeout. Keep exactly one retry layer.
+    client = arxiv.Client(page_size=100, num_retries=0, delay_seconds=3)
+    old_session = getattr(client, '_session', None)
+    if old_session is not None:
+        old_session.close()
+    with ArxivSession() as transport:
+        client._session = transport
+        yield client
 
 def _download_file(url: str, path: str) -> None:
     with requests.get(url, stream=True, timeout=DOWNLOAD_TIMEOUT) as response:
@@ -140,12 +190,11 @@ class ArxivRetriever(BaseRetriever):
             search = arxiv.Search(query=query, max_results=10 if self.config.executor.debug else None,
                                   sort_by=arxiv.SortCriterion.SubmittedDate,
                                   sort_order=arxiv.SortOrder.Descending)
-            client = arxiv.Client(page_size=500, num_retries=3, delay_seconds=3)
-            results = list(client.results(search))
+            with api_client() as client:
+                results = list(client.results(search))
             if '*' not in categories and not self.retriever_config.get('include_cross_list', False):
                 results = [paper for paper in results if paper.primary_category in categories]
             return results
-        client = arxiv.Client(num_retries=3, delay_seconds=3)
         query = '+'.join(categories)
         include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed
@@ -164,11 +213,12 @@ class ArxivRetriever(BaseRetriever):
 
         # Get full information of each paper from arxiv api
         bar = tqdm(total=len(all_paper_ids))
-        for i in range(0, len(all_paper_ids), 20):
-            search = arxiv.Search(id_list=all_paper_ids[i:i + 20])
-            batch = list(client.results(search))
-            bar.update(len(batch))
-            raw_papers.extend(batch)
+        with api_client() as client:
+            for i in range(0, len(all_paper_ids), 20):
+                search = arxiv.Search(id_list=all_paper_ids[i:i + 20])
+                batch = list(client.results(search))
+                bar.update(len(batch))
+                raw_papers.extend(batch)
         bar.close()
 
         return raw_papers
