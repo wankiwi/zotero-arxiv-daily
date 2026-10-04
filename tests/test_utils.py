@@ -248,3 +248,35 @@ def test_email_has_matching_plain_and_html_alternatives(config, monkeypatch):
     parts = message.get_payload()
     assert [p.get_content_type() for p in parts] == ['text/plain', 'text/html']
     assert all('1. 中文 Paper' in p.get_payload(decode=True).decode('utf-8') for p in parts)
+
+
+@pytest.mark.parametrize('instant,expected', [
+    ('2026-10-04T15:59:59+00:00', '2026/10/04'),
+    ('2026-10-04T16:00:00+00:00', '2026/10/05'),
+    ('2026-10-04T19:17:00+00:00', '2026/10/05'),
+    ('2026-04-30T15:59:59+00:00', '2026/04/30'),
+    ('2026-04-30T16:00:00+00:00', '2026/05/01'),
+    ('2026-12-31T15:59:59+00:00', '2026/12/31'),
+    ('2026-12-31T16:00:00+00:00', '2027/01/01'),
+    ('2028-02-28T16:00:00+00:00', '2028/02/29'),
+    ('2028-02-29T16:00:00+00:00', '2028/03/01'),
+])
+def test_email_subject_uses_singapore_date(config, monkeypatch, instant, expected):
+    import datetime
+    from types import SimpleNamespace
+    from email import message_from_string
+    from email.header import decode_header, make_header
+    from zotero_arxiv_daily import utils
+    clock = datetime.datetime.fromisoformat(instant)
+    class FrozenClock:
+        @staticmethod
+        def now(tz=None):
+            assert getattr(tz, 'key', None) == 'Asia/Singapore'
+            return clock.astimezone(tz)
+    monkeypatch.setattr(utils, 'datetime', SimpleNamespace(datetime=FrozenClock))
+    sent = []
+    monkeypatch.setattr(smtplib, 'SMTP', make_stub_smtp(sent))
+    send_email(config, '<html>Original body</html>')
+    message = message_from_string(sent[0][2])
+    assert str(make_header(decode_header(message['Subject']))) == 'Daily Papers ' + expected
+    assert message.get_payload()[1].get_payload(decode=True).decode('utf-8') == '<html>Original body</html>'

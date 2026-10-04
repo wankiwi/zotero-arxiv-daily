@@ -9,6 +9,7 @@ from .construct_email import email_plain_text
 from email.utils import parseaddr, formataddr
 from loguru import logger
 import datetime
+from zoneinfo import ZoneInfo
 import ssl
 from contextlib import suppress
 from pathlib import PurePosixPath
@@ -82,7 +83,7 @@ def send_email(config:DictConfig, html:str):
     msg.attach(MIMEText(html, 'html', 'utf-8'))
     msg['From'] = _format_addr('Github Action <%s>' % sender)
     msg['To'] = _format_addr('You <%s>' % receiver)
-    today = datetime.datetime.now().strftime('%Y/%m/%d')
+    today = datetime.datetime.now(ZoneInfo('Asia/Singapore')).strftime('%Y/%m/%d')
     msg['Subject'] = Header(f'Daily Papers {today}', 'utf-8').encode()
 
     context = ssl.create_default_context()
