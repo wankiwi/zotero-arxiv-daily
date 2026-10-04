@@ -1,0 +1,55 @@
+name: Validate encrypted cache (synthetic only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  save:
+    if: ${{ github.repository == 'wankiwi/zotero-arxiv-daily' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - run: uv sync --frozen
+      - name: Seal three synthetic vectors (cold runner)
+        env:
+          EMBEDDING_CACHE_KEY: ${{ secrets.EMBEDDING_CACHE_KEY }}
+        run: uv run --frozen python scripts/validate_encrypted_cache.py save --package "$RUNNER_TEMP/embedding-validation-package/private.enc"
+      - name: Save ciphertext only in isolated validation namespace
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/embedding-validation-package/private.enc
+          key: embedding-validation-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+  restore:
+    needs: save
+    if: ${{ github.repository == 'wankiwi/zotero-arxiv-daily' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - run: uv sync --frozen
+      - name: Restore exact ciphertext key on second runner
+        id: restored
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/embedding-validation-package/private.enc
+          key: embedding-validation-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
+      - name: Require exact cache hit
+        env:
+          CACHE_HIT: ${{ steps.restored.outputs.cache-hit }}
+        run: test "$CACHE_HIT" = true
+      - name: Authenticate and assert three disk hits, zero misses, identical vectors
+        env:
+          EMBEDDING_CACHE_KEY: ${{ secrets.EMBEDDING_CACHE_KEY }}
+        run: uv run --frozen python scripts/validate_encrypted_cache.py restore --package "$RUNNER_TEMP/embedding-validation-package/private.enc"

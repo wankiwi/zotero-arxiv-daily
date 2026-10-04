@@ -459,6 +459,14 @@ uv run --frozen --extra onnx python scripts/benchmark_embeddings.py --onnx-direc
 
 该对照使用固定合成文本、独立子进程和相同输入/提示，报告缓存冷暖耗时、cosine 差异和 top-10 重叠；不含人工质量标签，不能据此宣称推荐准确性提升。默认后端仍为 PyTorch。
 
+### 手动验证加密缓存（不投递）
+
+Actions 的 **Validate encrypted cache (synthetic only)** 仅支持在本仓库 `main` 手动运行，无定时触发。两个独立 runner 依次执行：首个用 3 个固定合成向量建立冷缓存并上传 AES-GCM 密文；第二个按完全相同的 key 还原，断言 `disk_hits=3`、`misses=0`、`memory_hits=0` 且向量逐项一致。
+
+此验证只向封装/还原步骤提供已有 `EMBEDDING_CACHE_KEY`，不注入 Zotero、SMTP 或 LLM 凭据，不运行应用主程序，也不修改投递历史或预算。专用 `embedding-validation-v1-` 缓存前缀与每日生产缓存隔离；仅缓存密文文件，不上传明文向量。日志中的命中计数和密文摘要可核对两阶段结果，但不能据此声称真实每日任务已提速。
+
+脚本接口为 `scripts/validate_encrypted_cache.py {save,restore} --package PATH`，仅接受可信仓库 `main` 的 `workflow_dispatch` 环境；`PATH` 是密文包位置，保存时拒绝覆盖已有文件。工作流固定使用 runner 临时目录，无需用户输入参数。
+
 ### 可选推荐算法实验（默认关闭）
 
 `reranker.experiments` 的默认值逐项保留当前算法；实际使用的兴趣权重仍由 `interest_profile` 决定，不被实验开关覆盖。可以一次只改一个参数进行对照：
