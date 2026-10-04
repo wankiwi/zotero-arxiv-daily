@@ -54,3 +54,27 @@ def test_unavailable_directory_uses_memory(tmp_path):
     cache = EmbeddingCache({}, file)
     cache.put('text', np.array([1.0]))
     assert cache.directory is None and np.array_equal(cache.get('text'), [1.0])
+
+
+def test_private_partition_and_dimension_dtype_limits(tmp_path):
+    cache=EmbeddingCache({'model':'fixed'},tmp_path,dimension=2,dtype='float32')
+    assert cache.directory.parent.name=='private'
+    for vector in (np.ones(3,dtype=np.float32),np.ones(2,dtype=np.float64)):
+        with pytest.raises(ValueError):cache.put('private',vector)
+    cache.put('private',np.ones(2,dtype=np.float32))
+    assert not (tmp_path/'public').exists()
+    assert cache.stats['writes']==1
+    fresh=EmbeddingCache({'model':'fixed'},tmp_path,dimension=2,dtype='float32')
+    assert fresh.get('private') is not None and fresh.stats['disk_hits']==1
+    assert fresh.get('private') is not None and fresh.stats['memory_hits']==1
+
+
+def test_oversized_and_wrong_dimension_disk_entries_are_misses(tmp_path):
+    import hashlib
+    cache=EmbeddingCache({},tmp_path,dimension=2,dtype='float32')
+    path=cache.directory/(cache.key('text')+'.npz')
+    vector=np.ones(3,dtype=np.float32)
+    np.savez(path,vector=vector,checksum=hashlib.sha256(vector.tobytes()).hexdigest())
+    assert cache.get('text') is None and cache.stats['corrupt']==1
+    path.write_bytes(b'x'*(cache.max_bytes+1))
+    assert cache.get('text') is None and cache.stats['corrupt']==2

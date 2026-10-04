@@ -49,12 +49,37 @@ class LocalReranker(BaseReranker):
                 logging.getLogger(name).setLevel(logging.ERROR)
             warnings.filterwarnings('ignore', category=FutureWarning)
         load_options = {'trust_remote_code': True}
-        if local.get('revision'):
-            load_options['revision'] = local.revision
-        identity = (local.model, local.get('revision'), local.get('cpu_dtype', 'auto'))
+        from .onnx_encoder import MODEL, REVISION
+        revision = local.get('revision') or (REVISION if local.model == MODEL else None)
+        if revision:
+            load_options['revision'] = revision
+        backend = local.get('backend', 'torch')
+        if backend not in ('torch', 'onnx_fp32', 'onnx_int8'):
+            raise ValueError('local.backend must be torch, onnx_fp32 or onnx_int8')
+        if type(local.get('onnx_fallback', True)) is not bool:
+            raise ValueError('local.onnx_fallback must be boolean')
+        identity = (local.model, revision, local.get('cpu_dtype', 'auto'), backend,
+                    local.get('onnx_directory'), local.get('cpu_threads'))
         if getattr(self, '_model_identity', None) != identity:
-            self._encoder = SentenceTransformer(local.model, **load_options)
+            started = perf_counter()
+            self._backend = 'torch'
+            if backend != 'torch' and getattr(self, '_failed_onnx_identity', None) != identity:
+                try:
+                    from .onnx_encoder import OnnxEncoder
+                    threads = int(local.get('cpu_threads') or available_cpu_threads())
+                    if threads < 1:
+                        raise ValueError('local.cpu_threads must be positive')
+                    self._encoder = OnnxEncoder(local.model, revision, backend, local.get('onnx_directory'), threads)
+                    self._backend = backend
+                except Exception as exc:
+                    if not local.get('onnx_fallback', True):
+                        raise
+                    self._failed_onnx_identity = identity
+                    logger.warning(f'Optional ONNX load failed ({type(exc).__name__}); using PyTorch')
+            if self._backend == 'torch':
+                self._encoder = SentenceTransformer(local.model, **load_options)
             self._model_identity = identity
+            logger.info(f'Embedding model prepared: backend={self._backend}, seconds={perf_counter()-started:.3f}')
         encoder = self._encoder
         mode = local.get('cpu_dtype', 'auto')
         if mode not in ('auto', 'native', 'float32'):
@@ -77,22 +102,31 @@ class LocalReranker(BaseReranker):
         kwargs['convert_to_numpy'] = True
         kwargs['convert_to_tensor'] = False
         resolved = getattr(encoder[0].auto_model.config, '_commit_hash', None)
-        namespace = {'schema': 1, 'model': local.model, 'revision': resolved,
+        dimension = kwargs.get('truncate_dim') or (encoder.get_sentence_embedding_dimension() if hasattr(encoder, 'get_sentence_embedding_dimension') else None)
+        namespace = {'schema': 2, 'privacy': 'private', 'backend': self._backend,
+                     'artifacts': getattr(encoder, 'artifact_identity', None), 'dimension': dimension, 'output_dtype': 'float32', 'model': local.model, 'revision': resolved,
                      'encode': kwargs, 'prompts': encoder.prompts, 'default_prompt': encoder.default_prompt_name,
                      'max_seq_length': encoder.max_seq_length, 'dtype': str(next(encoder.parameters()).dtype),
                      'device': str(encoder.device), 'threads': torch.get_num_threads(),
                      'libraries': {name: version(name) for name in ('sentence-transformers', 'transformers', 'torch', 'tokenizers')}}
-        directory = local.get('cache_dir')
+        directory = os.environ.get('PRIVATE_EMBEDDING_CACHE_DIR') or local.get('cache_dir')
         if directory and not resolved:
             logger.warning('Persistent embedding cache disabled: model has no resolved immutable revision')
             directory = None
         namespace_key = digest(namespace)
         if getattr(self, '_cache_namespace', None) != namespace_key or getattr(self, '_cache_directory', None) != directory:
-            self._cache = EmbeddingCache(namespace, directory)
+            self._cache = EmbeddingCache(namespace, directory, dimension=dimension, dtype='float32')
             self._cache_namespace, self._cache_directory = namespace_key, directory
+        # This pool is PRIVATE: even public-paper membership reflects user filtering.
+        # Never export this directory as a public candidate cache.
         texts = list(dict.fromkeys(s1 + s2))
+        lookup_started = perf_counter()
+        stats_before = dict(self._cache.stats)
         lookup = {text: self._cache.get(text) for text in texts}
         missing = [text for text in texts if lookup[text] is None]
+        delta = {key: self._cache.stats[key]-stats_before[key] for key in stats_before}
+        logger.info(f'Private embedding cache: memory_hits={delta["memory_hits"]}, disk_hits={delta["disk_hits"]}, '
+                    f'misses={delta["misses"]}, corrupt={delta["corrupt"]}, lookup_seconds={perf_counter()-lookup_started:.3f}')
         logger.info(f'Local embeddings: device={encoder.device}, dtype={namespace["dtype"]}, threads={torch.get_num_threads()}, '
                     f'unique={len(texts)}, cached={len(texts)-len(missing)}, pending={len(missing)}, batch_size={kwargs.get("batch_size", 32)}')
         if missing:
@@ -100,19 +134,32 @@ class LocalReranker(BaseReranker):
             logger.info(f'Embedding token lengths: median={int(np.median(lengths))}, p95={int(np.percentile(lengths, 95))}, '
                         f'max={max(lengths)}, model_limit={encoder.max_seq_length}')
             started = perf_counter()
-            features = encoder.encode(missing, **kwargs, show_progress_bar=True)
+            try:
+                features = encoder.encode(missing, **kwargs, show_progress_bar=True)
+            except Exception as exc:
+                if self._backend == 'torch' or not local.get('onnx_fallback', True):
+                    raise
+                logger.warning(f'Optional ONNX inference failed ({type(exc).__name__}); recomputing with PyTorch')
+                self._failed_onnx_identity = identity
+                self._model_identity = None
+                return self.get_similarity_score(s1, s2)
             if len(features) != len(missing):
                 raise ValueError('Local encoder returned incomplete embeddings')
             for text, vector in zip(missing, features):
                 self._cache.put(text, vector)
                 lookup[text] = vector
             logger.info(f'Embedded {len(missing)} texts in {perf_counter()-started:.2f}s')
+        similarity_started = perf_counter()
         left, right = np.stack([lookup[t] for t in s1]), np.stack([lookup[t] for t in s2])
         profile = interest_profile(self.config)
         if profile.keywords and profile.keyword_weight:
             # Both components use cosine, even if a model config selects dot product.
             left = left / np.linalg.norm(left, axis=1, keepdims=True)
             right = right / np.linalg.norm(right, axis=1, keepdims=True)
-            return left @ right.T
+            result = left @ right.T
+            logger.info(f'Embedding similarity: seconds={perf_counter()-similarity_started:.3f}, candidates={len(s1)}, references={len(s2)}')
+            return result
         sim = encoder.similarity(left, right)
-        return sim.cpu().numpy()
+        result = sim.cpu().numpy()
+        logger.info(f'Embedding similarity: seconds={perf_counter()-similarity_started:.3f}, candidates={len(s1)}, references={len(s2)}')
+        return result

@@ -419,3 +419,45 @@ ChemRxiv 计入现有**预印本 15** 配额；期刊 25、剩余合格未见候
 持续故障或中途翻页失败仍作为来源失败报告，不交付不完整的 arXiv 候选集。其他来源可以正常投递并保存历史，因此 Actions 显示失败不等于邮件没发出；先检查 SMTP 接受日志及已保存投递状态，不要为了验证而重复运行发信。
 
 邮件标题 `Daily Papers YYYY/MM/DD` 的日期按发送时的 `Asia/Singapore`（UTC+8）计算，不依赖 runner 系统时区。例如 UTC 10 月 4 日 19:17 对应标题日期 `2026/10/05`。正文中的论文发表日期保持来源日期；检索窗口、UTC 日预算、投递历史及 cron 不受此显示规则影响。
+
+## 本地 embedding 缓存与可选 ONNX 对照
+
+当前 Jina 模型固定为 revision `ac5d898c8d382b17167c33e5c8af644a3519b47d`；同一模型显式 `revision: null` 也回退到此固定值，其他模型不套用 Jina revision。默认仍使用 PyTorch、原有 document prompt 和原评分公式。ONNX 只是一条可切换实验路径，不能因量化或格式相同就假设排序相同。
+
+```yaml
+reranker:
+  local:
+    revision: ac5d898c8d382b17167c33e5c8af644a3519b47d
+    backend: torch # torch / onnx_fp32 / onnx_int8
+    cache_dir: null # 可设本机受控私有目录；默认关闭持久化
+    onnx_directory: null # 已校验官方文件所在目录；运行时不自动下载 ONNX
+    onnx_fallback: true # 可选 runtime/模型加载/推理失败时重新用 PyTorch 计算
+```
+
+持久缓存保存到 `cache_dir/private/<namespace>`。即使文本来自公开论文，推荐候选已经经过私人文库、历史或关键词筛选，其集合成员关系也属于私有信息；候选、文库、关键词的混合向量**从不归类为公开缓存**。本地明文目录没有上传接口；工作流只允许上传经 AES-256-GCM 整包加密后的单个文件，不能上传整个明文目录。文本哈希不构成脱敏，SHA 校验和只发现损坏，不抵御有写权限者投毒；只从受控、可信的本地目录读取。公共语料缓存若将来增加，必须在任何私人筛选之前独立生成，本次未接入。
+
+命名空间包括固定模型版本、后端、官方 ONNX 文件 SHA、runtime、prompt/encode 参数、最大长度、维度、dtype、设备、线程与库版本；文本改变或这些身份改变时缓存失效，兴趣权重改变不会导致重编码。读取禁止 pickle，检查压缩/展开大小、维度、dtype、有限非零向量和校验和；损坏条目按缺失重算。文件使用私有权限和原子写入，磁盘不可用则继续使用内存缓存。日志仅输出模型准备、内存/磁盘命中、缺失/损坏数量、查找、编码和相似度耗时，不输出缓存文本。
+
+**加密跨 Actions 缓存只有代码发布且专用密钥已配置后才可工作，未实际运行不能声称命中。** 用户在仓库 Actions Secrets 自行添加 `EMBEDDING_CACHE_KEY`：32 个随机字节的标准 Base64（44 字符，通常以 `=` 结尾）。不要把密钥发聊天或提交代码。程序只在可信仓库 main 的 schedule/workflow_dispatch 中使用此专用密钥；PR 不注入。缺失或格式无效时继续推荐并明确提示未启用。没有创建凭据、服务或自托管 runner。
+
+可选 ONNX 需要 `uv sync --frozen --extra onnx`。下载命令会先检查空间，仅访问官方固定 revision 并核对图文件与 external-data 文件 SHA：
+
+```bash
+uv run --frozen --extra onnx python scripts/download_jina_onnx.py --backend onnx_fp32 --directory /private/models/jina
+# 量化版本单独选择 onnx_int8，不会自动下载两组。
+# onnx_directory 配置为 /private/models/jina/onnx；同 revision 的 tokenizer 须已在本地缓存。
+```
+
+FP32 官方文件约 849 MB，量化文件约 247 MB。可选后端固定 CPU provider；其他模型/版本、不支持的 encode 参数或缺文件会报错，开启 fallback 时回退到 PyTorch。两种后端的向量命名空间隔离，回退不会把部分 ONNX 向量混入 PyTorch 缓存。默认不切换后端，不改变 25/15/5 配额、实际兴趣权重、缺摘要系数、预算、时间窗口或邮件行为。
+
+加密包内包含所有向量文件名和 manifest；每次使用新 96-bit nonce，AES-256-GCM 认证绑定仓库/格式身份。外部 cache key 仅含固定格式版本、runner OS、run ID/attempt，不包含私人配置或文本哈希。认证通过后才检查/解包：最多 128 MiB、20000 个向量、单文件 1 MiB，拒绝路径穿越、重复成员、压缩膨胀、错误校验和和非法向量。模型/提示身份仍通过加密包内的缓存命名空间匹配。校验失败、密钥轮换或格式变化时安全重算；只在封包成功后保存新密文。密文大小和更新时间仍可见。包不可供不可信 PR 写入可信明文缓存；无正确 key 的伪造包无法通过认证。实际评分步骤只接收临时明文目录路径，不注入加密密钥。
+
+加密快照最多保留 20,000 个最近使用的向量，并为归档索引和内部清单预留 16 MiB；总包仍限 128 MiB。磁盘命中会刷新本地使用时间，时间戳随清单一起加密并在还原后保留。超出快照容量的旧向量不上传，下次需要时重算；不会删除本地源缓存、交付历史或预算记录。本地手动指定的缓存目录由用户管理磁盘生命周期。
+
+离线后端对照（模型与 tokenizer 必须已缓存，不自动下载）：
+
+```bash
+uv run --frozen --extra onnx python scripts/benchmark_embeddings.py --onnx-directory /private/models/jina/onnx --output /private/results/backends.json
+```
+
+该对照使用固定合成文本、独立子进程和相同输入/提示，报告缓存冷暖耗时、cosine 差异和 top-10 重叠；不含人工质量标签，不能据此宣称推荐准确性提升。默认后端仍为 PyTorch。
