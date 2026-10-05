@@ -28,7 +28,8 @@ def test_blend_uses_equal_keyword_mean_and_recent_library_weights():
     assert result[0].zotero_score == pytest.approx(60)
     html = render_email(result)
     assert 'keywords (60%) and your library (40%)' in html
-    assert 'Relevance combines semantic keyword' in html
+    assert html.count('Scored using abstract similarity to keywords (60%) and your library (40%).') == 1
+    assert html.index('Scored using') < html.index('1. A')
 
 
 def test_keyword_normalization_does_not_repeat_weight():

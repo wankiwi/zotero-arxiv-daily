@@ -209,7 +209,7 @@ preprint_interests:
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         config = compose(config_name='runtime')
     assert list(config.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare', 'openreview']
-    assert config.llm.enabled and config.llm.budget.enabled and config.llm.budget.daily_cny == 0.20
+    assert config.llm.enabled and config.llm.budget.enabled and config.llm.budget.daily_cny == 0.30
     assert config.output.email.enabled and not config.output.rss.enabled
     assert config.email.receiver == 'daily@example.org'
     assert config.email.smtp_server == 'mail.cstnet.cn' and config.email.smtp_port == 994
@@ -247,4 +247,19 @@ def test_custom_quotas_override_defaults_for_scheduled_and_manual_runs(tmp_path,
     with initialize_config_dir(config_dir=str(tmp_path/'config'),version_base=None):
         config=compose(config_name='runtime')
     assert quotas_for(config.executor)==expected
-    assert config.llm.budget.daily_cny==.20 and config.state.enabled
+    assert config.llm.budget.daily_cny==.30 and config.state.enabled
+
+
+@pytest.mark.parametrize('event', ['schedule', 'workflow_dispatch'])
+@pytest.mark.parametrize('amount', [.05, .21, .30, .40, None])
+def test_custom_budget_amount_is_authoritative_while_guard_stays_enabled(tmp_path, event, amount):
+    from omegaconf import OmegaConf
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    custom = OmegaConf.to_yaml(OmegaConf.create({'llm': {'budget': {'enabled': False, 'daily_cny': amount}}}))
+    prepare(tmp_path, {'GITHUB_EVENT_NAME': event, 'PAPER_CONFIG': 'interests', 'CUSTOM_CONFIG': custom})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.llm.budget.daily_cny == amount
+    assert config.llm.budget.enabled is True and config.state.enabled
+    assert config.output.email.enabled and not config.output.rss.enabled
+    assert config.llm.generation_kwargs.max_tokens == 16384  # Invocation still enforces the reviewed 96-token ceiling.

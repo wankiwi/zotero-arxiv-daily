@@ -47,6 +47,14 @@ class Paper:
     summary_input_fallback: Optional[str] = None
     tldr_status: Optional[str] = None
     tldr_error: Optional[str] = None
+    tldr_error_reason: Optional[str] = None
+    authors_status: Optional[str] = None
+    affiliations_status: Optional[str] = None
+    authors_source: Optional[str] = None
+    authors_source_url: Optional[str] = None
+    affiliations_source: Optional[str] = None
+    affiliations_source_url: Optional[str] = None
+    metadata_recovery_attempts: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def summary_label(self):
@@ -118,9 +126,10 @@ class Paper:
         return requests.call(operation)
 
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict, requests=None) -> str:
-        self.tldr_error = None
+        self.tldr_error, self.tldr_error_reason = None, None
         if not self.abstract and (llm_params.get('input_mode', 'abstract') != 'full_text' or not self.full_text):
             self.tldr, self.tldr_status = '', 'not_generated'
+            self.tldr_error_reason = 'input_unavailable'
             return self.tldr
         try:
             tldr = self._generate_tldr_with_llm(openai_client,llm_params,requests)
@@ -129,6 +138,7 @@ class Paper:
             return tldr.strip()
         except Exception as e:
             self.tldr_error = 'budget_unavailable' if isinstance(e, BudgetUnavailable) else 'model_unavailable' if model_unavailable(e) else 'request_failed'
+            self.tldr_error_reason = e.reason if isinstance(e, BudgetUnavailable) else self.tldr_error
             # Do not log provider response bodies, account IDs or request payloads.
             if requests is None:
                 logger.warning(f'AI summary unavailable ({self.tldr_error}); using original abstract when available')

@@ -4,7 +4,7 @@ The entire daily allowance is consumed by one run, including failed calls and
 unused balance. This intentionally trades utilization for crash safety.
 """
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import json
 import os
 from pathlib import Path
@@ -16,7 +16,9 @@ from .llm import ModelRequests
 from loguru import logger
 
 class BudgetUnavailable(RuntimeError):
-    pass
+    def __init__(self, message, *, reason='budget_guard_unavailable'):
+        super().__init__(message)
+        self.reason = reason
 
 # Reviewed public provider contract: explicit non-thinking, peak CNY tariff.
 # Different endpoints/models fail closed; stale pricing warns and continues.
@@ -28,7 +30,6 @@ VERIFIED_PRICING = {
     'pricing_source': 'https://www.siliconflow.cn/pricing',
     'model_contract': 'https://api-docs.siliconflow.cn/docs/api/chat-completions-post',
 }
-MAX_DAILY_CNY = Decimal('0.20')
 PROMPT_BYTES = 768
 SYSTEM_BYTES = 256
 FRAMING_TOKENS = 128
@@ -41,8 +42,8 @@ def utc_day():
 
 def pricing_warning():
     if VERIFIED_PRICING and utc_day() > VERIFIED_PRICING['valid_through']:
-        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行每日 ¥0.20 记账额度；'
-                '若供应商涨价，实际费用可能超过估算及 ¥0.20，请尽快复核价格。'
+        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行配置的每日记账额度；'
+                '若供应商涨价，实际费用可能超过估算及配置额度，请尽快复核价格。'
                 ' Stale LLM pricing: estimates may understate actual charges.')
     return ''
 
@@ -51,9 +52,14 @@ def budget_plan(config):
     budget = config.get('budget', {})
     if budget.get('enabled', True) is not True:
         raise BudgetUnavailable('Budget guard disabled: paid calls prohibited, not unlimited')
-    cap = Decimal(str(budget.get('daily_cny', '0.20')))
-    if not cap.is_finite() or not 0 < cap <= MAX_DAILY_CNY:
-        raise BudgetUnavailable('Daily CNY budget must be positive and no more than 0.20')
+    # CUSTOM_CONFIG supplies the amount. Never replace it with a fixed ceiling
+    # or invent an allowance when the composed configuration omits it.
+    try:
+        cap = Decimal(str(budget.get('daily_cny')))
+    except (InvalidOperation, TypeError, ValueError):
+        raise BudgetUnavailable('Daily CNY budget must be an explicitly configured positive finite number') from None
+    if not cap.is_finite() or cap <= 0:
+        raise BudgetUnavailable('Daily CNY budget must be an explicitly configured positive finite number')
     if VERIFIED_PRICING is None:
         raise BudgetUnavailable('Exact provider pricing/non-thinking token bound is not verified; paid calls disabled')
     pricing = VERIFIED_PRICING
@@ -147,11 +153,11 @@ class BudgetRequests(ModelRequests):
         # terminal aborts before sending, not merely before precharging a slot.
         with self._budget_lock:
             if getattr(self, '_aborted', False):
-                raise BudgetUnavailable('Paid requests stopped after an unexpected billing response')
+                raise BudgetUnavailable('Paid requests stopped after an unexpected billing response', reason='billing_unverified')
             if utc_day() != self.day:
-                raise BudgetUnavailable('UTC day changed; no new request until a fresh run reserves that day')
+                raise BudgetUnavailable('UTC day changed; no new request until a fresh run reserves that day', reason='day_changed')
             if self.remaining < self.per_call:
-                raise BudgetUnavailable('Daily LLM budget exhausted; retaining original abstract')
+                raise BudgetUnavailable('Daily LLM budget exhausted; retaining original abstract', reason='daily_budget_exhausted')
             self.remaining -= self.per_call
             try:
                 return super().call(operation)
@@ -170,21 +176,21 @@ def prepare_budget(config):
 def audit_response(response, expected_model):
     """Unexpected metadata terminates queued calls; never refund uncertain billing."""
     if getattr(response, 'model', None) != expected_model:
-        raise BudgetUnavailable('Provider response model does not match reserved model')
+        raise BudgetUnavailable('Provider response model does not match reserved model', reason='billing_unverified')
     usage = getattr(response, 'usage', None)
     if usage is None:
-        raise BudgetUnavailable('Provider response has no billable usage metadata')
+        raise BudgetUnavailable('Provider response has no billable usage metadata', reason='billing_unverified')
     counts = [getattr(usage, key, None) for key in ('prompt_tokens', 'completion_tokens', 'total_tokens')]
     if any(type(count) is not int or count < 0 for count in counts):
-        raise BudgetUnavailable('Provider response usage is invalid')
+        raise BudgetUnavailable('Provider response usage is invalid', reason='billing_unverified')
     prompt, completion, total = counts
     details = getattr(usage, 'completion_tokens_details', None)
     reasoning = getattr(details, 'reasoning_tokens', 0) or 0
     if type(reasoning) is not int or reasoning != 0 or prompt > PROMPT_BYTES + SYSTEM_BYTES + FRAMING_TOKENS or completion > MAX_OUTPUT_TOKENS or total != prompt + completion:
-        raise BudgetUnavailable('Provider usage exceeded or contradicted the reserved bound')
+        raise BudgetUnavailable('Provider usage exceeded or contradicted the reserved bound', reason='billing_unverified')
     choices = getattr(response, 'choices', [])
     if len(choices) != 1 or getattr(choices[0].message, 'reasoning_content', None):
-        raise BudgetUnavailable('Provider unexpectedly emitted reasoning or extra choices')
+        raise BudgetUnavailable('Provider unexpectedly emitted reasoning or extra choices', reason='billing_unverified')
 
 
 def bootstrap_ledger():

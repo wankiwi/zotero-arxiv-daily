@@ -6,6 +6,7 @@ from .selection import GROUPS, paper_group
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, quote
+from collections import Counter
 
 
 def safe_url(value):
@@ -37,7 +38,7 @@ framework = '''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:11px;letter-spacing:2px;">ZOTERO · RESEARCH DIGEST</p>
 <h1 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;font-size:28px;line-height:1.2;">Daily Papers</h1>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:12px 0 0;font-size:14px;line-height:1.6;color:#dce5ee;">__COUNT__ · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers</p></td></tr>
-<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">Relevance uses text similarity weighted by when papers were added to your library. Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
+<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">__SCORING__ Library similarity weights papers by when they were added. Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
 __CONTENT__
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.7;color:#526174;">Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.</td></tr>
 </table><!--[if mso]></td></tr></table><![endif]-->
@@ -57,13 +58,15 @@ def get_block_html(title, authors, rate, tldr, pdf_url, affiliations=None, summa
     # Retain the keyword for callers, but never duplicate an original below an AI summary.
     if summary_label != 'AI summary' and original_abstract is not None:
         tldr = original_abstract
+    basis_note = (f'<br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">'
+                  f'Based on {escape(basis)} (abstract unavailable).</span>') if basis != 'abstract' else ''
     return f'''<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;table-layout:fixed;border:1px solid #dbe1e8;border-radius:8px;">
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px;overflow-wrap:anywhere;word-break:break-word;">
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 10px;color:#687589;font-size:12px;line-height:1.6;">{details}</p>
 <h2 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 12px;color:#253244;font-size:18px;line-height:1.4;">{heading}</h2>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 5px;color:#526174;font-size:13px;line-height:1.7;">{escape(authors or 'Authors unavailable')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 16px;color:#687589;font-size:12px;line-height:1.6;">{escape(affiliations or 'Unknown Affiliation')}</p>
-<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}/100</strong><br><span style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;color:#687589;font-size:12px;">Scored using {escape(basis)} similarity to {escape(interest_reference)}.</span></p>
+<p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:14px;line-height:1.7;color:#8e302c;"><strong>Relevance: {escape(str(rate))}/100</strong>{basis_note}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:12px;font-weight:bold;color:#526174;">{escape(summary_label)}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">{escape(tldr or 'No abstract available').replace(chr(10), '<br>')}</p>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;">{buttons}</p>{doi_line}
@@ -87,6 +90,18 @@ def email_summary(paper):
             return paper.abstract, f'Manuscript abstract ({paper.abstract_source})'
         if paper.tldr_status == 'not_generated' and not paper.tldr_error:
             return paper.abstract, 'Original abstract (AI summary not generated)'
+        reason = {
+            'daily_budget_exhausted': 'daily AI budget reached',
+            'day_changed': 'AI budget day changed',
+            'budget_guard_unavailable': 'AI budget unavailable',
+            'billing_unverified': 'AI billing verification failed',
+            'model_unavailable': 'AI model unavailable',
+            'request_failed': 'AI request failed',
+        }.get(paper.tldr_error_reason)
+        if not reason and paper.tldr_error == 'budget_unavailable':
+            reason = 'AI budget unavailable'
+        if reason:
+            return paper.abstract, f'Original abstract ({reason})'
         return paper.abstract, 'Original abstract (AI summary unavailable)'
     reasons = {
         'access_blocked': 'access blocked; no bypass attempted',
@@ -119,7 +134,51 @@ def email_summary(paper):
     return 'No abstract available' + ('. ' + '; '.join(details) if details else ''), 'Abstract unavailable'
 
 
-def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_action_origin=None) -> str:
+def percentage(weight):
+    return f'{weight:.1%}'.replace('.0%', '%')
+
+
+def scoring_explanation(papers, interest_weights=None):
+    weights = Counter((round(p.interest_keyword_weight, 6), round(p.interest_zotero_weight, 6)) for p in papers)
+    if not weights:
+        weights[tuple(interest_weights or (0., 1.))] = 0
+    if len(weights) == 1:
+        keyword, library = next(iter(weights))
+        parts = []
+        if keyword:
+            parts.append(f'keywords ({percentage(keyword)})')
+        if library:
+            parts.append(f'your library ({percentage(library)})')
+        text = 'Scored using abstract similarity to ' + ' and '.join(parts) + '.'
+    else:
+        parts = [f'{percentage(keyword)}/{percentage(library)} ({count} papers)'
+                 for (keyword, library), count in weights.items()]
+        text = 'Scored using abstract similarity with effective keyword/library weights: ' + '; '.join(parts) + '.'
+    if any(p.scoring_basis != 'abstract' for p in papers):
+        text += ' Title similarity is used where an abstract is unavailable.'
+    return text
+
+
+def metadata_label(paper, field):
+    status = getattr(paper, field + '_status')
+    noun = 'Authors' if field == 'authors' else 'Affiliations'
+    if paper.source == 'openreview' and status in ('not_public', 'anonymized'):
+        return f'{noun} withheld by OpenReview'
+    if status == 'access_blocked':
+        return f'{noun} unavailable (metadata access blocked)'
+    if status == 'not_provided':
+        return f'{noun} not provided in public metadata'
+    if status == 'doi_unavailable':
+        return f'{noun} unavailable (no verified DOI)'
+    if status == 'lookup_limit':
+        return f'{noun} unavailable (metadata lookup allowance reached)'
+    if status == 'lookup_failed':
+        return f'{noun} unavailable (metadata lookup failed)'
+    return 'Authors unavailable' if field == 'authors' else 'Unknown Affiliation'
+
+
+def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_action_origin=None,
+                 interest_weights=None) -> str:
     shorten_affiliations([], affiliation_max_chars)  # Validate even an empty digest.
     zotero_action_origin = confirmation_origin(zotero_action_origin)
     labels = {'journals': '期刊 / Journals', 'preprints': '预印本 / Preprints（含会议论文）', 'random': '随机推荐 / Random'}
@@ -147,11 +206,9 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
             if p.selection_score is not None and p.score is not None and p.selection_score != p.score:
                 metadata += f' · Selected at relevance {p.selection_score:.1f}/100; updated after abstract recovery'
             summary, summary_label = email_summary(p)
-            block = get_block_html(p.title, ', '.join(authors), round(p.score, 1) if p.score is not None else 'Unknown',
-                                   summary, p.pdf_url, affiliations, summary_label, number=number,
+            block = get_block_html(p.title, ', '.join(authors) or metadata_label(p, 'authors'), round(p.score, 1) if p.score is not None else 'Unknown',
+                                   summary, p.pdf_url, affiliations or metadata_label(p, 'affiliations'), summary_label, number=number,
                                    metadata=metadata, basis=p.scoring_basis, article_url=p.url, doi=p.doi,
-                                   interest_reference=(f"keywords ({p.interest_keyword_weight:.0%}) and your library ({p.interest_zotero_weight:.0%})"
-                                                       if p.interest_keyword_weight else "your library"),
                                    zotero_url=confirmation_link(p, zotero_action_origin))
             parts.append('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:0 0 16px;">' + block + '</td></tr>')
         if not parts:
@@ -167,14 +224,11 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
                    '<strong>LLM 费用提醒 / Pricing warning</strong><br>' + escape(warning) + '</td></tr>') + content
     count = f'{len(papers)} recommendation'  + ('' if len(papers) == 1 else 's')
     template = framework
-    if any(p.interest_keyword_weight for p in papers):
-        template = template.replace('Relevance uses text similarity weighted by when papers were added to your library.',
-                                    'Relevance combines semantic keyword similarity and library similarity at the weights shown on each card; library papers are weighted by when they were added.')
     if any(p.missing_abstract_factor < 1 for p in papers):
         template = template.replace('Scores are shown to one decimal place.',
             'Missing-abstract adjustment is applied before conversion to 0-100: in the original signed domain, positive values multiply '
             'by the stated factor and negative values divide by it. A factor of zero yields 0/100. Scores are shown to one decimal place.')
-    return template.replace('__COUNT__', count).replace('__CONTENT__', content)
+    return template.replace('__COUNT__', count).replace('__SCORING__', escape(scoring_explanation(papers, interest_weights))).replace('__CONTENT__', content)
 
 
 class _PlainEmail(HTMLParser):

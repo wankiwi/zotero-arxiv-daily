@@ -21,6 +21,8 @@ from .scores import minimum_score
 from .selection import quotas_for, select_papers, pending_batch, is_cover_title
 from .abstracts import clean_abstract, recover_abstracts, RecoveryContext, recovery_shortlist
 from time import monotonic
+from collections import Counter
+from .metadata import recover_metadata
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -52,6 +54,8 @@ class Executor:
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = None
         self.llm_blocked_reason = None
+        self.llm_blocked_code = None
+        self.effective_interest_weights = None
         self.model_requests = ModelRequests()
         self.library_dois, self.library_titles, self.library_titles_without_doi = set(), set(), set()
 
@@ -122,11 +126,12 @@ class Executor:
             if not paper.tldr:
                 paper.generate_tldr(self.openai_client, self.config.llm, self.model_requests)
         elif not paper.tldr:
-            paper.tldr_status, paper.tldr_error = 'not_generated', None
+            paper.tldr_status, paper.tldr_error, paper.tldr_error_reason = 'not_generated', None, None
             if getattr(self, 'llm_blocked_reason', None):
                 paper.tldr = paper.abstract
                 paper.tldr_status = 'fallback' if paper.abstract else 'not_generated'
                 paper.tldr_error = 'budget_unavailable'
+                paper.tldr_error_reason = getattr(self, 'llm_blocked_code', None) or 'budget_guard_unavailable'
         return paper
 
     def run(self):
@@ -170,7 +175,8 @@ class Executor:
             if pending or (self.config.executor.send_empty and not errors):
                 try:
                     send_email(self.config, render_email(pending, affiliation_max_chars=self.config.email.get('affiliation_max_chars', 180),
-                                                         zotero_action_origin=self.config.email.get('zotero_action_origin')))
+                                                         zotero_action_origin=self.config.email.get('zotero_action_origin'),
+                                                         interest_weights=self.effective_interest_weights))
                     logger.info(f'SMTP accepted {len(pending)} recommendations')
                     state.mark(pending, 'email')
                     state.save()
@@ -190,7 +196,7 @@ class Executor:
 
     def _recommend(self, state, errors, maximum, workers):
         corpus = self.filter_corpus(self.fetch_zotero_corpus())
-        interest_profile(self.config).effective_weights(bool(corpus))
+        self.effective_interest_weights = interest_profile(self.config).effective_weights(bool(corpus))
         if not corpus:
             logger.warning('No Zotero papers with abstracts matched; ranking by configured keywords only')
         candidates = []
@@ -251,12 +257,18 @@ class Executor:
             # New abstract vectors are encoded, unchanged reference vectors remain cached.
             # This mutates scores/basis only; do not redraw random picks or refill quotas.
             self.reranker.rerank(restored, corpus)
+        recover_metadata(ranked, self.config.get('metadata', {}), context=recovery_context)
+        logger.info(f'Paper metadata: {sum(not p.authors for p in ranked)}/{len(ranked)} authors unavailable; '
+                    f'{sum(not p.affiliations for p in ranked)}/{len(ranked)} affiliations unavailable; '
+                    f'author statuses={dict(Counter(p.authors_status or "unknown" for p in ranked if not p.authors))}; '
+                    f'affiliation statuses={dict(Counter(p.affiliations_status or "unknown" for p in ranked if not p.affiliations))}')
         if ranked and self.config.llm.get('enabled', True):
             try:
                 self.model_requests = prepare_budget(self.config.llm)
                 self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url, max_retries=0)
             except BudgetUnavailable as exc:
                 self.llm_blocked_reason = str(exc)
+                self.llm_blocked_code = exc.reason
                 logger.warning(f'LLM budget guard: {exc}')
         # Fork-based PDF extraction must run outside worker threads.
         if workers > 1 and self.config.llm.get('input_mode', 'abstract') != 'full_text':
@@ -268,9 +280,10 @@ class Executor:
         generated = sum(p.tldr_status == 'generated' for p in ranked)
         not_generated = sum(p.tldr_status == 'not_generated' and not p.tldr_error for p in ranked)
         if failed:
+            reasons = dict(Counter(p.tldr_error_reason or p.tldr_error for p in ranked if p.tldr_error))
             logger.warning(f'AI summary degradation: {failed}/{len(ranked)} unavailable; '
                            f'{generated} generated; original abstracts retained when available. '
-                           f'Model requests stopped={self.model_requests.unavailable}')
+                           f'Reasons={reasons}; model unavailable={self.model_requests.unavailable}')
         else:
             logger.info(f'AI summaries: {generated} generated; {not_generated} not generated')
         return ranked

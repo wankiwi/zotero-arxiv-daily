@@ -1,0 +1,984 @@
+{
+  "retrieved_on": "2026-10-05",
+  "sources": [
+    "https://api.crossref.org/works/{doi}",
+    "https://api.openalex.org/works/https://doi.org/{doi}"
+  ],
+  "cases": [
+    {
+      "doi": "10.1038/s41557-026-02262-y",
+      "title": "Linking vibrational energetics to carbon isotope separation in CO2 electrolysis",
+      "crossref": {
+        "message": {
+          "DOI": "10.1038/s41557-026-02262-y",
+          "title": [
+            "Linking vibrational energetics to carbon isotope separation in CO2 electrolysis"
+          ],
+          "type": "journal-article",
+          "author": []
+        }
+      },
+      "openalex": {
+        "doi": "https://doi.org/10.1038/s41557-026-02262-y",
+        "title": "Linking vibrational energetics to carbon isotope separation in CO2 electrolysis",
+        "display_name": "Linking vibrational energetics to carbon isotope separation in CO2 electrolysis",
+        "authorships": []
+      }
+    },
+    {
+      "doi": "10.1038/s41570-026-00882-z",
+      "title": "Distinguishing single-site from single-atom catalysts",
+      "crossref": {
+        "message": {
+          "DOI": "10.1038/s41570-026-00882-z",
+          "title": [
+            "Distinguishing single-site from single-atom catalysts"
+          ],
+          "author": [
+            {
+              "given": "Aiqin",
+              "family": "Wang",
+              "affiliation": []
+            },
+            {
+              "given": "Botao",
+              "family": "Qiao",
+              "affiliation": []
+            },
+            {
+              "given": "Xiaofeng",
+              "family": "Yang",
+              "affiliation": []
+            },
+            {
+              "given": "Yanqiang",
+              "family": "Huang",
+              "affiliation": []
+            },
+            {
+              "given": "Graham J.",
+              "family": "Hutchings",
+              "affiliation": []
+            },
+            {
+              "given": "Tao",
+              "family": "Zhang",
+              "affiliation": []
+            }
+          ],
+          "type": "journal-article"
+        }
+      },
+      "openalex": {
+        "doi": "https://doi.org/10.1038/s41570-026-00882-z",
+        "title": "Distinguishing single-site from single-atom catalysts",
+        "display_name": "Distinguishing single-site from single-atom catalysts",
+        "authorships": [
+          {
+            "author": {
+              "display_name": "Aiqin Wang"
+            },
+            "institutions": [
+              {
+                "display_name": "Dalian Institute of Chemical Physics"
+              },
+              {
+                "display_name": "Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "State Key Laboratory of Catalysis"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Catalysis, Dalian Institute of Chemical Physics, Chinese Academy of Sciences, Dalian, Liaoning, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Botao Qiao"
+            },
+            "institutions": [
+              {
+                "display_name": "Dalian Institute of Chemical Physics"
+              },
+              {
+                "display_name": "Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "State Key Laboratory of Catalysis"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Catalysis, Dalian Institute of Chemical Physics, Chinese Academy of Sciences, Dalian, Liaoning, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Xiaofeng Yang"
+            },
+            "institutions": [
+              {
+                "display_name": "Dalian Institute of Chemical Physics"
+              },
+              {
+                "display_name": "Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "State Key Laboratory of Catalysis"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Catalysis, Dalian Institute of Chemical Physics, Chinese Academy of Sciences, Dalian, Liaoning, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Yanqiang Huang"
+            },
+            "institutions": [
+              {
+                "display_name": "Dalian Institute of Chemical Physics"
+              },
+              {
+                "display_name": "Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "State Key Laboratory of Catalysis"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Catalysis, Dalian Institute of Chemical Physics, Chinese Academy of Sciences, Dalian, Liaoning, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Graham John Hutchings"
+            },
+            "institutions": [
+              {
+                "display_name": "Cardiff University"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Cardiff Catalysis Institute, Department of Chemistry, School of Physical Chemical and Environmental Sciences, Cardiff University, Translational Research Hub, Cardiff, UK. hutch@cf.ac.uk"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Tao Zhang"
+            },
+            "institutions": [
+              {
+                "display_name": "Dalian Institute of Chemical Physics"
+              },
+              {
+                "display_name": "Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "University of Chinese Academy of Sciences"
+              },
+              {
+                "display_name": "State Key Laboratory of Catalysis"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Catalysis, Dalian Institute of Chemical Physics, Chinese Academy of Sciences, Dalian, Liaoning, China. taozhang@dicp.ac.cn",
+              "University of Chinese Academy of Sciences, Beijing, China. taozhang@dicp.ac.cn"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "doi": "10.1038/s41586-026-11083-5",
+      "title": "Author Correction: Proteasome-guided haem signalling axis contributes to T cell exhaustion",
+      "crossref": {
+        "message": {
+          "DOI": "10.1038/s41586-026-11083-5",
+          "title": [
+            "Author Correction: Proteasome-guided haem signalling axis contributes to T cell exhaustion"
+          ],
+          "author": [
+            {
+              "given": "Yingxi",
+              "family": "Xu",
+              "affiliation": []
+            },
+            {
+              "given": "Yangtao",
+              "family": "Shangguan",
+              "affiliation": []
+            },
+            {
+              "given": "Yu-Ming",
+              "family": "Chuang",
+              "affiliation": []
+            },
+            {
+              "given": "Tzu-Hsuan",
+              "family": "Chang",
+              "affiliation": []
+            },
+            {
+              "given": "Wenbing",
+              "family": "Liu",
+              "affiliation": []
+            },
+            {
+              "given": "Jhan-Jie",
+              "family": "Peng",
+              "affiliation": []
+            },
+            {
+              "given": "Josep",
+              "family": "Garnica",
+              "affiliation": []
+            },
+            {
+              "given": "Leling",
+              "family": "Xie",
+              "affiliation": []
+            },
+            {
+              "given": "Pei-Chun",
+              "family": "Hsueh",
+              "affiliation": []
+            },
+            {
+              "given": "Mei-Chun",
+              "family": "Lin",
+              "affiliation": []
+            },
+            {
+              "given": "Yi-Hao",
+              "family": "Wang",
+              "affiliation": []
+            },
+            {
+              "given": "Karina Lobo",
+              "family": "Hajdu",
+              "affiliation": []
+            },
+            {
+              "given": "Yibo",
+              "family": "Wu",
+              "affiliation": []
+            },
+            {
+              "given": "Maryam",
+              "family": "Akrami",
+              "affiliation": []
+            },
+            {
+              "given": "Chen",
+              "family": "Wang",
+              "affiliation": []
+            },
+            {
+              "given": "Anna",
+              "family": "Kohl",
+              "affiliation": []
+            },
+            {
+              "given": "Alfred",
+              "family": "Zippelius",
+              "affiliation": []
+            },
+            {
+              "given": "Wei",
+              "family": "Qi",
+              "affiliation": []
+            },
+            {
+              "given": "Min",
+              "family": "Wang",
+              "affiliation": []
+            },
+            {
+              "given": "Bugi Ratno",
+              "family": "Budiarto",
+              "affiliation": []
+            },
+            {
+              "given": "Shih-Yu",
+              "family": "Chen",
+              "affiliation": []
+            },
+            {
+              "given": "Zhengtao",
+              "family": "Xiao",
+              "affiliation": []
+            },
+            {
+              "given": "Panagiota",
+              "family": "Vardaka",
+              "affiliation": []
+            },
+            {
+              "given": "Rahul",
+              "family": "Roychoudhuri",
+              "affiliation": []
+            },
+            {
+              "given": "Zhiliang",
+              "family": "Bai",
+              "affiliation": []
+            },
+            {
+              "given": "Rong",
+              "family": "Fan",
+              "affiliation": []
+            },
+            {
+              "given": "Santiago",
+              "family": "Carmona",
+              "affiliation": []
+            },
+            {
+              "given": "Yi-Ru",
+              "family": "Yu",
+              "affiliation": []
+            },
+            {
+              "given": "Christoph",
+              "family": "Scheiermann",
+              "affiliation": []
+            },
+            {
+              "given": "Jianxiang",
+              "family": "Wang",
+              "affiliation": []
+            },
+            {
+              "given": "Ping-Chih",
+              "family": "Ho",
+              "affiliation": []
+            }
+          ],
+          "type": "journal-article"
+        }
+      },
+      "openalex": {
+        "doi": "https://doi.org/10.1038/s41586-026-11083-5",
+        "title": "Author Correction: Proteasome-guided haem signalling axis contributes to T cell exhaustion",
+        "display_name": "Author Correction: Proteasome-guided haem signalling axis contributes to T cell exhaustion",
+        "authorships": [
+          {
+            "author": {
+              "display_name": "Yingxi Xu"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland. xuyingxi@ihcams.ac.cn",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland. xuyingxi@ihcams.ac.cn",
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China. xuyingxi@ihcams.ac.cn",
+              "Tianjin Institutes of Health Science, Tianjin, China. xuyingxi@ihcams.ac.cn"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Yangtao Shangguan"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China",
+              "Tianjin Institutes of Health Science, Tianjin, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Yu‐Ming Chuang"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Tzu-Hsuan Chang"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Wenbing Liu"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China",
+              "Tianjin Institutes of Health Science, Tianjin, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Jhan-Jie Peng"
+            },
+            "institutions": [
+              {
+                "display_name": "Chang Gung University"
+              },
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Center for Molecular and Clinical Immunology, Chang Gung University, Taoyuan, Taiwan",
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Graduate Institute of Clinical Medical Sciences, Chang Gung University, Taoyuan, Taiwan",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Josep Garnica"
+            },
+            "institutions": [
+              {
+                "display_name": "SIB Swiss Institute of Bioinformatics"
+              },
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland",
+              "Swiss Institute of Bioinformatics, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Leling Xie"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China",
+              "Tianjin Institutes of Health Science, Tianjin, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Pei‐Chun Hsueh"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Mei-Chun Lin"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "National Taiwan University Hospital"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Department of Otolaryngology, National Taiwan University Hospital, Taipei, Taiwan",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Yihao Wang"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Karina Lôbo Hajdu"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Yibo Wu"
+            },
+            "institutions": [
+              {
+                "display_name": "University of Geneva"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Chemical Biology Mass Spectrometry Platform (CHEMBIOMS), Faculty of Sciences, University of Geneva, Geneva, Switzerland",
+              "Department of Biomedical Sciences, University of Lausanne, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Maryam Akrami"
+            },
+            "institutions": [
+              {
+                "display_name": "University of Basel"
+              },
+              {
+                "display_name": "University Hospital of Basel"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Laboratory of Cancer Immunology, Department of Biomedicine, University of Basel and University Hospital of Basel, Basel, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Chen Wang"
+            },
+            "institutions": [
+              {
+                "display_name": "University of Geneva"
+              },
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Suzhou Institute of Systems Medicine"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Pathology and Immunology, Faculty of Medicine, University of Geneva, Geneva, Switzerland",
+              "Geneva Centre for Inflammation Research, Geneva, Switzerland",
+              "National Key Laboratory of Immunity and Inflammation, Suzhou Institute of Systems Medicine, Chinese Academy of Medical Sciences & Peking Union Medical College, Suzhou, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Anna Kohl"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Alfred Zippelius"
+            },
+            "institutions": [
+              {
+                "display_name": "University of Basel"
+              },
+              {
+                "display_name": "University Hospital of Basel"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Laboratory of Cancer Immunology, Department of Biomedicine, University of Basel and University Hospital of Basel, Basel, Switzerland",
+              "Medical Oncology, University Hospital Basel, Basel, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Wei Qi"
+            },
+            "institutions": [],
+            "raw_affiliation_strings": [
+              "Novogene Co. Ltd, Beijing, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Min Wang"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China",
+              "Tianjin Institutes of Health Science, Tianjin, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Bugi Ratno Budiarto"
+            },
+            "institutions": [
+              {
+                "display_name": "National Yang Ming Chiao Tung University"
+              },
+              {
+                "display_name": "Institute of Biomedical Sciences, Academia Sinica"
+              },
+              {
+                "display_name": "Academia Sinica"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Institute of Biomedical Sciences, Academia Sinica, Taipei, Taiwan",
+              "Taiwan International Graduate Program in Molecular Medicine, National Yang Ming Chiao Tung University and Academia Sinica, Taipei, Taiwan"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Shih‐Yu Chen"
+            },
+            "institutions": [
+              {
+                "display_name": "Institute of Biomedical Sciences, Academia Sinica"
+              },
+              {
+                "display_name": "Academia Sinica"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Institute of Biomedical Sciences, Academia Sinica, Taipei, Taiwan"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Zhengtao Xiao"
+            },
+            "institutions": [
+              {
+                "display_name": "Xi'an Jiaotong University"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "School of Basic Medical Sciences, Xi'an Jiaotong University, Xi'an, China"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Panagiota Vardaka"
+            },
+            "institutions": [
+              {
+                "display_name": "Babraham Institute"
+              },
+              {
+                "display_name": "University of Cambridge"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Pathology, University of Cambridge, Cambridge, UK",
+              "Laboratory of Lymphocyte Signaling and Development, Babraham Institute, Cambridge, UK"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Rahul Roychoudhuri"
+            },
+            "institutions": [
+              {
+                "display_name": "Babraham Institute"
+              },
+              {
+                "display_name": "University of Cambridge"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Pathology, University of Cambridge, Cambridge, UK",
+              "Laboratory of Lymphocyte Signaling and Development, Babraham Institute, Cambridge, UK"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Zhiliang Bai"
+            },
+            "institutions": [
+              {
+                "display_name": "Yale University"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Biomedical Engineering, Yale University, New Haven, CT, USA"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Rong Fan"
+            },
+            "institutions": [
+              {
+                "display_name": "Yale University"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Biomedical Engineering, Yale University, New Haven, CT, USA"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Santiago J. Carmona"
+            },
+            "institutions": [
+              {
+                "display_name": "SIB Swiss Institute of Bioinformatics"
+              },
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland",
+              "Swiss Institute of Bioinformatics, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "YU Yi-ru"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Christoph Scheiermann"
+            },
+            "institutions": [
+              {
+                "display_name": "University of Geneva"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Department of Pathology and Immunology, Faculty of Medicine, University of Geneva, Geneva, Switzerland",
+              "Geneva Centre for Inflammation Research, Geneva, Switzerland"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Jianxiang Wang"
+            },
+            "institutions": [
+              {
+                "display_name": "Chinese Academy of Medical Sciences & Peking Union Medical College"
+              },
+              {
+                "display_name": "Institute of Hematology & Blood Diseases Hospital"
+              },
+              {
+                "display_name": "State Key Laboratory of Experimental Hematology"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "State Key Laboratory of Experimental Hematology, National Clinical Research Center for Blood Diseases, Institute of Hematology and Blood Diseases Hospital, Chinese Academy of Medical Sciences and Peking Union Medical College, Tianjin, China. wangjx@ihcams.ac.cn",
+              "Tianjin Institutes of Health Science, Tianjin, China. wangjx@ihcams.ac.cn"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Ping‐Chih Ho"
+            },
+            "institutions": [
+              {
+                "display_name": "Ludwig Cancer Research"
+              },
+              {
+                "display_name": "Taipei Medical University"
+              },
+              {
+                "display_name": "University of Lausanne"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "College of Medical Science and Technology, Taipei Medical University, Taipei, Taiwan. ping-chih.ho@unil.ch",
+              "Department of Oncology, University of Lausanne, Lausanne, Switzerland. ping-chih.ho@unil.ch",
+              "Ludwig Institute for Cancer Research Lausanne branch, Lausanne, Switzerland. ping-chih.ho@unil.ch"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "doi": "10.1038/s43588-026-01059-w",
+      "title": "Towards a chemistry genome",
+      "crossref": {
+        "message": {
+          "DOI": "10.1038/s43588-026-01059-w",
+          "title": [
+            "Towards a chemistry genome"
+          ],
+          "author": [
+            {
+              "given": "Thomas",
+              "family": "Bligaard",
+              "affiliation": []
+            },
+            {
+              "given": "Benjamin Thomas",
+              "family": "Hinrichsen",
+              "affiliation": []
+            }
+          ],
+          "type": "journal-article"
+        }
+      },
+      "openalex": {
+        "doi": "https://doi.org/10.1038/s43588-026-01059-w",
+        "title": "Towards a chemistry genome",
+        "display_name": "Towards a chemistry genome",
+        "authorships": [
+          {
+            "author": {
+              "display_name": "Thomas Bligaard"
+            },
+            "institutions": [
+              {
+                "display_name": "Technical University of Denmark"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "Catalysis Theory Center, Department of Energy Conversion and Storage, Technical University of Denmark, Lyngby, Denmark. tbli@dtu.dk"
+            ]
+          },
+          {
+            "author": {
+              "display_name": "Benjamin Thomas Hinrichsen"
+            },
+            "institutions": [
+              {
+                "display_name": "Technical University of Denmark"
+              }
+            ],
+            "raw_affiliation_strings": [
+              "VISION - Center for Visualizing Catalytic Processes, Department of Physics, Technical University of Denmark, Lyngby, Denmark"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

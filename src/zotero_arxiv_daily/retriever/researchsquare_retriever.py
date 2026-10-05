@@ -7,6 +7,7 @@ from .journal_retriever import clean_text, crossref_date
 from ..http import session
 from ..identity import canonical_doi, deduplicate, normalize_doi
 from ..protocol import Paper
+from ..metadata import crossref_metadata
 from .openalex_researchsquare import OpenAlexResearchSquare
 
 
@@ -96,9 +97,9 @@ class ResearchSquareRetriever(BaseRetriever):
             return None
         if not doi or not title:
             return None
-        authors = [' '.join(filter(None, (author.get('given'), author.get('family')))) or author.get('name', '')
-                   for author in raw_paper.get('author', [])]
+        authors, affiliations = crossref_metadata(raw_paper)
         return Paper(source=self.name, title=title, authors=[name for name in authors if name],
+                     affiliations=affiliations or None,
                      abstract=clean_text(raw_paper.get('abstract')),
                      url=f'https://doi.org/{doi}', pdf_url=None, full_text=None,
                      doi=doi, published=posted_date(raw_paper))

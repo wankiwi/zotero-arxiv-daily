@@ -123,6 +123,12 @@ def deduplicate(papers):
                     setattr(previous, field, getattr(paper, field))
                     if field == 'abstract':
                         previous.abstract_source = paper.abstract_source
+            if title_key(previous.title) == title:
+                for field in ('authors', 'affiliations'):
+                    if not getattr(previous, field) and getattr(paper, field):
+                        setattr(previous, field, list(getattr(paper, field)))
+                        for suffix in ('_status', '_source', '_source_url'):
+                            setattr(previous, field + suffix, getattr(paper, field + suffix))
             keys[key] = previous
             keys[paper_id(previous)] = previous
             previous.related_dois = sorted(aliases - {paper_doi(previous)})

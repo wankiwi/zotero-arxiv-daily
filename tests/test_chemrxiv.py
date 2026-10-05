@@ -157,7 +157,7 @@ def test_schedule_explicit_opt_in_preserves_other_source_filters(tmp_path,enable
     assert list(cfg.preprint_interests.chemrxiv.keywords)==(['molecular'] if keywords=='[molecular]' else [])
     assert list(cfg.preprint_interests.openreview.venues)==['ICLR','NeurIPS','ICML','TMLR','CoRL']
     assert dict(cfg.executor.quotas)=={'journals':25,'preprints':15,'random':5}
-    assert not cfg.output.rss.enabled and cfg.llm.budget.daily_cny==0.2
+    assert not cfg.output.rss.enabled and cfg.llm.budget.daily_cny==0.3
 
 
 def test_indexed_cursor_does_not_stop_on_out_of_window_page(config,monkeypatch):

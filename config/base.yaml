@@ -72,7 +72,7 @@ llm:
   input_mode: abstract # abstract (default) or full_text with explicit fallback.
   budget:
     enabled: true # Fail closed unless provider pricing and token bounds are verified.
-    daily_cny: 0.20
+    daily_cny: 0.30
   enabled: true
   api:
     key: ??? # API Key of your LLM API. Example: sk-xxx
@@ -142,6 +142,11 @@ state:
   retention_days: 90
 
 # Optional semantic ranking interests; empty preserves Zotero-only ranking.
+metadata:
+  enabled: true
+  max_papers: 50 # Missing selected-paper authors/affiliations only; exact DOI and title.
+  max_seconds: 90 # No paid enrichment or identity/profile searches.
+
 interest_profile:
   keywords: []
   keyword_weight: 0.6

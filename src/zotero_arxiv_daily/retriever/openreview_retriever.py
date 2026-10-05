@@ -10,6 +10,7 @@ from ..http import session
 from ..protocol import Paper
 from ..abstracts import clean_abstract
 from ..preprint_interests import keyword_text, _terms
+from ..metadata import names
 
 API = 'https://api2.openreview.net'
 VENUES = {'ICLR': 'ICLR.cc/{year}/Conference', 'NeurIPS': 'NeurIPS.cc/{year}/Conference',
@@ -227,8 +228,24 @@ class OpenReviewRetriever(BaseRetriever):
         count('subject_match')
         logger.debug(f'OpenReview {note["id"]}: {reason}')
         identity = quote(note['id'], safe='')
+        authors = names(strings(value(content, 'authors', [])))
+        anonymous = {'anonymous', 'anonymous author', 'anonymous authors', 'anon'}
+        anonymized = bool(authors) and all(a.casefold() in anonymous for a in authors)
+        authors = [] if anonymized else authors
+        authors_status = ('anonymized' if anonymized else 'provided' if authors else
+                          'not_public' if 'authors' in note['content'] and 'authors' not in content else 'not_provided')
+        affiliation_keys = ('affiliations', 'author_affiliations')
+        affiliations = names([text for key in affiliation_keys for text in strings(value(content, key, []))])
+        affiliations_status = ('provided' if affiliations else 'not_public'
+            if any(key in note['content'] and key not in content for key in affiliation_keys) else 'not_provided')
+        metadata_url = API + '/notes?id=' + identity
         return Paper(source='openreview', title=title, abstract=abstract,
-                     authors=strings(value(content, 'authors', [])), url='https://openreview.net/forum?id=' + identity,
+                     authors=authors, affiliations=affiliations or None,
+                     authors_status=authors_status, affiliations_status=affiliations_status,
+                     authors_source='OpenReview' if authors else None, authors_source_url=metadata_url if authors else None,
+                     affiliations_source='OpenReview' if affiliations else None,
+                     affiliations_source_url=metadata_url if affiliations else None,
+                     url='https://openreview.net/forum?id=' + identity,
                      pdf_url='https://openreview.net/pdf?id=' + identity if value(content, 'pdf') else None,
                      published=published, subject_match_reason=reason, abstract_source='OpenReview' if abstract else None,
                      publication_kind=kind, publication_status=status, publication_venue=group,
