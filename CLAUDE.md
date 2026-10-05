@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zotero-arXiv-Daily recommends new journal, arXiv/bioRxiv/medRxiv, Research Square and OpenReview papers based on a user's Zotero library. It computes embedding similarity between new papers and the user's existing library, generates TLDRs via LLM, and delivers results by email. Designed to run in GitHub Actions. LLM calls use a durable CNY0.20 daily estimated budget; stale prices warn and continue under the configured policy.
+Zotero-arXiv-Daily recommends new journal, arXiv/bioRxiv/medRxiv, Research Square and OpenReview papers based on a user's Zotero library. It computes embedding similarity between new papers and the user's existing library, generates TLDRs via LLM, and delivers results by email. Designed to run in GitHub Actions. LLM calls use a durable CNY0.30 daily estimated budget; stale prices warn and continue under the configured policy.
 
 ## Commands
 

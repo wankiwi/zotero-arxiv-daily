@@ -37,8 +37,30 @@ existing conservative bound, each request precharges
 46 × ¥0.004320 = ¥0.198720, leaving ¥0.001280. The last four papers have all the
 expected budget fallback fields. An offline concurrent replay of the actual
 guard reproduces 46 successful synthetic summaries and four budget fallbacks.
-This is expected budget behavior; no reservation, token bound, tariff, daily
-limit or refund policy is relaxed by this change.
+`Model requests stopped=False` in the old log only reports the model-unavailable
+flag, not the remaining budget. `BudgetRequests.call` checks and decrements its
+own balance before dispatch, without setting that flag on exhaustion. The
+stored per-paper error, durable reservation and concurrent replay agree. The
+PR now logs per-reason counts (for this replay, `daily_budget_exhausted: 4`),
+and calls the independent flag `model unavailable`.
+
+After reviewing this evidence, the user explicitly authorized a **CNY0.30**
+daily estimated cap on October 5. Fifty unchanged reservations cost CNY0.216,
+leaving CNY0.084. The PR changes the default, hard maximum and mandatory workflow
+budget override to 0.30, without reducing input/output tokens or changing
+thinking, tariff, whole-day reservation, no-refund policy or prior ledger entries.
+An existing CNY0.20 claim still blocks a same-UTC-day rerun at the new cap;
+there is no top-up or fresh grant for an already reserved day. Missing usable
+input or API errors can still prevent a summary despite sufficient budget.
+
+The GitHub Actions repository **variable** `CUSTOM_CONFIG` was safely updated
+from 0.20 to 0.30 and read back. Only the `llm.budget.daily_cny` scalar changed;
+every other configuration byte was preserved. No literal credentials were
+present in the variable and no secrets were accessed or updated. Quotas remain
+25/20/5, weights 0.4/0.6. **Main still forces a 0.20 runtime budget** in
+`scripts/prepare_workflow.py`, so the stored variable is 0.30 while production
+runtime remains 0.20 until this PR is explicitly approved and merged. No merge,
+workflow dispatch, paid validation or extra production email was performed.
 
 Pre-ranking abstract recovery recovered 12/25 candidates. Publisher access was
 blocked and Semantic Scholar returned HTTP 429. Those broader candidate recovery
@@ -60,12 +82,23 @@ are retained in `tests/fixtures/oct5_public_metadata.json` for offline replay.
 | `10.1038/s41570-026-00882-z` | 6 | 0 | Affiliations recovered |
 | `10.1038/s41586-026-11083-5` | 31 | 0 | Affiliations recovered; this is a correction notice |
 
-The public request `GET https://api2.openreview.net/notes?id=A9wPaTiqh0`
+The **unauthenticated local** request `GET https://api2.openreview.net/notes?id=A9wPaTiqh0`
 returned **HTTP 403**. Diagnostic requests to that provider were then stopped,
 with no alternate routes or identities attempted. The stored digest has neither
 the original note payloads nor field ACLs. Consequently the precise reason for
 each of the 24 missing OpenReview identities cannot be proved from available
-evidence: do not describe all of them as confirmed anonymous submissions.
+evidence: do not describe all of them as confirmed anonymous submissions or
+assume that production credentials failed. The production job's environment
+shows both OpenReview credential variables present and masked; no values were
+read. The released retriever authenticates through `/login` before reading notes,
+and login rejection aborts that source. It produced these 24 new OpenReview
+records, with no logged login/access failure. Together those facts establish
+successful authenticated production retrieval, despite the separate local 403.
+The released converter already reads public `authors`, so an omitted authors
+extraction step is not established for these papers. Explicit public affiliation
+fields were not read before this PR. The stored output cannot distinguish absent
+fields, field ACL restrictions or anonymous placeholder values for individual
+papers; future persisted status codes will make those cases visible.
 Resolving that uncertainty requires an authorized official API response exposing
 the relevant *public* fields. Restricted fields must remain excluded even when
 the production client authenticates successfully.
@@ -74,8 +107,23 @@ The fourth journal is “Author Correction: Proteasome-guided haem signalling ax
 contributes to T cell exhaustion”. Its 166-character stored abstract is only
 `Nature, Published online: ...; doi:...` followed by the title. It did not get
 an AI summary in this run because it was also one of the four budget fallbacks.
-The existing correction filter missed the `Author Correction:` prefix, and RSS
-conversion treated the publication notice as abstract input.
+RSS conversion treated the publication notice as abstract input. It is now
+removed while preserving this paper and any substantive text. The PR initially
+broadened the existing title filter to Author/Publisher Correction prefixes;
+that unintended scope change has been reverted in both RSS and Crossref paths.
+The original main-branch filters and cover exclusion are retained, with no new
+blanket correction, news or reply exclusion.
+
+The duplicate merge bug is reproducible: `_journal` puts Crossref records before
+publisher RSS; `deduplicate` kept the first record and filled only abstract,
+full text, PDF URL and DOI. It dropped authors/affiliations present only in a
+later same-title, same-DOI/version record. The fix fills those missing metadata
+fields with their provenance, without overwriting existing data or borrowing
+across versions. No raw duplicate records from this production run were retained.
+Therefore **zero of today's missing authors are proven recoverable by this
+merge fix**. The four public DOI fixtures prove three affiliation recoveries,
+zero new authors; the authorless Nature Chemistry record is also authorless in
+both Crossref and OpenAlex.
 
 ## Changes
 
@@ -94,14 +142,17 @@ conversion treated the publication notice as abstract input.
 - Read explicit public OpenReview affiliations and distinguish provided,
   missing, nonpublic and anonymous authors. Apply note and field ACLs before
   reading identity fields; do not deanonymize missing authors through searches.
-- Filter Author/Publisher Correction notices and strip precise RSS publication
-  boilerplate plus a repeated title from summary input.
+- Retain the original article filters and strip precise RSS publication
+  boilerplate plus a repeated title from summary input, preserving papers and
+  substantive abstracts, including Author/Publisher Corrections, news and replies.
 - Persist safe summary failure reason codes and display budget, billing, model
   or request degradation without provider response bodies. Only a successful
   generated summary hides the original abstract.
 - Put one scoring explanation before the email cards, using their recorded
   effective weights. Handle keyword-only, library-only, empty and mixed pending
   digests. Retain a short per-paper title-only basis note when necessary.
+- Apply the newly authorized CNY0.30 estimated daily budget in local defaults
+  and workflow policy; retain all existing reservations and delivery history.
 
 The reconstructed historical 50-paper digest has 25 authors and 25 affiliations
 still unavailable after three verified affiliation recoveries. This replay
@@ -114,18 +165,18 @@ modified by the replay.
 - Red reproduction on the released source: `tests/test_oct5_regressions.py`
   produced 19 failures and eight passes before fixes.
 - Locked-dependency suite: `uv run --frozen pytest --cov=src/zotero_arxiv_daily
-  --cov-report=term-missing` — **798 passed, one slow model-download test
-  deselected**, 90.2538% total statement coverage (3556/3940 statements).
-- The 46 newly added cases cover empty responses, incomplete pagination,
+  --cov-report=term-missing` — **812 passed, one slow model-download test
+  deselected**, 90.2513% total statement coverage (3555/3939 statements).
+- The 60 newly added cases cover empty responses, incomplete pagination,
   transport acceptance and repeat-run history, actual public metadata fixtures,
   identity/version mismatches, provider refusals, limits, field ACLs, budget
   capacity, original-abstract retention, and HTML/plain-text header placement.
 - `uvx ruff check --select F401,F821,F841 src scripts tests` and
   `git diff --check` pass.
 
-The workflow, encrypted-cache implementation, Jina PyTorch model, score
+Workflow scheduling, the encrypted-cache implementation, Jina PyTorch model, score
 conversion, quotas, configured weights, UTC 19:17 schedule, Asia/Singapore subject
 date, RSS/Pages policy, Aptos single-column styling and Zotero confirmation link
-are retained. GitHub CUSTOM_CONFIG was checked read-only, printing only these
-nonsecret settings. No credentials, local memory, secrets, production state,
+are retained. Only the explicitly authorized nonsecret CUSTOM_CONFIG budget
+scalar was changed. No credentials, local memory, secrets, production state,
 paid diagnostic calls, merge or deployment are changed or performed.

@@ -132,17 +132,43 @@ def test_rss_boilerplate_and_repeated_title_are_not_summary_input(config, monkey
     assert papers[0].abstract == expected
 
 
-def test_author_correction_feed_is_not_selected_as_a_research_article(config, monkeypatch):
+@pytest.mark.parametrize('title', [
+    'Author Correction: A molecular study', 'Publisher Correction: A molecular study',
+    'News: A molecular study', 'Reply to a molecular study',
+])
+@pytest.mark.parametrize('body', ['', 'Substantive scientific evidence.'])
+def test_notices_and_replies_remain_in_rss_with_only_boilerplate_removed(config, monkeypatch, title, body):
     r = JournalRetriever(config)
     now = datetime.now(timezone.utc)
     import feedparser
     from time import gmtime
-    entry = {'title': 'Author Correction: A molecular study', 'link': 'https://doi.org/10.1038/correction',
-             'published_parsed': gmtime(now.timestamp()), 'summary': 'Only a correction title'}
+    doi = '10.1038/correction'
+    entry = {'title': title, 'link': 'https://doi.org/' + doi,
+             'published_parsed': gmtime(now.timestamp()),
+             'summary': f'Nature, Published online: 4 October 2026; doi:{doi} {title} {body}'}
     monkeypatch.setattr(feedparser, 'parse', lambda _: SimpleNamespace(bozo=False, entries=[entry]))
     client = SimpleNamespace(get=lambda *a, **kw: SimpleNamespace(raise_for_status=lambda: None, content=b'fixture'))
-    assert r._rss(Journal('nature', 'Nature', ('0028-0836',), 'https://www.nature.com/nature.rss'),
-                  client, now-timedelta(days=1), now+timedelta(seconds=1)) == []
+    papers = r._rss(Journal('nature', 'Nature', ('0028-0836',), 'https://www.nature.com/nature.rss'),
+                    client, now-timedelta(days=1), now+timedelta(seconds=1))
+    assert len(papers) == 1 and papers[0].title == title
+    assert papers[0].abstract == body
+
+
+@pytest.mark.parametrize('title', [
+    'Author Correction: A molecular study', 'Publisher Correction: A molecular study',
+    'News: A molecular study', 'Reply to a molecular study',
+])
+def test_crossref_title_filters_do_not_expand_to_author_publisher_corrections_or_replies(config, title):
+    r = JournalRetriever(config)
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    item = {'title': [title], 'DOI': '10.1038/correction', 'ISSN': ['0028-0836'],
+            'published': {'date-parts': [[2026, 10, 4]]}, 'abstract': 'Substantive evidence.'}
+    client = SimpleNamespace(get=lambda *a, **kw: SimpleNamespace(raise_for_status=lambda: None,
+                             json=lambda: {'message': {'items': [item]}}))
+    papers = r._crossref(Journal('nature', 'Nature', ('0028-0836',)),
+                         client, now-timedelta(days=1), now+timedelta(days=1))
+    assert len(papers) == 1 and papers[0].title == title
+    assert papers[0].abstract == 'Substantive evidence.'
 
 
 def test_header_scoring_explanation_occurs_once_and_uses_effective_weights():
@@ -211,13 +237,15 @@ def test_openreview_withheld_identity_is_explained_without_deanonymization(confi
     assert p.authors == [] and p.authors_status == 'anonymized'
 
 
-def test_actual_budget_allows_46_summaries_and_retains_4_originals(config, monkeypatch):
+@pytest.mark.parametrize('cap,expected', [('0.20', 46), ('0.30', 50)])
+def test_budget_cap_preserves_96_tokens_and_originals_on_exhaustion(config, monkeypatch, cap, expected):
     monkeypatch.setattr(budget, 'utc_day', lambda: '2026-10-04')
     config.llm.budget.enabled = True
+    config.llm.budget.daily_cny = float(cap)
     config.llm.api.base_url = 'https://api.siliconflow.cn/v1'
     config.llm.generation_kwargs.model = 'deepseek-ai/DeepSeek-V4-Flash'
     cap, per_call = budget.budget_plan(config.llm)
-    assert cap == Decimal('.20') and per_call == Decimal('.004320')
+    assert per_call == Decimal('.004320')
     guard = budget.BudgetRequests(cap, per_call, '2026-10-04')
     calls = []
     def create(**kwargs):
@@ -227,13 +255,15 @@ def test_actual_budget_allows_46_summaries_and_retains_4_originals(config, monke
     papers = [make_sample_paper(title=f'Offline paper {i}', abstract=f'Original evidence [{i}]') for i in range(50)]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda p: p.generate_tldr(client, config.llm, guard), papers))
-    assert len(calls) == 46 and guard.remaining == Decimal('.001280')
-    assert sum(p.tldr_status == 'generated' for p in papers) == 46
+    assert len(calls) == expected and guard.remaining == cap - expected * per_call
+    # This flag reports model availability, independently of the budget balance.
+    assert guard.unavailable is False
+    assert sum(p.tldr_status == 'generated' for p in papers) == expected
     failed = [p for p in papers if p.tldr_error]
-    assert len(failed) == 4 and all(p.tldr_error == 'budget_unavailable' for p in failed)
+    assert len(failed) == 50 - expected and all(p.tldr_error == 'budget_unavailable' for p in failed)
     assert all(p.tldr_error_reason == 'daily_budget_exhausted' and p.tldr == p.abstract for p in failed)
-    assert all(kw['extra_body'] == {'enable_thinking': False} for kw in calls)
+    assert all(kw['extra_body'] == {'enable_thinking': False} and kw['max_tokens'] == 96 for kw in calls)
     plain = email_plain_text(render_email(papers))
-    assert 'daily AI budget reached' in plain
+    assert ('daily AI budget reached' in plain) is bool(failed)
     assert all(p.abstract in plain for p in failed)
     assert all(p.abstract not in plain for p in papers if p.tldr_status == 'generated')

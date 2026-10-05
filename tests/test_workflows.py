@@ -209,7 +209,7 @@ preprint_interests:
     with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
         config = compose(config_name='runtime')
     assert list(config.executor.source) == ['journals', 'arxiv', 'biorxiv', 'researchsquare', 'openreview']
-    assert config.llm.enabled and config.llm.budget.enabled and config.llm.budget.daily_cny == 0.20
+    assert config.llm.enabled and config.llm.budget.enabled and config.llm.budget.daily_cny == 0.30
     assert config.output.email.enabled and not config.output.rss.enabled
     assert config.email.receiver == 'daily@example.org'
     assert config.email.smtp_server == 'mail.cstnet.cn' and config.email.smtp_port == 994
@@ -247,4 +247,4 @@ def test_custom_quotas_override_defaults_for_scheduled_and_manual_runs(tmp_path,
     with initialize_config_dir(config_dir=str(tmp_path/'config'),version_base=None):
         config=compose(config_name='runtime')
     assert quotas_for(config.executor)==expected
-    assert config.llm.budget.daily_cny==.20 and config.state.enabled
+    assert config.llm.budget.daily_cny==.30 and config.state.enabled

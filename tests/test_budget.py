@@ -21,10 +21,10 @@ def test_verified_plan_rejects_unknown_endpoint_model_and_limit(config,monkeypat
     monkeypatch.setattr(budget,'VERIFIED_PRICING',{'host':'test.example','model':'test-model','valid_through':'2099-01-01','input_cny_per_million':'3','output_cny_per_million':'9'})
     config.llm.api.base_url='https://test.example/v1';config.llm.generation_kwargs.model='test-model'
     cap,cost=budget.budget_plan(config.llm)
-    assert cap==Decimal('0.20') and cost*45<=Decimal('0.20')
+    assert cap==Decimal('0.30') and cost*50<=Decimal('0.30')
     config.llm.api.base_url='https://unknown.example/v1'
     with pytest.raises(budget.BudgetUnavailable,match='Endpoint'):budget.budget_plan(config.llm)
-    config.llm.budget.daily_cny=0.21
+    config.llm.budget.daily_cny=0.31
     with pytest.raises(budget.BudgetUnavailable,match='no more'):budget.budget_plan(config.llm)
 
 
@@ -74,6 +74,24 @@ def test_durable_claim_survives_crash_and_keeps_history(tmp_path,monkeypatch):
     assert git('write-tree')==index
     ledger=json.loads(git('show',head+':llm_budget.json',cwd=remote))
     assert ledger['days']['2026-10-01']['reserved_cny']=='0.20'
+
+
+def test_budget_increase_keeps_existing_claim_and_history(tmp_path, monkeypatch):
+    git, checkout, remote = make_git(tmp_path, monkeypatch)
+    budget.reserve_day(Decimal('.20'), '2026-10-04')
+    original_head = git('rev-parse', 'refs/heads/paper-state', cwd=remote).decode().strip()
+    original_history = git('show', original_head + ':recommendations.json', cwd=remote)
+    original_ledger = json.loads(git('show', original_head + ':llm_budget.json', cwd=remote))
+    with pytest.raises(budget.BudgetUnavailable, match='already reserved'):
+        budget.reserve_day(Decimal('.30'), '2026-10-04')
+    assert git('rev-parse', 'refs/heads/paper-state', cwd=remote).decode().strip() == original_head
+    budget.reserve_day(Decimal('.30'), '2026-10-05')
+    head = git('rev-parse', 'refs/heads/paper-state', cwd=remote).decode().strip()
+    ledger = json.loads(git('show', head + ':llm_budget.json', cwd=remote))
+    assert ledger['days']['2026-10-04'] == original_ledger['days']['2026-10-04']
+    assert ledger['days']['2026-10-05']['reserved_cny'] == '0.30'
+    assert ledger['days']['2026-10-05']['policy'] == 'whole-day-no-refund'
+    assert git('show', head + ':recommendations.json', cwd=remote) == original_history
 
 
 def test_concurrent_repository_claims_only_one_wins(tmp_path,monkeypatch):
@@ -268,7 +286,7 @@ def test_stale_pricing_warns_continues_and_renders_email(config,monkeypatch):
     warnings=[]
     monkeypatch.setattr(budget.logger,'warning',warnings.append)
     cap,cost=budget.budget_plan(config.llm)
-    assert cap==Decimal('.20') and cost==Decimal('.00432') and warnings
+    assert cap==Decimal('.30') and cost==Decimal('.00432') and warnings
     html=render_email([])
     assert 'Stale LLM pricing' in html and 'Stale LLM pricing' in email_plain_text(html)
     assert '实际费用可能超过' in html
@@ -276,10 +294,12 @@ def test_stale_pricing_warns_continues_and_renders_email(config,monkeypatch):
     assert not budget.pricing_warning()
 
 
-def test_known_price_increase_reduces_allowed_calls(config,monkeypatch):
+@pytest.mark.parametrize('daily_cny,expected', [(.20, 23), (.30, 34)])
+def test_known_price_increase_reduces_allowed_calls(config,monkeypatch,daily_cny,expected):
     pricing=dict(budget.VERIFIED_PRICING,input_cny_per_million='6',output_cny_per_million='18')
     monkeypatch.setattr(budget,'VERIFIED_PRICING',pricing)
     config.llm.api.base_url='https://api.siliconflow.cn/v1'
     config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'
+    config.llm.budget.daily_cny=daily_cny
     cap,cost=budget.budget_plan(config.llm)
-    assert int(cap//cost)==23
+    assert int(cap//cost)==expected

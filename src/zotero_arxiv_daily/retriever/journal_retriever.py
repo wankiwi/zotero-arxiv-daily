@@ -22,9 +22,6 @@ from ..protocol import Paper
 from ..selection import is_cover_title
 from ..metadata import crossref_metadata
 
-NOTICE_TITLE = re.compile(r'^(?:(?:author|publisher)\s+)?(?:correction|erratum|retraction|editorial)\s*[:：]', re.I)
-
-
 def clean_text(value):
     return ' '.join(unescape(re.sub(r'<[^>]+>', ' ', value or '')).split())
 
@@ -153,7 +150,7 @@ class JournalRetriever(BaseRetriever):
                         published = crossref_date(item)
                         if not title or is_cover_title(title) or not doi or not published or not since <= published <= until:
                             continue
-                        if NOTICE_TITLE.match(title):
+                        if re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
                             continue
                         links = [l.get('URL') for l in item.get('link', []) if l.get('content-type') == 'application/pdf']
                         authors, affiliations = crossref_metadata(item)
@@ -196,7 +193,7 @@ class JournalRetriever(BaseRetriever):
         for entry in feed.entries:
             try:
                 title = clean_text(entry.get('title'))
-                if not title or is_cover_title(title) or NOTICE_TITLE.match(title):
+                if not title or is_cover_title(title) or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
                     continue
                 parsed = entry.get('published_parsed') or entry.get('updated_parsed')
                 if not parsed:

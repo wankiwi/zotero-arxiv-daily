@@ -11,7 +11,7 @@
 5. 本地或 API embedding 与 Zotero 摘要比较，按文库加入时间加权；分数范围 0–100，不是概率或准确率。先按相关性选 **CUSTOM_CONFIG 指定的期刊/预印本配额（当前 25/20）**，再从剩余符合条件且未见过的候选中**按 random 配额无放回随机选择（当前 5 篇）**。随机组和前两组无重叠；OpenReview默认归预印本；经官方venue ID及pdate双重确认的已发表TMLR归期刊，已录用会议论文保留conference状态并归“预印本（含会议论文）”列。未知状态不猜测为已发表。
 6. 不足时仅发送实际候选，日志显示各组实际数/目标数，不跨组补满、不重复、不扩大领域。等待重试的投递占用对应组名额；随机结果存入历史，失败重试不重新抽样。旧历史无组标记时按来源归期刊/预印本。
 7. 邮件在电脑和手机均为单列，依次显示期刊、预印本、随机推荐三组，各组从 1 编号；纯文本保持相同顺序。使用 email-safe table、760px 最大内容宽度及 Aptos → Calibri → Arial → Helvetica → sans-serif，无需媒体查询或外部字体。
-8. LLM 按论文摘要或可获取的全文生成**中文一句话**总结。只有状态为成功、非空且没有错误的总结才显示为 AI summary；此时 HTML 和纯文本均不再重复原摘要。未生成、失败、空结果和无法验证来源的旧总结均显示原摘要，原摘要也没有时明确标为不可用。完整原摘要始终保留在内部数据。作者单位仅使用来源元数据，显示长度默认限制为180字符（含省略号），完整单位信息保留在内部数据。模型调用由每日 **¥0.20** 预算守卫管理，不付费提取作者单位。
+8. LLM 按论文摘要或可获取的全文生成**中文一句话**总结。只有状态为成功、非空且没有错误的总结才显示为 AI summary；此时 HTML 和纯文本均不再重复原摘要。未生成、失败、空结果和无法验证来源的旧总结均显示原摘要，原摘要也没有时明确标为不可用。完整原摘要始终保留在内部数据。作者单位仅使用来源元数据，显示长度默认限制为180字符（含省略号），完整单位信息保留在内部数据。模型调用由每日 **¥0.30** 预算守卫管理，不付费提取作者单位。
 9. SMTP 成功后记录投递；支持本地显式启用 RSS。仓库工作流固定只发邮件，禁用 RSS/Pages；旧 CUSTOM_CONFIG 中 RSS 开关不能重新启用发布。SMTP 接受不等同于收件箱到账；SMTP 接受后进程崩溃但状态尚未保存仍存在邮件协议固有的重复窗口。
 
 ## 快速开始与安全测试
@@ -29,7 +29,7 @@ Actions Secrets：`ZOTERO_ID`、`ZOTERO_KEY`、`SENDER`、`SENDER_PASSWORD`、`R
 
 Actions Variables：`CUSTOM_CONFIG`（YAML mapping，无 `defaults`）、`PAPER_CONFIG`（默认 all）、`SMTP_SERVER`、`SMTP_PORT`、`LLM_MODEL`、`OPENAI_API_BASE`（可由同名 secret 提供）。`RSS_SITE_URL` 仅本地 RSS 有意义。工作流中的 embedding API 密钥需用户另行配置，默认使用本地模型。
 
-**配置优先级：** preset → CUSTOM_CONFIG → 显式 dispatch overrides → 仓库投递策略。分组配额以 CUSTOM_CONFIG 为准；仅缺省字段继承 preset（interests 默认为 25/15/5）。当前 CUSTOM_CONFIG 为 25/20/5，总量 50。非空 quotas 的合计就是总量，旧 max_paper_num 不再截断；quotas=null 才使用旧全局上限。定时运行仍使用 interests、已保存兴趣列表、启用来源、中文语言、强制 ¥0.20 预算、仅邮件、RECEIVER 和既有历史路径；不再强制覆盖配额或总量。预算不会随配额增大，额度不足的论文保留原摘要。
+**配置优先级：** preset → CUSTOM_CONFIG → 显式 dispatch overrides → 仓库投递策略。分组配额以 CUSTOM_CONFIG 为准；仅缺省字段继承 preset（interests 默认为 25/15/5）。当前 CUSTOM_CONFIG 为 25/20/5，总量 50。非空 quotas 的合计就是总量，旧 max_paper_num 不再截断；quotas=null 才使用旧全局上限。定时运行仍使用 interests、已保存兴趣列表、启用来源、中文语言、强制 ¥0.30 预算、仅邮件、RECEIVER 和既有历史路径；不再强制覆盖配额或总量。预算不会随配额增大，额度不足的论文保留原摘要。
 
 每日 cron 为 **19:17 UTC（次日 03:17 Asia/Singapore）**，只在默认分支执行且可能延迟。推送 feature 分支不会启用其定时配置。`paper-state` 分支存储成功/待投递历史；不要清空、重置或删除。`Keep Alive` 沿用既有每30天定时，不新增任务。
 
@@ -54,7 +54,7 @@ uv run --frozen python -m zotero_arxiv_daily.main --config-name=journals llm.ena
 
 ## 当前配置的脱敏示例
 
-以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.20估算记账额度、以 CUSTOM_CONFIG 为准的25/20/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM是否成功以每次运行的生成状态及预算账本为准。GitHub不能读回已有secret，所有凭据继续由用户管理。
+以下为已启用配置与每日投递策略的脱敏示例。已替换 collection 名称、用户标识与所有凭据；`archive/**` **仅为示例，不是用户真实排除路径**。主分支预算守卫及持久账本已生效，在线配置为中文摘要、DeepSeek-V4-Flash、每日¥0.30估算记账额度、以 CUSTOM_CONFIG 为准的25/20/5配额、OpenReview开启和RSS关闭。OpenReview官方登录及公开稿件检索已验证；LLM是否成功以每次运行的生成状态及预算账本为准。GitHub不能读回已有secret，所有凭据继续由用户管理。
 
 ```yaml
 zotero:
@@ -71,7 +71,7 @@ email:
   sender_password: ${oc.env:SENDER_PASSWORD}
 llm:
   enabled: true
-  budget: {enabled: true, daily_cny: 0.20}
+  budget: {enabled: true, daily_cny: 0.30}
   language: Chinese
   input_mode: abstract
   api:
@@ -203,7 +203,7 @@ preprint_interests:
 | 参数 | 默认/意义与例子 |
 |---|---|
 | `llm.enabled` | base=true；私有配置控制启用，定时不再强制关闭。预算守卫未验证时仍不调用 |
-| `llm.budget.enabled`, `daily_cny` | true、0.20；所有Actions强制启用且上限0.20，不能被CUSTOM_CONFIG绕过。本地将其设为false也只会禁止模型调用，不会开放无限额调用 |
+| `llm.budget.enabled`, `daily_cny` | true、0.30；所有Actions强制启用且上限0.30，不能被CUSTOM_CONFIG绕过。本地将其设为false也只会禁止模型调用，不会开放无限额调用 |
 | `llm.input_mode` | `abstract`（默认）或 `full_text`。abstract不为摘要下载全文；full_text尝试来源支持的合法全文，发送完整提取文本，若不可得/超上下文/超预算输入界限则明确回退abstract，邮件和日志注明原因 |
 | `llm.language` | Chinese；prompt明确要求一句话，失败不将英文原摘要冒称中文摘要 |
 | `llm.api.key`, `base_url` | OpenAI兼容服务key/URL；key保留环境引用，当前URL显式为 `https://api.siliconflow.cn/v1`，须与预算验证记录一致 |
@@ -225,11 +225,11 @@ Preset：`base`仅默认，`custom`环境和旧arXiv示例，`legacy`组合二�
 
 无结果先查源错误、窗口、关键词、ignore_path、阈值、文库及历史去重；不要通过清历史强行再发。模型失败看结构化摘要状态，不打印API响应体或secret。OpenReview403是访问限制，不是没有论文。Crossref未索引但出版社RSS正常时会标注覆盖限制；临时网络错误仍失败。测试工作流不载入真实投递凭据；只有手工运行发送工作流才发送真实邮件。
 
-## ¥0.20/UTC日预算与激活条件
+## ¥0.30/UTC日预算与激活条件
 
 仅约束本仓库受控请求，不是账户级扣费上限；其他客户端或旧版本不在保护范围内。所有公开摘要生成入口均要求BudgetRequests预约；缺失budget配置默认要求守卫，false禁止调用而不是无限额。付费单位提取已移除，保留出版社单位元数据。
 
-保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://api-docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01；建议于2026-10-08 UTC结束前复核。2026-10-09 UTC起若未复核，继续按最后复核费率运行并保留每日¥0.20估算记账额度，同时在邮件（HTML及纯文本）和日志醒目提醒；供应商涨价时实际费用可能超过估算及¥0.20，不承诺实际费用的绝对硬上限。已知新价格时应更新费率并按预算减少请求。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
+保留用户选择 `deepseek-ai/DeepSeek-V4-Flash`。已核对[公开API约定](https://api-docs.siliconflow.cn/docs/api/chat-completions-post)及[官方价格](https://www.siliconflow.cn/pricing)，使用 `https://api.siliconflow.cn/v1`（仅默认443端口）、`enable_thinking=false`、n=1、max_tokens=96，不传reasoning_effort/thinking_budget，不重试、不自动补写。即使在低价时段也按输入3元/百万、输出9元/百万的峰值计费。价格记录核验于2026-10-01；建议于2026-10-08 UTC结束前复核。2026-10-09 UTC起若未复核，继续按最后复核费率运行并保留每日¥0.30估算记账额度，同时在邮件（HTML及纯文本）和日志醒目提醒；供应商涨价时实际费用可能超过估算及¥0.30，不承诺实际费用的绝对硬上限。已知新价格时应更新费率并按预算减少请求。登录保护的用户控制台未被读取，不声称已验证其中的账户设置。
 
 用户输入最多768 UTF-8字节，系统输入最多256字节，再保留128 framing tokens，共按1152输入token上界预约。原摘要完整保留在内部数据；只有没有有效AI总结时才在邮件中显示原摘要，仅模型上下文缩短。每次最坏预约 `(1152×3 + 96×9)/1,000,000 = ¥0.00432`，45篇合计¥0.1944。预算是基于已发布接口约定的工程上限，不是对供应商未来涨价或违规计费的绝对保证。
 
@@ -277,7 +277,7 @@ llm:
 
 ### 单篇 LLM 验证（不发送邮件）
 
-手动运行 **Test → mode=llm**：先验证预算记录中的服务地址与模型，再通过只读模型列表检查凭据与模型可用性，然后为 UTC 当日预留整个 ¥0.20 额度，只对一篇已投递、包含公开原始摘要的论文生成一句中文总结。使用生产摘要函数、96-token 输出限制、关闭思考和零自动重试；日志仅保留状态与 token 用量，不输出论文内容、账户信息或密钥。此模式没有 SMTP 凭据，不写入投递历史，不发送或重发邮件。即使验证失败或仅用掉一小部分预算，当天额度也不会返还；同日后续任务保留原始摘要。401/403 在预留预算前停止，需要通过 GitHub Secrets 安全更新 `OPENAI_API_KEY`。
+手动运行 **Test → mode=llm**：先验证预算记录中的服务地址与模型，再通过只读模型列表检查凭据与模型可用性，然后为 UTC 当日预留整个 ¥0.30 额度，只对一篇已投递、包含公开原始摘要的论文生成一句中文总结。使用生产摘要函数、96-token 输出限制、关闭思考和零自动重试；日志仅保留状态与 token 用量，不输出论文内容、账户信息或密钥。此模式没有 SMTP 凭据，不写入投递历史，不发送或重发邮件。即使验证失败或仅用掉一小部分预算，当天额度也不会返还；同日后续任务保留原始摘要。401/403 在预留预算前停止，需要通过 GitHub Secrets 安全更新 `OPENAI_API_KEY`。
 
 所有来源在排名和配额计算前排除明确封面标签（Inside/Outside/Front/Back/Supplementary Cover、Cover Image/Picture/Feature/Profile/Art、Frontispiece，标签后须为冒号、括号、分隔破折号或标题结束）；待投递与随机池同样排除，不删除历史。研究标题中正常提到cover或surface不会被排除。恢复后的摘要记录来源URL与状态，出版社拒绝普通HTTP访问时保留缺失状态和警告，不用标题相似的预印本或其他版本替代。
 

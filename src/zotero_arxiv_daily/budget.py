@@ -30,7 +30,7 @@ VERIFIED_PRICING = {
     'pricing_source': 'https://www.siliconflow.cn/pricing',
     'model_contract': 'https://api-docs.siliconflow.cn/docs/api/chat-completions-post',
 }
-MAX_DAILY_CNY = Decimal('0.20')
+MAX_DAILY_CNY = Decimal('0.30')
 PROMPT_BYTES = 768
 SYSTEM_BYTES = 256
 FRAMING_TOKENS = 128
@@ -43,8 +43,8 @@ def utc_day():
 
 def pricing_warning():
     if VERIFIED_PRICING and utc_day() > VERIFIED_PRICING['valid_through']:
-        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行每日 ¥0.20 记账额度；'
-                '若供应商涨价，实际费用可能超过估算及 ¥0.20，请尽快复核价格。'
+        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行每日 ¥0.30 记账额度；'
+                '若供应商涨价，实际费用可能超过估算及 ¥0.30，请尽快复核价格。'
                 ' Stale LLM pricing: estimates may understate actual charges.')
     return ''
 
@@ -53,9 +53,9 @@ def budget_plan(config):
     budget = config.get('budget', {})
     if budget.get('enabled', True) is not True:
         raise BudgetUnavailable('Budget guard disabled: paid calls prohibited, not unlimited')
-    cap = Decimal(str(budget.get('daily_cny', '0.20')))
+    cap = Decimal(str(budget.get('daily_cny', '0.30')))
     if not cap.is_finite() or not 0 < cap <= MAX_DAILY_CNY:
-        raise BudgetUnavailable('Daily CNY budget must be positive and no more than 0.20')
+        raise BudgetUnavailable('Daily CNY budget must be positive and no more than 0.30')
     if VERIFIED_PRICING is None:
         raise BudgetUnavailable('Exact provider pricing/non-thinking token bound is not verified; paid calls disabled')
     pricing = VERIFIED_PRICING

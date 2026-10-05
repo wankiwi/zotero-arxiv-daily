@@ -72,7 +72,7 @@ llm:
   input_mode: abstract # abstract (default) or full_text with explicit fallback.
   budget:
     enabled: true # Fail closed unless provider pricing and token bounds are verified.
-    daily_cny: 0.20
+    daily_cny: 0.30
   enabled: true
   api:
     key: ??? # API Key of your LLM API. Example: sk-xxx
