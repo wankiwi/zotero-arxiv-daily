@@ -16,7 +16,9 @@ from .llm import ModelRequests
 from loguru import logger
 
 class BudgetUnavailable(RuntimeError):
-    pass
+    def __init__(self, message, *, reason='budget_guard_unavailable'):
+        super().__init__(message)
+        self.reason = reason
 
 # Reviewed public provider contract: explicit non-thinking, peak CNY tariff.
 # Different endpoints/models fail closed; stale pricing warns and continues.
@@ -147,11 +149,11 @@ class BudgetRequests(ModelRequests):
         # terminal aborts before sending, not merely before precharging a slot.
         with self._budget_lock:
             if getattr(self, '_aborted', False):
-                raise BudgetUnavailable('Paid requests stopped after an unexpected billing response')
+                raise BudgetUnavailable('Paid requests stopped after an unexpected billing response', reason='billing_unverified')
             if utc_day() != self.day:
-                raise BudgetUnavailable('UTC day changed; no new request until a fresh run reserves that day')
+                raise BudgetUnavailable('UTC day changed; no new request until a fresh run reserves that day', reason='day_changed')
             if self.remaining < self.per_call:
-                raise BudgetUnavailable('Daily LLM budget exhausted; retaining original abstract')
+                raise BudgetUnavailable('Daily LLM budget exhausted; retaining original abstract', reason='daily_budget_exhausted')
             self.remaining -= self.per_call
             try:
                 return super().call(operation)
@@ -170,21 +172,21 @@ def prepare_budget(config):
 def audit_response(response, expected_model):
     """Unexpected metadata terminates queued calls; never refund uncertain billing."""
     if getattr(response, 'model', None) != expected_model:
-        raise BudgetUnavailable('Provider response model does not match reserved model')
+        raise BudgetUnavailable('Provider response model does not match reserved model', reason='billing_unverified')
     usage = getattr(response, 'usage', None)
     if usage is None:
-        raise BudgetUnavailable('Provider response has no billable usage metadata')
+        raise BudgetUnavailable('Provider response has no billable usage metadata', reason='billing_unverified')
     counts = [getattr(usage, key, None) for key in ('prompt_tokens', 'completion_tokens', 'total_tokens')]
     if any(type(count) is not int or count < 0 for count in counts):
-        raise BudgetUnavailable('Provider response usage is invalid')
+        raise BudgetUnavailable('Provider response usage is invalid', reason='billing_unverified')
     prompt, completion, total = counts
     details = getattr(usage, 'completion_tokens_details', None)
     reasoning = getattr(details, 'reasoning_tokens', 0) or 0
     if type(reasoning) is not int or reasoning != 0 or prompt > PROMPT_BYTES + SYSTEM_BYTES + FRAMING_TOKENS or completion > MAX_OUTPUT_TOKENS or total != prompt + completion:
-        raise BudgetUnavailable('Provider usage exceeded or contradicted the reserved bound')
+        raise BudgetUnavailable('Provider usage exceeded or contradicted the reserved bound', reason='billing_unverified')
     choices = getattr(response, 'choices', [])
     if len(choices) != 1 or getattr(choices[0].message, 'reasoning_content', None):
-        raise BudgetUnavailable('Provider unexpectedly emitted reasoning or extra choices')
+        raise BudgetUnavailable('Provider unexpectedly emitted reasoning or extra choices', reason='billing_unverified')
 
 
 def bootstrap_ledger():

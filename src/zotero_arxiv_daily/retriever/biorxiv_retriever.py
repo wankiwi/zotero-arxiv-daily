@@ -62,26 +62,45 @@ class BiorxivRetriever(BaseRetriever):
         with session() as client:
             for category in sorted(categories):
                 cursor = 0
+                expected_total = None
                 for _ in range(max_pages):
                     query = '' if category == '*' else '?' + urlencode({'category': category})
                     response = client.get(f'https://api.biorxiv.org/details/{self.server}/{since}/{until}/{cursor}{query}',
                                           timeout=(10, 30))
                     response.raise_for_status()
                     result = response.json()
+                    if not isinstance(result, dict):
+                        raise ValueError(f'{self.name} API response must be an object')
                     messages = result.get('messages', [])
-                    if messages and messages[0].get('status') not in (None, 'ok'):
-                        raise RuntimeError(f'{self.name} API returned: {messages}')
+                    if not isinstance(messages, list) or any(not isinstance(m, dict) for m in messages):
+                        raise ValueError(f'{self.name} API messages must be a list of objects')
+                    statuses = {m.get('status') for m in messages}
+                    total = messages[0].get('total') if messages else None
+                    if total is not None:
+                        if isinstance(total, bool) or not str(total).isdigit():
+                            raise ValueError(f'{self.name} API total must be a nonnegative integer')
+                        expected_total = max(expected_total or 0, int(total))
+                    if statuses == {'no posts found'}:
+                        # This official empty-window response may omit collection.
+                        # It is valid only when it cannot conceal unfinished pagination.
+                        if result.get('collection', []) != [] or (expected_total is not None and cursor < expected_total):
+                            raise RuntimeError(f'{self.name} API pagination returned an incomplete or contradictory empty collection')
+                        logger.info(f'{self.name}: no posts in category {category} for {since}–{until}')
+                        break
+                    if statuses - {None, 'ok'}:
+                        raise RuntimeError(f'{self.name} API returned a failure status')
                     collection = result['collection']
+                    if not isinstance(collection, list) or any(not isinstance(c, dict) for c in collection):
+                        raise ValueError(f'{self.name} API collection must be a list of objects')
                     for item in collection:
                         if since.isoformat() <= item.get('date', '') <= until.isoformat():
                             if '*' in categories or item.get('category', '').lower() in categories:
                                 records.append(item)
                     cursor += len(collection)
-                    total = messages[0].get('total') if messages else None
-                    if total is not None and cursor >= int(total):
+                    if expected_total is not None and cursor >= expected_total:
                         break
                     if not collection:
-                        if total is not None:
+                        if expected_total is not None:
                             raise RuntimeError(f'{self.name} API pagination returned an incomplete collection')
                         break
                 else:

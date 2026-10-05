@@ -20,10 +20,23 @@ from ..identity import deduplicate, normalize_doi
 from ..journals import Journal, discover_nature, selected_journals
 from ..protocol import Paper
 from ..selection import is_cover_title
+from ..metadata import crossref_metadata
+
+NOTICE_TITLE = re.compile(r'^(?:(?:author|publisher)\s+)?(?:correction|erratum|retraction|editorial)\s*[:：]', re.I)
 
 
 def clean_text(value):
     return ' '.join(unescape(re.sub(r'<[^>]+>', ' ', value or '')).split())
+
+
+def rss_abstract(value, title):
+    text = clean_text(value)
+    # Nature feeds may supply only a publication notice and repeated title.
+    # Strip this precise boilerplate rather than labeling it scientific evidence.
+    text, count = re.subn(r'^.{1,100}, Published online: [^;]+; doi:\s*10\.\S+\s*', '', text)
+    if count and text.startswith(title):
+        text = text[len(title):].strip()
+    return text
 
 
 def crossref_date(item):
@@ -140,16 +153,21 @@ class JournalRetriever(BaseRetriever):
                         published = crossref_date(item)
                         if not title or is_cover_title(title) or not doi or not published or not since <= published <= until:
                             continue
-                        if re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
+                        if NOTICE_TITLE.match(title):
                             continue
                         links = [l.get('URL') for l in item.get('link', []) if l.get('content-type') == 'application/pdf']
+                        authors, affiliations = crossref_metadata(item)
                         results.append(Paper(source='journals', title=title,
-                            authors=[clean_text(' '.join(filter(None, [a.get('given'), a.get('family')]))) for a in item.get('author', [])],
+                            authors=authors,
                             abstract=clean_text(item.get('abstract')), url=f'https://doi.org/{doi}',
                             pdf_url=links[0] if links else None, doi=doi, journal=journal.title,
                             related_dois=crossref_equivalent_dois(item),
                             issns=list(journal.issns), published=published,
-                            affiliations=list(dict.fromkeys(clean_text(a.get('name')) for person in item.get('author', []) for a in person.get('affiliation', []) if a.get('name'))) or None))
+                            affiliations=affiliations or None,
+                            authors_source='Crossref' if authors else None,
+                            authors_source_url='https://api.crossref.org/works/' + quote(doi, safe='') if authors else None,
+                            affiliations_source='Crossref' if affiliations else None,
+                            affiliations_source_url='https://api.crossref.org/works/' + quote(doi, safe='') if affiliations else None))
                     except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
                         self.failures.append(journal.title)
                         logger.warning(f'{journal.title}: skipping malformed Crossref record: {exc}')
@@ -178,7 +196,7 @@ class JournalRetriever(BaseRetriever):
         for entry in feed.entries:
             try:
                 title = clean_text(entry.get('title'))
-                if not title or is_cover_title(title) or re.match(r'^(correction|erratum|retraction|editorial)\s*[:：]', title, re.I):
+                if not title or is_cover_title(title) or NOTICE_TITLE.match(title):
                     continue
                 parsed = entry.get('published_parsed') or entry.get('updated_parsed')
                 if not parsed:
@@ -197,8 +215,9 @@ class JournalRetriever(BaseRetriever):
                 authors = [a.get('name', '') for a in entry.get('authors', []) if a.get('name')]
                 results.append(Paper(source='journals', title=title, authors=authors,
                     # APS feeds publish excerpts with author/date boilerplate, not full abstracts.
-                    abstract='' if urlsplit(journal.rss).hostname == 'feeds.aps.org' else clean_text(entry.get('summary') or entry.get('description')),
-                    url=url, doi=doi, journal=journal.title, issns=list(journal.issns), published=published))
+                    abstract='' if urlsplit(journal.rss).hostname == 'feeds.aps.org' else rss_abstract(entry.get('summary') or entry.get('description'), title),
+                    url=url, doi=doi, journal=journal.title, issns=list(journal.issns), published=published,
+                    authors_source='Publisher RSS' if authors else None, authors_source_url=journal.rss if authors else None))
             except (TypeError, ValueError, KeyError, AttributeError, IndexError) as exc:
                 self.failures.append(journal.title)
                 logger.warning(f'{journal.title}: skipping malformed RSS entry: {exc}')

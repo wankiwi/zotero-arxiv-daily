@@ -142,6 +142,11 @@ state:
   retention_days: 90
 
 # Optional semantic ranking interests; empty preserves Zotero-only ranking.
+metadata:
+  enabled: true
+  max_papers: 50 # Missing selected-paper authors/affiliations only; exact DOI and title.
+  max_seconds: 90 # No paid enrichment or identity/profile searches.
+
 interest_profile:
   keywords: []
   keyword_weight: 0.6
