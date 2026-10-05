@@ -4,7 +4,7 @@ The entire daily allowance is consumed by one run, including failed calls and
 unused balance. This intentionally trades utilization for crash safety.
 """
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import json
 import os
 from pathlib import Path
@@ -30,7 +30,6 @@ VERIFIED_PRICING = {
     'pricing_source': 'https://www.siliconflow.cn/pricing',
     'model_contract': 'https://api-docs.siliconflow.cn/docs/api/chat-completions-post',
 }
-MAX_DAILY_CNY = Decimal('0.30')
 PROMPT_BYTES = 768
 SYSTEM_BYTES = 256
 FRAMING_TOKENS = 128
@@ -43,8 +42,8 @@ def utc_day():
 
 def pricing_warning():
     if VERIFIED_PRICING and utc_day() > VERIFIED_PRICING['valid_through']:
-        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行每日 ¥0.30 记账额度；'
-                '若供应商涨价，实际费用可能超过估算及 ¥0.30，请尽快复核价格。'
+        return ('LLM 价格复核已过期：继续按最后复核费率估算并执行配置的每日记账额度；'
+                '若供应商涨价，实际费用可能超过估算及配置额度，请尽快复核价格。'
                 ' Stale LLM pricing: estimates may understate actual charges.')
     return ''
 
@@ -53,9 +52,14 @@ def budget_plan(config):
     budget = config.get('budget', {})
     if budget.get('enabled', True) is not True:
         raise BudgetUnavailable('Budget guard disabled: paid calls prohibited, not unlimited')
-    cap = Decimal(str(budget.get('daily_cny', '0.30')))
-    if not cap.is_finite() or not 0 < cap <= MAX_DAILY_CNY:
-        raise BudgetUnavailable('Daily CNY budget must be positive and no more than 0.30')
+    # CUSTOM_CONFIG supplies the amount. Never replace it with a fixed ceiling
+    # or invent an allowance when the composed configuration omits it.
+    try:
+        cap = Decimal(str(budget.get('daily_cny')))
+    except (InvalidOperation, TypeError, ValueError):
+        raise BudgetUnavailable('Daily CNY budget must be an explicitly configured positive finite number') from None
+    if not cap.is_finite() or cap <= 0:
+        raise BudgetUnavailable('Daily CNY budget must be an explicitly configured positive finite number')
     if VERIFIED_PRICING is None:
         raise BudgetUnavailable('Exact provider pricing/non-thinking token bound is not verified; paid calls disabled')
     pricing = VERIFIED_PRICING

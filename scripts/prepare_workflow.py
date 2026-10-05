@@ -38,7 +38,8 @@ def prepare(root: Path, environ=os.environ):
     llm_mode = environ.get('LLM_MODE', 'configured')
     if llm_mode not in ('configured', 'disabled'):
         raise ValueError('Invalid llm_mode')
-    config = OmegaConf.merge(config, {'llm': {'budget': {'enabled': True, 'daily_cny': 0.30}}})
+    # Keep the guard mandatory while preserving CUSTOM_CONFIG's budget amount.
+    config = OmegaConf.merge(config, {'llm': {'budget': {'enabled': True}}})
     if llm_mode == 'disabled':
         config = OmegaConf.merge(config, {'llm': {'enabled': False}})
     channel = environ.get('OUTPUT_CHANNEL', 'configured')

@@ -16,7 +16,7 @@ def test_production_pricing_is_fail_closed(config,monkeypatch):
         budget.budget_plan(config.llm)
 
 
-def test_verified_plan_rejects_unknown_endpoint_model_and_limit(config,monkeypatch):
+def test_verified_plan_rejects_unknown_endpoint_model_and_invalid_budget(config,monkeypatch):
     config.llm.budget.enabled=True
     monkeypatch.setattr(budget,'VERIFIED_PRICING',{'host':'test.example','model':'test-model','valid_through':'2099-01-01','input_cny_per_million':'3','output_cny_per_million':'9'})
     config.llm.api.base_url='https://test.example/v1';config.llm.generation_kwargs.model='test-model'
@@ -24,8 +24,30 @@ def test_verified_plan_rejects_unknown_endpoint_model_and_limit(config,monkeypat
     assert cap==Decimal('0.30') and cost*50<=Decimal('0.30')
     config.llm.api.base_url='https://unknown.example/v1'
     with pytest.raises(budget.BudgetUnavailable,match='Endpoint'):budget.budget_plan(config.llm)
-    config.llm.budget.daily_cny=0.31
-    with pytest.raises(budget.BudgetUnavailable,match='no more'):budget.budget_plan(config.llm)
+    config.llm.budget.daily_cny=0
+    with pytest.raises(budget.BudgetUnavailable,match='positive'):budget.budget_plan(config.llm)
+
+
+@pytest.mark.parametrize('amount', ['0.05', '0.21', '0.30', '0.40'])
+def test_budget_amount_uses_config_without_a_fixed_ceiling(config, amount):
+    config.llm.api.base_url = 'https://api.siliconflow.cn/v1'
+    config.llm.generation_kwargs.model = 'deepseek-ai/DeepSeek-V4-Flash'
+    config.llm.budget.daily_cny = amount
+    cap, cost = budget.budget_plan(config.llm)
+    assert cap == Decimal(amount) and cost == Decimal('.00432')
+
+
+@pytest.mark.parametrize('amount', [None, 0, -.1, 'NaN', 'Infinity', True, 'invalid'])
+def test_budget_amount_rejects_invalid_values_without_substitution(config, amount):
+    config.llm.budget.daily_cny = amount
+    with pytest.raises(budget.BudgetUnavailable, match='positive finite'):
+        budget.budget_plan(config.llm)
+
+
+def test_budget_amount_missing_fails_closed_without_default(config):
+    del config.llm.budget.daily_cny
+    with pytest.raises(budget.BudgetUnavailable, match='configured'):
+        budget.budget_plan(config.llm)
 
 
 def test_concurrent_calls_timeouts_and_day_rollover(monkeypatch):

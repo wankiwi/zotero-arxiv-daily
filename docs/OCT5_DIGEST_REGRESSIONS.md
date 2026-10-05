@@ -46,8 +46,12 @@ and calls the independent flag `model unavailable`.
 
 After reviewing this evidence, the user explicitly authorized a **CNY0.30**
 daily estimated cap on October 5. Fifty unchanged reservations cost CNY0.216,
-leaving CNY0.084. The PR changes the default, hard maximum and mandatory workflow
-budget override to 0.30, without reducing input/output tokens or changing
+leaving CNY0.084. The user subsequently directed that **CUSTOM_CONFIG is the
+authority for the budget amount**. The PR keeps a 0.30 preset default but removes
+both the workflow's fixed amount override and the budget guard's fixed ceiling.
+The guard consumes the explicitly composed positive finite amount, failing
+closed for absent/invalid values rather than substituting another amount,
+without reducing input/output tokens or changing
 thinking, tariff, whole-day reservation, no-refund policy or prior ledger entries.
 An existing CNY0.20 claim still blocks a same-UTC-day rerun at the new cap;
 there is no top-up or fresh grant for an already reserved day. Missing usable
@@ -57,10 +61,13 @@ The GitHub Actions repository **variable** `CUSTOM_CONFIG` was safely updated
 from 0.20 to 0.30 and read back. Only the `llm.budget.daily_cny` scalar changed;
 every other configuration byte was preserved. No literal credentials were
 present in the variable and no secrets were accessed or updated. Quotas remain
-25/20/5, weights 0.4/0.6. **Main still forces a 0.20 runtime budget** in
-`scripts/prepare_workflow.py`, so the stored variable is 0.30 while production
-runtime remains 0.20 until this PR is explicitly approved and merged. No merge,
-workflow dispatch, paid validation or extra production email was performed.
+25/20/5, weights 0.4/0.6. The old main forced a 0.20 runtime budget in
+`scripts/prepare_workflow.py`; the corrected workflow retains the configured
+0.30 amount and keeps only the guard's enabled flag mandatory. Offline tests
+verify both scheduled and manual paths retain other configured positive amounts,
+and a null override is rejected instead of falling back to 0.30. The user
+authorized the normal merge after CI, with no production dispatch, paid
+validation or extra email authorized.
 
 Pre-ranking abstract recovery recovered 12/25 candidates. Publisher access was
 blocked and Semantic Scholar returned HTTP 429. Those broader candidate recovery
@@ -97,8 +104,11 @@ successful authenticated production retrieval, despite the separate local 403.
 The released converter already reads public `authors`, so an omitted authors
 extraction step is not established for these papers. Explicit public affiliation
 fields were not read before this PR. The stored output cannot distinguish absent
-fields, field ACL restrictions or anonymous placeholder values for individual
-papers; future persisted status codes will make those cases visible.
+  fields, field ACL restrictions or anonymous placeholder values for individual
+  papers; future persisted status codes will make those cases visible. The user
+  confirmed that some OpenReview papers are blind reviewed; preserve withheld
+  identities and stop further identity-recovery investigation. This does not
+  establish that all 24 records were blind reviewed.
 Resolving that uncertainty requires an authorized official API response exposing
 the relevant *public* fields. Restricted fields must remain excluded even when
 the production client authenticates successfully.
@@ -151,8 +161,9 @@ both Crossref and OpenAlex.
 - Put one scoring explanation before the email cards, using their recorded
   effective weights. Handle keyword-only, library-only, empty and mixed pending
   digests. Retain a short per-paper title-only basis note when necessary.
-- Apply the newly authorized CNY0.30 estimated daily budget in local defaults
-  and workflow policy; retain all existing reservations and delivery history.
+- Use CUSTOM_CONFIG as authority for the estimated daily budget amount (current
+  0.30), with a mandatory guard and no fixed amount override/ceiling; retain all
+  existing reservations and delivery history.
 
 The reconstructed historical 50-paper digest has 25 authors and 25 affiliations
 still unavailable after three verified affiliation recoveries. This replay
@@ -165,12 +176,16 @@ modified by the replay.
 - Red reproduction on the released source: `tests/test_oct5_regressions.py`
   produced 19 failures and eight passes before fixes.
 - Locked-dependency suite: `uv run --frozen pytest --cov=src/zotero_arxiv_daily
-  --cov-report=term-missing` — **812 passed, one slow model-download test
-  deselected**, 90.2513% total statement coverage (3555/3939 statements).
-- The 60 newly added cases cover empty responses, incomplete pagination,
+  --cov-report=term-missing` — **834 passed, one slow model-download test
+  deselected**, 90.2563% total statement coverage (3557/3941 statements).
+- The 82 newly added cases cover empty responses, incomplete pagination,
   transport acceptance and repeat-run history, actual public metadata fixtures,
   identity/version mismatches, provider refusals, limits, field ACLs, budget
   capacity, original-abstract retention, and HTML/plain-text header placement.
+- Budget precedence reproduced 17 failures and five passes on the prior PR
+  head; all 22 cases now pass. They verify CUSTOM_CONFIG amounts for both
+  scheduled/manual workflows, values above and below the old fixed ceiling,
+  null/absent/invalid amounts, mandatory guard enablement and unchanged tokens.
 - `uvx ruff check --select F401,F821,F841 src scripts tests` and
   `git diff --check` pass.
 
@@ -179,4 +194,5 @@ conversion, quotas, configured weights, UTC 19:17 schedule, Asia/Singapore subje
 date, RSS/Pages policy, Aptos single-column styling and Zotero confirmation link
 are retained. Only the explicitly authorized nonsecret CUSTOM_CONFIG budget
 scalar was changed. No credentials, local memory, secrets, production state,
-paid diagnostic calls, merge or deployment are changed or performed.
+paid diagnostic calls or production workflow dispatch are changed or performed
+during validation. The normal merge is explicitly user-authorized after CI.
