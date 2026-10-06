@@ -176,7 +176,8 @@ class Executor:
                 try:
                     send_email(self.config, render_email(pending, affiliation_max_chars=self.config.email.get('affiliation_max_chars', 180),
                                                          zotero_action_origin=self.config.email.get('zotero_action_origin'),
-                                                         interest_weights=self.effective_interest_weights))
+                                                         interest_weights=self.effective_interest_weights,
+                                                         ranking_strategy=self.config.reranker.get('strategy', 'multi_interest_profile')))
                     logger.info(f'SMTP accepted {len(pending)} recommendations')
                     state.mark(pending, 'email')
                     state.save()

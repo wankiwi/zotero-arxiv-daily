@@ -12,6 +12,31 @@ from scripts.prepare_workflow import prepare
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize('strategy', ['multi_interest_profile', 'legacy_mean'])
+def test_scheduled_strategy_default_and_custom_rollback_preserve_other_policy(tmp_path, strategy):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    patch = (f'reranker:\n  strategy: {strategy}\n'
+             'interest_profile:\n  keywords: [water, sampling]\n  keyword_weight: 0.4\n  zotero_weight: 0.6\n'
+             'executor:\n  quotas: {journals: 25, preprints: 20, random: 5}\n'
+             'llm:\n  budget:\n    daily_cny: 0.30\n')
+    prepare(tmp_path, {'GITHUB_EVENT_NAME': 'schedule', 'CUSTOM_CONFIG': patch})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.reranker.strategy == strategy
+    assert config.reranker.local.backend == 'torch'
+    assert config.interest_profile.keyword_weight == .4 and config.interest_profile.zotero_weight == .6
+    assert dict(config.executor.quotas) == {'journals': 25, 'preprints': 20, 'random': 5}
+    assert config.llm.budget.daily_cny == .30 and config.llm.budget.enabled
+    assert config.state.enabled and config.output.email.enabled and not config.output.rss.enabled
+
+
+def test_normal_presets_default_to_profile_and_legacy_preset_is_explicit():
+    with initialize_config_dir(config_dir=str(ROOT / 'config'), version_base=None):
+        for name in ('all', 'interests', 'keyword_interests', 'journals', 'arxiv'):
+            assert compose(config_name=name).reranker.strategy == 'multi_interest_profile'
+        assert compose(config_name='legacy').reranker.strategy == 'legacy_mean'
+
+
 def test_runtime_configuration_forces_email_without_resolving_secrets(tmp_path):
     shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
     prepare(tmp_path, {'PAPER_CONFIG': 'journals', 'OUTPUT_CHANNEL': 'rss', 'WINDOW_DAYS': '14', 'CUSTOM_CONFIG': 'llm:\n  enabled: false\n'})

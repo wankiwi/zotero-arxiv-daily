@@ -87,6 +87,7 @@ def compare(sample, output):
         'reranker':{'missing_abstract_factor':.8,'experiments':{},'local':{
             'model':MODEL,'revision':REVISION,'backend':'torch','cpu_dtype':'float32','cpu_threads':4,
             'cache_dir':str(output/'vectors'),'encode_kwargs':{'task':'retrieval','prompt_name':'document','batch_size':16}}}})
+    cfg.reranker.strategy='legacy_mean' # This script compares the original mean-based ablations.
     ranker=LocalReranker(cfg);reports={};rankings={};baseline=None
     # One untimed baseline prepares the model/vectors; report this cold cost separately.
     started=perf_counter();ranker.rerank(copy.deepcopy(papers),corpus);cold=perf_counter()-started

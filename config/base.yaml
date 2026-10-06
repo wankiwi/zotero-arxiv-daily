@@ -84,7 +84,14 @@ llm:
   language: Chinese # Preferred language for the TL;DR. Example: English
 
 reranker:
-  experiments: # Defaults exactly preserve the existing ranking baseline.
+  strategy: multi_interest_profile # legacy_mean switches back to the original weighted means.
+  multi_interest_profile:
+    assignment_min_cosine: 0.30 # Each reference belongs only to its strongest keyword direction.
+    max_references_per_direction: 24 # Strongest matches; recency rank breaks ties.
+    min_references_per_direction: 5 # Newest exact canonical DOI wins for profiles only.
+    min_effective_support: 3.0 # 1/sum(normalized profile weights^2).
+    shrinkage: 5.0 # n_eff/(n_eff+shrinkage); raw centroid is NOT renormalized.
+  experiments: # Ablations require strategy=legacy_mean; profile uses these default settings only.
     keyword_prompt: document # query encodes only interest keywords with the local query prompt.
     text_mode: abstract # title_abstract applies to candidates and corpus; missing abstract still penalized.
     deduplicate_corpus: false # Newest exact normalized DOI only; no title-only merging.
