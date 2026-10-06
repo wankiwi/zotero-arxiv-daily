@@ -32,6 +32,24 @@ def cpu_has_bf16():
         return False
 
 
+def persistent_overlap(namespace, directory, texts, dimension):
+    """Probe only the exact namespace, with the normal vector validation."""
+    if not directory:
+        return False
+    namespace_key = digest(namespace)
+    path = Path(directory).expanduser() / 'private' / namespace_key
+    if not path.is_dir():
+        return False
+    cache = None
+    for text in texts:
+        if (path / (digest([namespace_key, text]) + '.npz')).is_file():
+            if cache is None:
+                cache = EmbeddingCache(namespace, directory, dimension=dimension, dtype='float32')
+            if cache.get(text) is not None:
+                return True
+    return False
+
+
 @register_reranker('local')
 class LocalReranker(BaseReranker):
     def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
@@ -97,6 +115,7 @@ class LocalReranker(BaseReranker):
             if self._backend == 'torch':
                 self._encoder = SentenceTransformer(local.model, **load_options)
             self._model_identity = identity
+            self._auto_cache_precision_selected = False
             logger.info(f'Embedding model prepared: backend={self._backend}, seconds={perf_counter()-started:.3f}')
         encoder = self._encoder
         mode = local.get('cpu_dtype', 'auto')
@@ -137,12 +156,27 @@ class LocalReranker(BaseReranker):
         if directory and not resolved:
             logger.warning('Persistent embedding cache disabled: model has no resolved immutable revision')
             directory = None
+        if not self._auto_cache_precision_selected:
+            # Freeze the choice for this model load, including document/query roles.
+            # Hosted runners can alternate between native BF16 and FP32. Reuse an
+            # exact FP32 pool by actually upcasting the model, never by relaxing
+            # the dtype in the cache identity or by emulating BF16 on AVX2 CPUs.
+            self._auto_cache_precision_selected = True
+            if (mode == 'auto' and self._backend == 'torch' and encoder.device.type == 'cpu'
+                    and next(encoder.parameters()).dtype == torch.bfloat16 and directory):
+                fp32_namespace = namespace | {'dtype': str(torch.float32)}
+                if (not persistent_overlap(namespace, directory, texts, dimension)
+                        and persistent_overlap(fp32_namespace, directory, texts, dimension)):
+                    encoder.float()
+                    namespace['dtype'] = str(next(encoder.parameters()).dtype)
+                    logger.info('Automatic CPU precision: using FP32 to reuse a validated compatible private cache')
         namespace_key = digest(namespace)
         if not hasattr(self, '_role_caches'):
             self._role_caches = {}
         cache_key = (namespace_key, directory)
         if cache_key not in self._role_caches:
             self._role_caches[cache_key] = EmbeddingCache(namespace, directory, dimension=dimension, dtype='float32')
+            logger.info(f'Private embedding cache namespace: {namespace_key}, backend={self._backend}, dtype={namespace["dtype"]}')
         self._cache = self._role_caches[cache_key]
         self._cache_namespace, self._cache_directory = namespace_key, directory
         # This pool is PRIVATE: even public-paper membership reflects user filtering.
