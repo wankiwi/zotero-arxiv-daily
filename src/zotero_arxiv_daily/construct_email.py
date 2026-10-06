@@ -38,7 +38,7 @@ framework = '''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0 0 8px;font-size:11px;letter-spacing:2px;">ZOTERO · RESEARCH DIGEST</p>
 <h1 style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:0;font-size:28px;line-height:1.2;">Daily Papers</h1>
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:12px 0 0;font-size:14px;line-height:1.6;color:#dce5ee;">__COUNT__ · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers</p></td></tr>
-<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">__SCORING__ Library similarity weights papers by when they were added. Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
+<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">__SCORING__ Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
 __CONTENT__
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.7;color:#526174;">Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.</td></tr>
 </table><!--[if mso]></td></tr></table><![endif]-->
@@ -138,7 +138,7 @@ def percentage(weight):
     return f'{weight:.1%}'.replace('.0%', '%')
 
 
-def scoring_explanation(papers, interest_weights=None):
+def scoring_explanation(papers, interest_weights=None, ranking_strategy=None):
     weights = Counter((round(p.interest_keyword_weight, 6), round(p.interest_zotero_weight, 6)) for p in papers)
     if not weights:
         weights[tuple(interest_weights or (0., 1.))] = 0
@@ -154,6 +154,19 @@ def scoring_explanation(papers, interest_weights=None):
         parts = [f'{percentage(keyword)}/{percentage(library)} ({count} papers)'
                  for (keyword, library), count in weights.items()]
         text = 'Scored using abstract similarity with effective keyword/library weights: ' + '; '.join(parts) + '.'
+    strategies = Counter(p.ranking_strategy or 'legacy_mean' for p in papers)
+    if not strategies:
+        strategies[ranking_strategy or 'legacy_mean'] = 0
+    if len(strategies) > 1:
+        text += (' Ranking uses multi-interest profiles for '
+                 f"{strategies['multi_interest_profile']} papers and legacy mean aggregation for "
+                 f"{strategies['legacy_mean']} papers; stored scores retain their original strategy.")
+    elif 'multi_interest_profile' in strategies:
+        text += (' Multi-interest profile ranking uses the strongest joint keyword/library direction. '
+                 'Each library profile weights references by when they were added and shrinks toward the global mean; '
+                 'directions with too little support, or no direction anchors, use the global library mean.')
+    else:
+        text += ' Legacy mean ranking averages keywords and weights library references by when they were added.'
     if any(p.scoring_basis != 'abstract' for p in papers):
         text += ' Title similarity is used where an abstract is unavailable.'
     return text
@@ -178,7 +191,7 @@ def metadata_label(paper, field):
 
 
 def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_action_origin=None,
-                 interest_weights=None) -> str:
+                 interest_weights=None, ranking_strategy=None) -> str:
     shorten_affiliations([], affiliation_max_chars)  # Validate even an empty digest.
     zotero_action_origin = confirmation_origin(zotero_action_origin)
     labels = {'journals': '期刊 / Journals', 'preprints': '预印本 / Preprints（含会议论文）', 'random': '随机推荐 / Random'}
@@ -201,6 +214,10 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
                     metadata += f' ({p.summary_input_fallback})'
             if p.abstract_source:
                 metadata += f' · Abstract: {p.abstract_source}'
+            if p.ranking_strategy == 'multi_interest_profile' and p.matched_interest:
+                metadata += f' · Matched interest: {p.matched_interest}'
+                if p.interest_zotero_weight and not p.interest_direction_reliability:
+                    metadata += ' (library support limited; global mean used)'
             if p.raw_score is not None and p.missing_abstract_factor < 1:
                 metadata += f' · Missing-abstract factor: {p.missing_abstract_factor:g}; unadjusted relevance: {p.raw_score:.1f}/100'
             if p.selection_score is not None and p.score is not None and p.selection_score != p.score:
@@ -228,7 +245,7 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
         template = template.replace('Scores are shown to one decimal place.',
             'Missing-abstract adjustment is applied before conversion to 0-100: in the original signed domain, positive values multiply '
             'by the stated factor and negative values divide by it. A factor of zero yields 0/100. Scores are shown to one decimal place.')
-    return template.replace('__COUNT__', count).replace('__SCORING__', escape(scoring_explanation(papers, interest_weights))).replace('__CONTENT__', content)
+    return template.replace('__COUNT__', count).replace('__SCORING__', escape(scoring_explanation(papers, interest_weights, ranking_strategy))).replace('__CONTENT__', content)
 
 
 class _PlainEmail(HTMLParser):

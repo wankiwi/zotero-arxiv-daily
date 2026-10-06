@@ -43,6 +43,10 @@ class Paper:
     zotero_score: Optional[float] = None
     interest_keyword_weight: float = 0.0
     interest_zotero_weight: float = 1.0
+    ranking_strategy: Optional[str] = None # None denotes legacy stored papers.
+    matched_interest: Optional[str] = None
+    interest_direction_support: int = 0
+    interest_direction_reliability: float = 0.0
     summary_input_source: Optional[str] = None
     summary_input_fallback: Optional[str] = None
     tldr_status: Optional[str] = None

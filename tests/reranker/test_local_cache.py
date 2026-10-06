@@ -41,6 +41,25 @@ def test_memory_and_local_persistent_hits_preserve_scores(config, encoder, tmp_p
     assert fresh._encoder.calls==[['new']]
 
 
+def test_profile_affinity_reuses_same_document_cache_and_weight_edits_keep_namespace(config, encoder, tmp_path):
+    from tests.canned_responses import make_sample_paper, make_sample_corpus
+    config.reranker.strategy = 'multi_interest_profile'
+    config.interest_profile.keywords = ['water', 'sampling']
+    config.reranker.local.cache_dir = str(tmp_path)
+    ranker = LocalReranker(config)
+    papers, corpus = [make_sample_paper()], make_sample_corpus(10)
+    ranker.rerank(papers, corpus)
+    assert len(ranker._encoder.calls) == 1 and len(ranker._encoder.calls[0]) == 13
+    namespace = ranker._cache_namespace
+    config.interest_profile.keyword_weight = 0
+    ranker.rerank(papers, corpus)
+    assert len(ranker._encoder.calls) == 1 and ranker._cache_namespace == namespace
+    assert papers[0].keyword_score is None and papers[0].matched_interest
+    fresh = LocalReranker(config)
+    fresh.rerank(papers, corpus)
+    assert not fresh._encoder.calls and fresh._cache_namespace == namespace
+
+
 def test_prompt_change_invalidates(config, encoder):
     ranker=LocalReranker(config)
     ranker.get_similarity_score(['a'],['b'])

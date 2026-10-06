@@ -217,7 +217,7 @@ class LocalReranker(BaseReranker):
     def _similarity(self, left, right):
         similarity_started = perf_counter()
         profile = interest_profile(self.config)
-        if profile.keywords and profile.keyword_weight:
+        if profile.keywords and (profile.keyword_weight or self.config.reranker.get('strategy', 'multi_interest_profile') == 'multi_interest_profile'):
             left = left / np.linalg.norm(left, axis=1, keepdims=True)
             right = right / np.linalg.norm(right, axis=1, keepdims=True)
             result = left @ right.T

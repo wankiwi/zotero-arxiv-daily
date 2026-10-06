@@ -11,7 +11,7 @@ from tests.canned_responses import make_sample_paper, make_sample_corpus
 
 class Controlled(BaseReranker):
     def __init__(self, matrix, **profile):
-        super().__init__(OmegaConf.create({'interest_profile': profile}))
+        super().__init__(OmegaConf.create({'interest_profile': profile, 'reranker': {'strategy': 'legacy_mean'}}))
         self.matrix = np.array(matrix)
 
     def get_similarity_score(self, left, right):

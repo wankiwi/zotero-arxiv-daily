@@ -9,7 +9,7 @@ from tests.canned_responses import make_sample_paper, make_sample_corpus
 
 class Controlled(BaseReranker):
     def __init__(self, values, factor=0.8, keywords=()):
-        super().__init__(OmegaConf.create({'reranker':{'missing_abstract_factor':factor},
+        super().__init__(OmegaConf.create({'reranker':{'missing_abstract_factor':factor, 'strategy':'legacy_mean'},
                                           'interest_profile':{'keywords':list(keywords)}}))
         self.values=np.asarray(values)
     def get_similarity_score(self,left,right):return self.values
