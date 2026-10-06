@@ -64,6 +64,68 @@ def test_cpu_native_preserves_dtype(config, encoder, monkeypatch):
     assert next(ranker._encoder.parameters()).dtype == torch.bfloat16
 
 
+def test_auto_bf16_runner_reuses_fp32_cache_with_actual_upcast(config, encoder, tmp_path, monkeypatch):
+    config.reranker.local.cache_dir = str(tmp_path)
+    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: False)
+    cold = LocalReranker(config)
+    score = cold.get_similarity_score(['a'], ['b'])
+    namespace = cold._cache_namespace
+    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    warm = LocalReranker(config)
+    assert np.array_equal(score, warm.get_similarity_score(['a'], ['b']))
+    assert next(warm._encoder.parameters()).dtype == torch.float32
+    assert warm._cache_namespace == namespace
+    assert warm._cache.stats['disk_hits'] == 2 and not warm._encoder.calls
+    warm.get_similarity_score(['a'], ['new'])
+    assert warm._encoder.calls == [['new']]
+    assert next(warm._encoder.parameters()).dtype == torch.float32
+
+
+def test_native_bf16_still_invalidates_fp32_pool(config, encoder, tmp_path, monkeypatch):
+    config.reranker.local.cache_dir = str(tmp_path)
+    config.reranker.local.cpu_dtype = 'float32'
+    cold = LocalReranker(config)
+    cold.get_similarity_score(['a'], ['b'])
+    config.reranker.local.cpu_dtype = 'native'
+    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    native = LocalReranker(config)
+    native.get_similarity_score(['a'], ['b'])
+    assert native._cache_namespace != cold._cache_namespace
+    assert native._cache.stats['disk_hits'] == 0 and native._encoder.calls == [['a', 'b']]
+    assert next(native._encoder.parameters()).dtype == torch.bfloat16
+
+
+def test_auto_prefers_existing_native_pool_and_freezes_precision_across_roles(config, encoder, tmp_path, monkeypatch):
+    config.reranker.local.cache_dir = str(tmp_path)
+    config.reranker.local.cpu_dtype = 'float32'
+    fp32 = LocalReranker(config)
+    fp32._encode_texts(['query text'], 'query')
+    config.reranker.local.cpu_dtype = 'auto'
+    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    native = LocalReranker(config)
+    native._encode_texts(['document text'], 'document')
+    native._encode_texts(['query text'], 'query')
+    assert next(native._encoder.parameters()).dtype == torch.bfloat16
+    assert native._encoder.calls == [['document text'], ['query text']]
+    fresh = LocalReranker(config)
+    fresh._encode_texts(['document text'], 'document')
+    assert fresh._cache.stats['disk_hits'] == 1 and not fresh._encoder.calls
+
+
+def test_corrupt_fp32_pool_cannot_select_auto_precision(config, encoder, tmp_path, monkeypatch):
+    config.reranker.local.cache_dir = str(tmp_path)
+    config.reranker.local.cpu_dtype = 'float32'
+    cold = LocalReranker(config)
+    cold._encode_texts(['a'])
+    next(cold._cache.directory.glob('*.npz')).write_bytes(b'corrupt synthetic fixture')
+    config.reranker.local.cpu_dtype = 'auto'
+    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    warm = LocalReranker(config)
+    warm._encode_texts(['a'])
+    assert next(warm._encoder.parameters()).dtype == torch.bfloat16
+    assert warm._cache.stats['disk_hits'] == 0 and warm._encoder.calls == [['a']]
+
+
 def test_model_revision_change_reloads(config, encoder):
     ranker=LocalReranker(config)
     ranker.get_similarity_score(['a'],['b'])
@@ -157,6 +219,25 @@ def test_backend_namespace_and_inference_fallback(config,encoder,monkeypatch):
     ranker.get_similarity_score(['new'],['b'])
     assert ranker._backend=='torch' and ranker._cache_namespace!=namespace
     assert ranker._encoder.calls==[['new','b']]
+
+
+def test_actual_backend_change_invalidates_otherwise_identical_disk_identity(config, encoder, tmp_path, monkeypatch):
+    from zotero_arxiv_daily.reranker import onnx_encoder
+    class FakeOnnx(encoder):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+    monkeypatch.setattr(onnx_encoder, 'OnnxEncoder', FakeOnnx)
+    config.reranker.local.cache_dir = str(tmp_path)
+    config.reranker.local.cpu_dtype = 'float32'
+    config.reranker.local.backend = 'onnx_fp32'
+    cold = LocalReranker(config)
+    cold.get_similarity_score(['a'], ['b'])
+    assert cold._backend == 'onnx_fp32'
+    config.reranker.local.backend = 'torch'
+    fresh = LocalReranker(config)
+    fresh.get_similarity_score(['a'], ['b'])
+    assert fresh._backend == 'torch' and fresh._cache_namespace != cold._cache_namespace
+    assert fresh._cache.stats['disk_hits'] == 0 and fresh._encoder.calls == [['a', 'b']]
 
 
 def test_query_role_separates_cache_and_preserves_document_reuse(config,encoder):
