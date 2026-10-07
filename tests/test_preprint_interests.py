@@ -9,10 +9,10 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from scripts.prepare_workflow import prepare
-from zotero_arxiv_daily.preprint_interests import validate_interests, enabled_sources, categories_for, matches_keywords
-from zotero_arxiv_daily.retriever.biorxiv_retriever import BiorxivRetriever
-from zotero_arxiv_daily.retriever.medrxiv_retriever import MedrxivRetriever
-from zotero_arxiv_daily.retriever.base import BaseRetriever
+from zot2dailypaper.preprint_interests import validate_interests, enabled_sources, categories_for, matches_keywords
+from zot2dailypaper.retriever.biorxiv_retriever import BiorxivRetriever
+from zot2dailypaper.retriever.medrxiv_retriever import MedrxivRetriever
+from zot2dailypaper.retriever.base import BaseRetriever
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,7 +83,7 @@ def test_biorxiv_server_categories_paginated_independently(config, monkeypatch):
                         doi=f'10.1101/{category}{cursor}', version=1)
             return SimpleNamespace(raise_for_status=lambda: None,
                 json=lambda: {'messages': [{'status': 'ok', 'total': 2}], 'collection': [item]})
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.biorxiv_retriever.session', Client)
+    monkeypatch.setattr('zot2dailypaper.retriever.biorxiv_retriever.session', Client)
     assert len(BiorxivRetriever(config)._retrieve_raw_papers()) == 4
     assert [urlparse(url).path.rsplit('/', 1)[1] for url in calls] == ['0', '1', '0', '1']
     assert set(parse_qs(urlparse(url).query)['category'][0] for url in calls) == {'biophysics', 'biochemistry'}
@@ -108,7 +108,7 @@ def test_keyword_phrase_matching():
 
 
 def test_arxiv_interest_query_is_server_side(config, monkeypatch):
-    import zotero_arxiv_daily.retriever.arxiv_retriever as module
+    import zot2dailypaper.retriever.arxiv_retriever as module
     config.preprint_interests = {'arxiv': {'categories': ['physics.chem-ph', 'cs.AI '], 'keywords': ['soft matter']}}
     searches = []
     class Client:
@@ -125,9 +125,9 @@ def test_arxiv_interest_query_is_server_side(config, monkeypatch):
 
 def test_researchsquare_filter_cannot_resurrect_older_matching_version(config, monkeypatch):
     from tests.retriever.test_preprint_windows import fake_session, rs_item
-    from zotero_arxiv_daily.retriever.researchsquare_retriever import ResearchSquareRetriever
+    from zot2dailypaper.retriever.researchsquare_retriever import ResearchSquareRetriever
     config.preprint_interests = {'researchsquare': {'keywords': ['soft matter']}}
-    fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.researchsquare_retriever.session', [
+    fake_session(monkeypatch, 'zot2dailypaper.retriever.researchsquare_retriever.session', [
         {'message': {'items': [rs_item(title=['Soft matter']), rs_item('10.21203/rs.3.rs-123/v2', title=['Unrelated topic'])], 'total-results': 2}},
     ])
     assert ResearchSquareRetriever(config).retrieve_papers() == []
@@ -139,6 +139,6 @@ def test_researchsquare_filter_cannot_resurrect_older_matching_version(config, m
     ('x_y / molecular dynamics','x_y molecular dynamics'),
 ])
 def test_keyword_and_identity_normalization_preserve_existing_unicode(text,expected):
-    from zotero_arxiv_daily.identity import title_key
-    from zotero_arxiv_daily.preprint_interests import keyword_text
+    from zot2dailypaper.identity import title_key
+    from zot2dailypaper.preprint_interests import keyword_text
     assert title_key(text)==keyword_text(text)==expected

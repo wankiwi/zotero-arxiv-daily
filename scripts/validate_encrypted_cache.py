@@ -8,8 +8,8 @@ import tempfile
 
 import numpy as np
 
-from zotero_arxiv_daily.reranker.embedding_cache import EmbeddingCache
-from zotero_arxiv_daily.reranker.encrypted_cache import MAGIC, decode_key, seal, unseal
+from zot2dailypaper.reranker.embedding_cache import EmbeddingCache
+from zot2dailypaper.reranker.encrypted_cache import MAGIC, decode_key, seal, unseal
 
 
 NAMESPACE = {'validation': 'synthetic-only-v1', 'dimension': 4, 'dtype': 'float32'}
@@ -52,7 +52,7 @@ def main():
     parser.add_argument('phase', choices=['save', 'restore'])
     parser.add_argument('--package', type=Path, required=True)
     args = parser.parse_args()
-    if (os.environ.get('GITHUB_REPOSITORY') != 'wankiwi/zotero-arxiv-daily'
+    if (os.environ.get('GITHUB_REPOSITORY') != 'wankiwi/zot2dailypaper'
             or os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'):
         raise SystemExit('Synthetic cache validation requires trusted main workflow_dispatch')

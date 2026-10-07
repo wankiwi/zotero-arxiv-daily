@@ -2,7 +2,7 @@
 
 from omegaconf import open_dict
 
-from zotero_arxiv_daily.retriever.medrxiv_retriever import MedrxivRetriever
+from zot2dailypaper.retriever.medrxiv_retriever import MedrxivRetriever
 
 
 def test_medrxiv_server_attribute(config):

@@ -13,6 +13,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from .embedding_cache import valid_vector, validate_array_archive
 
 MAGIC = b'ZPDEMB1\0'
+# Durable v1 format identity: keep the original repository slug after renaming.
+# Changing these authenticated bytes would invalidate existing encrypted caches.
 AAD = b'wankiwi/zotero-arxiv-daily:private-embedding-cache:v1'
 MAX_PACKAGE = 128 * 1024 * 1024
 MAX_MEMBER = 1024 * 1024

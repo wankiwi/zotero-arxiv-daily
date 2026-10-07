@@ -9,8 +9,8 @@ import sys
 import pytest
 
 from tests.test_budget import make_git
-from zotero_arxiv_daily import budget
-from zotero_arxiv_daily.budget_calendar import LOCAL_NAMESPACE, LOCAL_TIMEZONE, window_at, legacy_digest
+from zot2dailypaper import budget
+from zot2dailypaper.budget_calendar import LOCAL_NAMESPACE, LOCAL_TIMEZONE, window_at, legacy_digest
 
 CAP, COST = Decimal('.30'), Decimal('.00432')
 
@@ -184,7 +184,7 @@ def test_independent_old_new_writer_interleavings_grant_only_one(tmp_path, monke
     second = tmp_path / 'second'
     git('clone', str(remote), str(second))
     code = ("from datetime import datetime, timezone\nfrom decimal import Decimal\n"
-            "from zotero_arxiv_daily import budget\n"
+            "from zot2dailypaper import budget\n"
             "class Fixed(datetime):\n @classmethod\n def now(cls,tz=None):\n"
             "  return datetime.fromisoformat('2026-10-07T03:00:00+00:00').astimezone(tz or timezone.utc)\n"
             "budget.datetime=Fixed\n"
@@ -300,7 +300,7 @@ def test_two_independent_local_processes_grant_only_one(tmp_path, monkeypatch):
     monkeypatch.setenv('GIT_COMMITTER_DATE', '2026-10-07T03:00:00+00:00')
     monkeypatch.setenv('GITHUB_RUN_ID', '1000')
     monkeypatch.setenv('GITHUB_RUN_ATTEMPT', '1')
-    code = ("from datetime import datetime\nfrom decimal import Decimal\nfrom zotero_arxiv_daily import budget\n"
+    code = ("from datetime import datetime\nfrom decimal import Decimal\nfrom zot2dailypaper import budget\n"
             "budget.budget_now=lambda:datetime.fromisoformat('2026-10-07T03:00:00+00:00')\n"
             "budget.reserve_local_day(Decimal('.30'))\n")
     jobs = [subprocess.Popen([sys.executable, '-c', code], cwd=path, stdout=subprocess.PIPE,
@@ -315,7 +315,7 @@ def test_cooldown_crossing_singapore_midnight_never_sends_second_attempt(monkeyp
     from datetime import timedelta
     from tests.test_summary_reliability import client, params
     from tests.canned_responses import make_sample_paper
-    from zotero_arxiv_daily import llm, protocol
+    from zot2dailypaper import llm, protocol
     current = clock(monkeypatch, '2026-10-07T15:59:59+00:00')
     elapsed = [0.0]
     def sleep(seconds):

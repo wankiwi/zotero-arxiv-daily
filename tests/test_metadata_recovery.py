@@ -7,9 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily import metadata, aps_metadata, abstracts
-from zotero_arxiv_daily.executor import Executor
-from zotero_arxiv_daily.state import load_paper, paper_dict, State
+from zot2dailypaper import metadata, aps_metadata, abstracts
+from zot2dailypaper.executor import Executor
+from zot2dailypaper.state import load_paper, paper_dict, State
 from tests.test_pipeline import pipeline  # noqa: F401 -- isolated pipeline fixture
 
 
@@ -169,7 +169,7 @@ def test_pipeline_recovers_selected_metadata_with_llm_disabled(pipeline, monkeyp
     pipeline.executor.max_paper_num = 1
     calls = transport(monkeypatch, lambda _: (200, crossref(author=[{'name': 'Author A',
                                                            'affiliation': [{'name': 'University A'}]}])))
-    monkeypatch.setattr('zotero_arxiv_daily.executor.recover_metadata', metadata.recover_metadata)
+    monkeypatch.setattr('zot2dailypaper.executor.recover_metadata', metadata.recover_metadata)
     executor = Executor(pipeline)
     selected = make_sample_paper(doi='10.5555/test', title='Test paper', authors=[], affiliations=None)
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: [selected])

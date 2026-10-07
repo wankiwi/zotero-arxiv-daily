@@ -102,7 +102,7 @@ Desktop (1440px) and mobile (390px) browser checks confirm three vertically stac
 
 Real metadata checks on the ten previously missing abstracts identified two publisher cover items, now excluded by precise front/back-cover labels. Of the eight research papers, three abstracts were recovered through DOI-verified OpenAlex metadata and two through DOI-verified public Nature abstract sections. Nature's ordinary anonymous authorize/transit redirects are supported within four GETs and a 2MB page limit. Three APS abstracts exist publicly, but ordinary HTTP returned 403 in the verification environment; the implementation records access-blocked status and does not bypass it or substitute a title-matched preprint. Neither the probe nor previews modified delivery history or sent email.
 
-The user-updated SiliconFlow key passed isolated validation run [36838849520](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/36838849520): one Chinese sentence, 91 prompt tokens and 48 completion tokens (139 total), one paid request, and unchanged delivery-history blob containing 95 records. The existing whole-day-no-refund guard reserved CNY0.20 for the UTC day; no subsequent paid validation or email was triggered.
+The user-updated SiliconFlow key passed isolated validation run [36838849520](https://github.com/wankiwi/zot2dailypaper/actions/runs/36838849520): one Chinese sentence, 91 prompt tokens and 48 completion tokens (139 total), one paid request, and unchanged delivery-history blob containing 95 records. The existing whole-day-no-refund guard reserved CNY0.20 for the UTC day; no subsequent paid validation or email was triggered.
 
 
 ## APS metadata and cover eligibility follow-up

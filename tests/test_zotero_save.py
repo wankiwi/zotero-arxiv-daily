@@ -3,8 +3,8 @@ import time
 import json
 from types import SimpleNamespace
 import pytest
-from zotero_arxiv_daily.zotero_save import SaveService, SaveError, VerifiedSession, ZoteroWriter
-from zotero_arxiv_daily.identity import paper_id
+from zot2dailypaper.zotero_save import SaveService, SaveError, VerifiedSession, ZoteroWriter
+from zot2dailypaper.identity import paper_id
 from tests.canned_responses import make_sample_paper
 
 

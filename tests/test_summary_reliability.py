@@ -14,10 +14,10 @@ import pytest
 from tests.canned_responses import make_sample_paper, make_chat_response
 from tests.test_budget import make_git
 from tests.test_pipeline import pipeline  # noqa: F401 -- shared isolated fixture
-from zotero_arxiv_daily import budget, llm, protocol
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
-from zotero_arxiv_daily.executor import Executor
-from zotero_arxiv_daily.state import State, paper_dict, load_paper
+from zot2dailypaper import budget, llm, protocol
+from zot2dailypaper.construct_email import render_email, email_plain_text
+from zot2dailypaper.executor import Executor
+from zot2dailypaper.state import State, paper_dict, load_paper
 
 
 MODEL = 'deepseek-ai/DeepSeek-V4-Flash'
@@ -309,8 +309,8 @@ def test_all_missing_or_whitespace_inputs_do_not_reserve_a_day(pipeline, monkeyp
     papers = [make_sample_paper(title=f'Offline {i}', url=f'https://example.org/{i}', abstract=text)
               for i, text in enumerate((' ', ''))]
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: papers)
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', lambda cfg: pytest.fail('No input must not reserve'))
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kw: pytest.fail('No input must not create client'))
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget', lambda cfg: pytest.fail('No input must not reserve'))
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', lambda **kw: pytest.fail('No input must not create client'))
     executor.run()
     restored = State(pipeline.state.path).pending('email')
     assert len(restored) == 2 and all(p.tldr_error_reason == 'input_unavailable' for p in restored)
@@ -320,10 +320,10 @@ def test_local_client_setup_failure_keeps_ranked_papers_without_reserving(pipeli
     pipeline.llm.enabled = True
     executor = Executor(pipeline)
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: [make_sample_paper()])
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', lambda cfg: pytest.fail('Setup failure must not reserve'))
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget', lambda cfg: pytest.fail('Setup failure must not reserve'))
     def broken(**kwargs):
         raise ValueError('PRIVATE_CREDENTIAL_MARKER')
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', broken)
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', broken)
     logs = []
     sink = logger.add(lambda msg: logs.append(str(msg)))
     try:
@@ -343,8 +343,8 @@ def test_reserved_day_reason_survives_pipeline_state_and_email(pipeline, monkeyp
     def already_reserved(cfg):
         raise budget.BudgetUnavailable('UTC day already reserved', reason='daily_budget_reserved',
                                        day='2026-10-06', retry_at='2026-10-07T00:00:00+00:00')
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', already_reserved)
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kw: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget', already_reserved)
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', lambda **kw: SimpleNamespace(close=lambda: None))
     executor.run()
     restored = State(pipeline.state.path).pending('email')
     plain = email_plain_text(render_email(restored))
@@ -371,14 +371,14 @@ def test_partial_success_and_delivery_resume_reuse_stored_results_without_paid_c
         if len(calls) == 4:
             data['choices'][0]['finish_reason'] = 'length'
         return httpx.Response(200, json=data)
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kw: client(handler))
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', lambda **kw: client(handler))
     def reserve(cfg):
         reservations.append(True)
         return guard()
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', reserve)
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget', reserve)
     def smtp_failure(*args):
         raise OSError('offline SMTP failure')
-    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email', smtp_failure)
+    monkeypatch.setattr('zot2dailypaper.executor.send_email', smtp_failure)
     papers = [make_sample_paper(title=f'Offline {i}', url=f'https://example.org/{i}') for i in range(3)]
     first = Executor(pipeline)
     monkeypatch.setattr(first.retrievers['arxiv'], 'retrieve_papers', lambda: papers)
@@ -390,7 +390,7 @@ def test_partial_success_and_delivery_resume_reuse_stored_results_without_paid_c
     assert sorted(p.tldr_attempts for p in pending) == [1, 1, 2]
     repeat = Executor(pipeline)
     monkeypatch.setattr(repeat.retrievers['arxiv'], 'retrieve_papers', lambda: [])
-    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email', lambda *args: sends.append(args[1]))
+    monkeypatch.setattr('zot2dailypaper.executor.send_email', lambda *args: sends.append(args[1]))
     repeat.run()
     assert len(calls) == 4 and len(reservations) == 1 and len(sends) == 1
     assert '2/3 generated' in sends[0] and not State(pipeline.state.path).pending('email')

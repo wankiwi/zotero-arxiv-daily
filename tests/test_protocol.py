@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 import pytest
 from tests.canned_responses import make_sample_paper, make_stub_openai_client, make_budget_guard, make_chat_response
-from zotero_arxiv_daily.budget import BudgetUnavailable
+from zot2dailypaper.budget import BudgetUnavailable
 
 @pytest.fixture
 def llm_params():

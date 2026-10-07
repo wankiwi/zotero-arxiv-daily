@@ -33,7 +33,7 @@ def test_independent_cold_save_and_restore(tmp_path):
                                         ('GITHUB_REPOSITORY', 'other/repo'),
                                         ('GITHUB_EVENT_NAME', 'pull_request')])
 def test_cli_rejects_untrusted_context(monkeypatch, tmp_path, field, value):
-    for name, content in {'GITHUB_REF': 'refs/heads/main', 'GITHUB_REPOSITORY': 'wankiwi/zotero-arxiv-daily',
+    for name, content in {'GITHUB_REF': 'refs/heads/main', 'GITHUB_REPOSITORY': 'wankiwi/zot2dailypaper',
                           'GITHUB_EVENT_NAME': 'workflow_dispatch'}.items():
         monkeypatch.setenv(name, content)
     monkeypatch.setenv(field, value)
@@ -51,13 +51,13 @@ def test_manual_workflow_isolated_namespace_and_credentials():
     assert workflow['jobs']['restore']['needs'] == 'save'
     for job in workflow['jobs'].values():
         assert "github.ref == 'refs/heads/main'" in job['if']
-        assert "github.repository == 'wankiwi/zotero-arxiv-daily'" in job['if']
+        assert "github.repository == 'wankiwi/zot2dailypaper'" in job['if']
         for step in job['steps']:
             if step.get('uses', '').startswith('actions/cache/'):
                 assert step['with']['key'].startswith('embedding-validation-v1-')
                 assert step['with']['path'].endswith('/private.enc')
                 assert 'restore-keys' not in step['with']
     for forbidden in ['secrets.ZOTERO', 'secrets.SMTP', 'secrets.OPENAI', 'CUSTOM_CONFIG',
-                      'workflow_state.py', 'zotero_arxiv_daily.main', 'schedule:', 'embedding-private-v1-']:
+                      'workflow_state.py', 'zot2dailypaper.main', 'schedule:', 'embedding-private-v1-']:
         assert forbidden not in text
     assert text.count('secrets.EMBEDDING_CACHE_KEY') == 2

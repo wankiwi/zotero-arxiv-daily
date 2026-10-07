@@ -3,7 +3,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from zotero_arxiv_daily.protocol import CorpusPaper, Paper
+from zot2dailypaper.protocol import CorpusPaper, Paper
 
 
 # ---------------------------------------------------------------------------
@@ -230,5 +230,5 @@ SAMPLE_BIORXIV_API_RESPONSE = {
 def make_budget_guard():
     """Synthetic allowance for fake clients only; never reserves a remote ledger."""
     from decimal import Decimal
-    from zotero_arxiv_daily.budget import BudgetRequests, utc_day
+    from zot2dailypaper.budget import BudgetRequests, utc_day
     return BudgetRequests(Decimal('0.20'), Decimal('0.001'), utc_day())

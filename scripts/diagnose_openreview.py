@@ -6,11 +6,11 @@ from pathlib import Path
 from hydra import compose, initialize_config_dir
 from loguru import logger
 from validate_openreview import ProbeClient
-from zotero_arxiv_daily.retriever.openreview_retriever import OpenReviewRetriever
+from zot2dailypaper.retriever.openreview_retriever import OpenReviewRetriever
 
 
 def main():
-    logger.disable('zotero_arxiv_daily')
+    logger.disable('zot2dailypaper')
     with initialize_config_dir(config_dir=str(Path(__file__).resolve().parents[1]/'config'),version_base=None):
         config=compose(config_name='interests')
     r=OpenReviewRetriever(config);client=ProbeClient(max_requests=160)

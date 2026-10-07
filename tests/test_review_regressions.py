@@ -4,10 +4,10 @@ from types import SimpleNamespace
 from dataclasses import replace
 import re
 from omegaconf import open_dict
-from zotero_arxiv_daily.identity import deduplicate
-from zotero_arxiv_daily.journals import CORE
-from zotero_arxiv_daily.retriever.journal_retriever import JournalRetriever
-from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever
+from zot2dailypaper.identity import deduplicate
+from zot2dailypaper.journals import CORE
+from zot2dailypaper.retriever.journal_retriever import JournalRetriever
+from zot2dailypaper.retriever.arxiv_retriever import ArxivRetriever
 from tests.canned_responses import make_sample_paper
 
 UTC = timezone.utc
@@ -35,14 +35,14 @@ def test_arxiv_default_window_sees_delayed_announcements(config, monkeypatch):
         current = None
         @classmethod
         def now(cls, tz=None): return cls.current
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.arxiv_retriever.datetime', Clock)
+    monkeypatch.setattr('zot2dailypaper.retriever.arxiv_retriever.datetime', Clock)
     paper = SimpleNamespace(primary_category='cs.AI')
     def results(search):
         left,right = re.search(r'submittedDate:\[(\d+) TO (\d+)\]',search.query).groups()
         start = datetime.strptime(left,'%Y%m%d%H%M').replace(tzinfo=UTC)
         end = datetime.strptime(right,'%Y%m%d%H%M').replace(tzinfo=UTC)
         return iter([paper] if Clock.current >= public and start <= submitted <= end else [])
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.arxiv_retriever.arxiv.Client',lambda **kw: SimpleNamespace(results=results))
+    monkeypatch.setattr('zot2dailypaper.retriever.arxiv_retriever.arxiv.Client',lambda **kw: SimpleNamespace(results=results))
     with open_dict(config):
         config.source.arxiv.category = ['*']
         # Use the composed production default rather than a hard-coded test window.
@@ -66,7 +66,7 @@ def test_one_bad_crossref_record_preserves_other_records(config, monkeypatch):
     client = SimpleNamespace(get=lambda *a, **kw: response({'items':[good,bad]}))
     @contextmanager
     def session(*a): yield client
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session',session)
+    monkeypatch.setattr('zot2dailypaper.retriever.journal_retriever.session',session)
     journal = replace(CORE['jacs'],rss=None,issns=('0002-7863',))
     _, papers, failed = JournalRetriever(config)._journal(journal, datetime(2026,3,1,tzinfo=UTC),datetime(2026,3,5,tzinfo=UTC))
     assert [p.doi for p in papers] == ['10.1021/test']

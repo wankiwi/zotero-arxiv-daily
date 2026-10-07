@@ -10,16 +10,16 @@ from omegaconf import open_dict
 
 from tests.canned_responses import make_sample_paper, make_chat_response
 from tests.test_pipeline import pipeline  # noqa: F401 -- isolated providers/transports
-from zotero_arxiv_daily import budget
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
-from zotero_arxiv_daily.executor import Executor
-from zotero_arxiv_daily.identity import deduplicate
-from zotero_arxiv_daily.retriever.biorxiv_retriever import BiorxivRetriever
-from zotero_arxiv_daily.retriever.medrxiv_retriever import MedrxivRetriever
-from zotero_arxiv_daily.retriever.openreview_retriever import OpenReviewRetriever
-from zotero_arxiv_daily.retriever.journal_retriever import JournalRetriever
-from zotero_arxiv_daily.journals import Journal
-from zotero_arxiv_daily.state import State, load_paper, paper_dict
+from zot2dailypaper import budget
+from zot2dailypaper.construct_email import render_email, email_plain_text
+from zot2dailypaper.executor import Executor
+from zot2dailypaper.identity import deduplicate
+from zot2dailypaper.retriever.biorxiv_retriever import BiorxivRetriever
+from zot2dailypaper.retriever.medrxiv_retriever import MedrxivRetriever
+from zot2dailypaper.retriever.openreview_retriever import OpenReviewRetriever
+from zot2dailypaper.retriever.journal_retriever import JournalRetriever
+from zot2dailypaper.journals import Journal
+from zot2dailypaper.state import State, load_paper, paper_dict
 
 
 def bio_client(monkeypatch, responses):
@@ -28,7 +28,7 @@ def bio_client(monkeypatch, responses):
         calls.append(url)
         payload = responses[len(calls) - 1]
         return SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.biorxiv_retriever.session',
+    monkeypatch.setattr('zot2dailypaper.retriever.biorxiv_retriever.session',
                         lambda: nullcontext(SimpleNamespace(get=get)))
     return calls
 
@@ -86,7 +86,7 @@ def test_daily_pipeline_empty_bio_window_succeeds_without_redelivery(pipeline, m
         pipeline.state.enabled = True
     bio_client(monkeypatch, [{'messages': [{'status': 'no posts found'}]}] * 2)
     sent = []
-    monkeypatch.setattr('zotero_arxiv_daily.executor.send_email', lambda *args: sent.append(args[1]))
+    monkeypatch.setattr('zot2dailypaper.executor.send_email', lambda *args: sent.append(args[1]))
     for _ in range(2):
         executor = Executor(pipeline)
         executor.retrievers['biorxiv'] = BiorxivRetriever(pipeline)

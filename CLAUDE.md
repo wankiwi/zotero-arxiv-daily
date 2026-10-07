@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zotero-arXiv-Daily recommends new journal, arXiv/bioRxiv/medRxiv, Research Square and OpenReview papers based on a user's Zotero library. It computes embedding similarity between new papers and the user's existing library, generates TLDRs via LLM, and delivers results by email. Designed to run in GitHub Actions. LLM calls use a durable daily estimated budget whose amount comes from CUSTOM_CONFIG (currently CNY0.30); the guard remains mandatory and stale prices warn under the configured policy. Preserve OpenReview blind-review anonymity; never infer or unmask withheld identities.
+zot2dailypaper recommends new journal, arXiv/bioRxiv/medRxiv, Research Square and OpenReview papers based on a user's Zotero library. It computes embedding similarity between new papers and the user's existing library, generates TLDRs via LLM, and delivers results by email. Designed to run in GitHub Actions. LLM calls use a durable daily estimated budget whose amount comes from CUSTOM_CONFIG (currently CNY0.30); the guard remains mandatory and stale prices warn under the configured policy. Preserve OpenReview blind-review anonymity; never infer or unmask withheld identities.
 
 ## Commands
 
 ```bash
 # Run the application
-uv run src/zotero_arxiv_daily/main.py
+uv run src/zot2dailypaper/main.py
 
 # Run tests (excludes slow tests by default)
 uv run pytest
@@ -29,7 +29,7 @@ Static checks: `uvx ruff check --select F401,F821,F841 src scripts tests`; use a
 
 ## Architecture
 
-The app follows a linear pipeline orchestrated by `Executor` (`src/zotero_arxiv_daily/executor.py`):
+The app follows a linear pipeline orchestrated by `Executor` (`src/zot2dailypaper/executor.py`):
 
 1. **Fetch Zotero corpus** — retrieves user's library papers via pyzotero API
 2. **Filter corpus** — applies `include_path` and `ignore_path` glob patterns without broadening their scope
@@ -40,9 +40,9 @@ The app follows a linear pipeline orchestrated by `Executor` (`src/zotero_arxiv_
 
 ### Plugin Systems
 
-**Retrievers** (`src/zotero_arxiv_daily/retriever/`): Register via `@register_retriever` decorator, discovered by `get_retriever_cls()`. Each retriever implements `_retrieve_raw_papers()` and `convert_to_paper()`.
+**Retrievers** (`src/zot2dailypaper/retriever/`): Register via `@register_retriever` decorator, discovered by `get_retriever_cls()`. Each retriever implements `_retrieve_raw_papers()` and `convert_to_paper()`.
 
-**Rerankers** (`src/zotero_arxiv_daily/reranker/`): Register via `@register_reranker` decorator, discovered by `get_reranker_cls()`. Two implementations: `local` (sentence-transformers) and `api` (OpenAI-compatible embeddings endpoint).
+**Rerankers** (`src/zot2dailypaper/reranker/`): Register via `@register_reranker` decorator, discovered by `get_reranker_cls()`. Two implementations: `local` (sentence-transformers) and `api` (OpenAI-compatible embeddings endpoint).
 
 ### Configuration
 
@@ -50,7 +50,7 @@ Uses Hydra + OmegaConf. Presets inherit `config/base.yaml`; `default` selects `a
 
 ### Data Classes
 
-`Paper` and `CorpusPaper` in `src/zotero_arxiv_daily/protocol.py`. `Paper.generate_tldr` requires a reserved `BudgetRequests` guard. `generate_affiliations` remains a no-spend compatibility method returning existing metadata.
+`Paper` and `CorpusPaper` in `src/zot2dailypaper/protocol.py`. `Paper.generate_tldr` requires a reserved `BudgetRequests` guard. `generate_affiliations` remains a no-spend compatibility method returning existing metadata.
 
 ## Testing
 
@@ -64,7 +64,7 @@ uv run pytest
 uv run pytest -m ""
 
 # Run with coverage
-uv run pytest --cov=src/zotero_arxiv_daily --cov-report=term-missing
+uv run pytest --cov=src/zot2dailypaper --cov-report=term-missing
 ```
 
 ## gstack

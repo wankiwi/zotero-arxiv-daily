@@ -1,7 +1,7 @@
 """Create a credential-free preview with synthetic papers; never send email."""
 from pathlib import Path
-from zotero_arxiv_daily.protocol import Paper
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
+from zot2dailypaper.protocol import Paper
+from zot2dailypaper.construct_email import render_email, email_plain_text
 
 def main():
     destination = Path('docs/previews')

@@ -1,6 +1,6 @@
 """Explicit first-time ledger setup; no credentials or paid requests are used."""
 import argparse
-from zotero_arxiv_daily.budget import bootstrap_ledger
+from zot2dailypaper.budget import bootstrap_ledger
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)

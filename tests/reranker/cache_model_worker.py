@@ -92,8 +92,8 @@ def evaluate(options):
     import torch
     import sentence_transformers
     from omegaconf import OmegaConf
-    from zotero_arxiv_daily.reranker import local
-    from zotero_arxiv_daily.reranker.encrypted_cache import seal, unseal
+    from zot2dailypaper.reranker import local
+    from zot2dailypaper.reranker.encrypted_cache import seal, unseal
 
     cache = Path(options['cache'])
     os.environ['PRIVATE_EMBEDDING_CACHE_DIR'] = str(cache)

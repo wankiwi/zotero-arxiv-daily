@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from zotero_arxiv_daily.reranker.embedding_cache import EmbeddingCache
+from zot2dailypaper.reranker.embedding_cache import EmbeddingCache
 
 
 def test_persistent_cache_exact_roundtrip_without_plaintext(tmp_path):
@@ -42,7 +42,7 @@ def test_invalid_vectors_rejected(vector):
 def test_disk_write_failure_retains_memory(tmp_path, monkeypatch):
     cache = EmbeddingCache({}, tmp_path)
     def fail(*args): raise OSError('disk full')
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.embedding_cache.os.replace', fail)
+    monkeypatch.setattr('zot2dailypaper.reranker.embedding_cache.os.replace', fail)
     cache.put('text', np.array([1.0]))
     assert np.array_equal(cache.get('text'), [1.0])
     assert not list(cache.directory.iterdir())

@@ -6,7 +6,7 @@ import time
 import requests
 from hydra import compose, initialize_config_dir
 from loguru import logger
-from zotero_arxiv_daily.retriever.openreview_retriever import OpenReviewRetriever, API, no_exclusions
+from zot2dailypaper.retriever.openreview_retriever import OpenReviewRetriever, API, no_exclusions
 
 
 def safe_error_category(response):
@@ -40,7 +40,7 @@ class ProbeClient:
         self.max_requests = max_requests
         self.client = requests.Session()
         self.headers = self.client.headers
-        self.headers['User-Agent'] = 'zotero-arxiv-daily/1.0'
+        self.headers['User-Agent'] = 'zot2dailypaper/1.0'
         self.calls, self.last_start, self.last_status = 0, 0, None
         self.stage = 'login'
         self.error_category = None
@@ -106,7 +106,7 @@ def validate(retriever, client):
 
 
 def main():
-    logger.disable('zotero_arxiv_daily')
+    logger.disable('zot2dailypaper')
     with initialize_config_dir(config_dir=str(Path(__file__).resolve().parents[1] / 'config'), version_base=None):
         config = compose(config_name='interests')
     client = ProbeClient()

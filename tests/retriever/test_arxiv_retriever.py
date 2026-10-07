@@ -4,8 +4,8 @@ import time
 from types import SimpleNamespace
 
 
-from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
-import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
+from zot2dailypaper.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
+import zot2dailypaper.retriever.arxiv_retriever as arxiv_retriever
 
 
 def _sleep_and_return(value: str, delay_seconds: float) -> str:
@@ -18,7 +18,7 @@ def _raise_runtime_error() -> None:
 
 
 def test_arxiv_retriever(config, mock_feedparser, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+    monkeypatch.setattr("zot2dailypaper.retriever.base.sleep", lambda _: None)
 
     # The RSS fixture gives us paper IDs.  After feedparser, the code calls
     # arxiv.Client().results(search) which makes real HTTP requests.  We mock

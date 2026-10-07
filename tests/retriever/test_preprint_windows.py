@@ -5,12 +5,12 @@ from types import SimpleNamespace
 from omegaconf import open_dict
 import pytest
 
-from zotero_arxiv_daily.identity import paper_id
-from zotero_arxiv_daily.state import State
-from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever
-from zotero_arxiv_daily.retriever.biorxiv_retriever import BiorxivRetriever
-from zotero_arxiv_daily.retriever.medrxiv_retriever import MedrxivRetriever
-from zotero_arxiv_daily.retriever.researchsquare_retriever import ResearchSquareRetriever
+from zot2dailypaper.identity import paper_id
+from zot2dailypaper.state import State
+from zot2dailypaper.retriever.arxiv_retriever import ArxivRetriever
+from zot2dailypaper.retriever.biorxiv_retriever import BiorxivRetriever
+from zot2dailypaper.retriever.medrxiv_retriever import MedrxivRetriever
+from zot2dailypaper.retriever.researchsquare_retriever import ResearchSquareRetriever
 
 
 def fake_session(monkeypatch, target, payloads):
@@ -40,7 +40,7 @@ def test_research_square_pagination_versions_and_state(config, monkeypatch, tmp_
     first = [rs_item(f'10.21203/rs.3.rs-{number}/v1') for number in range(200)]
     last = [rs_item('10.21203/rs.3.rs-0/v2'), rs_item(subtype='other'),
             rs_item('10.21203/unrelated'), rs_item(published={'date-parts': [[2000, 1, 1]]})]
-    calls = fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.researchsquare_retriever.session', [
+    calls = fake_session(monkeypatch, 'zot2dailypaper.retriever.researchsquare_retriever.session', [
         {'message': {'items': first, 'total-results': 204, 'next-cursor': 'second'}},
         {'message': {'items': last, 'total-results': 204}},
     ])
@@ -64,7 +64,7 @@ def test_research_square_pagination_versions_and_state(config, monkeypatch, tmp_
 @pytest.mark.parametrize('max_pages, next_cursor', [(1, 'second'), (2, '*')])
 def test_research_square_incomplete_pagination_fails(config, monkeypatch, max_pages, next_cursor):
     config.source.researchsquare.max_pages = max_pages
-    fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.researchsquare_retriever.session', [
+    fake_session(monkeypatch, 'zot2dailypaper.retriever.researchsquare_retriever.session', [
         {'message': {'items': [rs_item()] * 200, 'total-results': 201, 'next-cursor': next_cursor}},
     ])
     with pytest.raises(RuntimeError, match='max_pages|pagination'):
@@ -79,7 +79,7 @@ def test_all_bio_med_categories_paginate_and_select_newest(config, monkeypatch, 
     first = [{'doi': f'10.1101/2026.09.30.{number}', 'date': today, 'category': 'different subject', 'version': '1'}
              for number in range(100)]
     last = [first[0] | {'version': '2'}, first[1] | {'date': '2000-01-01'}]
-    calls = fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.biorxiv_retriever.session', [
+    calls = fake_session(monkeypatch, 'zot2dailypaper.retriever.biorxiv_retriever.session', [
         {'messages': [{'status': 'ok', 'total': '102'}], 'collection': first},
         {'messages': [{'status': 'ok', 'total': '102'}], 'collection': last},
     ])
@@ -92,7 +92,7 @@ def test_all_bio_med_categories_paginate_and_select_newest(config, monkeypatch, 
 def test_bio_incomplete_window_fails(config, monkeypatch):
     with open_dict(config.source):
         config.source.biorxiv = {'category': ['*'], 'window_days': 1, 'max_pages': 1}
-    fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.biorxiv_retriever.session', [
+    fake_session(monkeypatch, 'zot2dailypaper.retriever.biorxiv_retriever.session', [
         {'messages': [{'status': 'ok', 'total': 101}], 'collection': [{}] * 100},
     ])
     with pytest.raises(RuntimeError, match='max_pages'):
@@ -101,7 +101,7 @@ def test_bio_incomplete_window_fails(config, monkeypatch):
 
 @pytest.mark.parametrize('categories, days', [(['*'], None), (['physics.chem-ph'], 3)])
 def test_arxiv_all_categories_use_bounded_api_query(config, monkeypatch, categories, days):
-    import zotero_arxiv_daily.retriever.arxiv_retriever as module
+    import zot2dailypaper.retriever.arxiv_retriever as module
     config.source.arxiv.category = categories
     config.source.arxiv.window_days = days
     searches = []
@@ -120,7 +120,7 @@ def test_arxiv_all_categories_use_bounded_api_query(config, monkeypatch, categor
 
 
 def test_withdrawn_latest_research_square_version_suppresses_old_version(config, monkeypatch):
-    fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.researchsquare_retriever.session', [
+    fake_session(monkeypatch, 'zot2dailypaper.retriever.researchsquare_retriever.session', [
         {'message': {'items': [rs_item(), rs_item('10.21203/rs.3.rs-123/v2', title=['WITHDRAWN: Test & paper'])],
                      'total-results': 2}},
     ])
@@ -131,7 +131,7 @@ def test_research_square_uses_posted_date(config, monkeypatch):
     item = rs_item()
     item['posted'] = item['published']
     item['published'] = {'date-parts': [[2000, 1, 1]]}
-    fake_session(monkeypatch, 'zotero_arxiv_daily.retriever.researchsquare_retriever.session', [
+    fake_session(monkeypatch, 'zot2dailypaper.retriever.researchsquare_retriever.session', [
         {'message': {'items': [item], 'total-results': 1}},
     ])
     papers = ResearchSquareRetriever(config).retrieve_papers()
@@ -150,7 +150,7 @@ def test_invalid_zero_preprint_window_rejected(config, name, retriever_cls):
 
 
 def test_arxiv_date_window_respects_cross_list_selection(config, monkeypatch):
-    import zotero_arxiv_daily.retriever.arxiv_retriever as module
+    import zot2dailypaper.retriever.arxiv_retriever as module
     config.source.arxiv.category = ['physics.chem-ph']
     config.source.arxiv.window_days = 1
     primary = SimpleNamespace(primary_category='physics.chem-ph')

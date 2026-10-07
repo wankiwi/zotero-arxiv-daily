@@ -21,7 +21,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run --frozen pytest --cov=src/zotero_arxiv_daily --cov-report=term-missing
+      - run: uv run --frozen zot2dailypaper --help
+      - run: uv run --frozen pytest --cov=src/zot2dailypaper --cov-report=term-missing
   model-test:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.model_test }}
     runs-on: ubuntu-latest

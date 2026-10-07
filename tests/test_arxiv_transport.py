@@ -3,7 +3,7 @@ from datetime import datetime,timezone,timedelta
 from email.utils import format_datetime
 import pytest
 import requests
-from zotero_arxiv_daily.retriever import arxiv_retriever as module
+from zot2dailypaper.retriever import arxiv_retriever as module
 
 
 def replies(monkeypatch,values):

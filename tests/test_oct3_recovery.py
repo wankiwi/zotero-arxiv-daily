@@ -1,9 +1,9 @@
 from contextlib import nullcontext
 from types import SimpleNamespace
 import pytest
-from zotero_arxiv_daily import abstracts
-from zotero_arxiv_daily.construct_email import email_summary
-from zotero_arxiv_daily.publisher_abstracts import parse_abstract, publisher_url
+from zot2dailypaper import abstracts
+from zot2dailypaper.construct_email import email_summary
+from zot2dailypaper.publisher_abstracts import parse_abstract, publisher_url
 from tests.canned_responses import make_sample_paper
 
 TEXT = 'A complete verified original abstract about interfacial molecular transport and its underlying physical mechanism.'
@@ -72,7 +72,7 @@ def test_deadline_client_caps_timeout_and_never_starts_late(monkeypatch):
 
 
 def test_source_attempt_reasons_survive_state_and_email(monkeypatch):
-    from zotero_arxiv_daily.state import load_paper,paper_dict
+    from zot2dailypaper.state import load_paper,paper_dict
     unavailable_metadata(monkeypatch)
     paper=make_sample_paper(doi='10.5555/example',abstract='')
     abstracts.recover_abstracts([paper],{'enabled':True})
@@ -100,7 +100,7 @@ def test_public_acs_abstract_requires_exact_doi_and_complete_section():
 
 
 def test_metadata_recovery_transport_never_retries_429():
-    from zotero_arxiv_daily.http import abstract_session
+    from zot2dailypaper.http import abstract_session
     with abstract_session() as client:
         for url in ('https://api.crossref.org/works/example','https://api.openalex.org/works/example'):
             assert client.get_adapter(url).max_retries.total==0

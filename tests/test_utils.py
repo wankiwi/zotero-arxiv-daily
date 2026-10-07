@@ -1,4 +1,4 @@
-"""Tests for zotero_arxiv_daily.utils: glob_match, send_email, tex extraction."""
+"""Tests for zot2dailypaper.utils: glob_match, send_email, tex extraction."""
 
 import smtplib
 import tarfile
@@ -6,7 +6,7 @@ import io
 
 import pytest
 
-from zotero_arxiv_daily.utils import glob_match, send_email, extract_tex_code_from_tar
+from zot2dailypaper.utils import glob_match, send_email, extract_tex_code_from_tar
 from tests.canned_responses import make_stub_smtp
 
 
@@ -238,7 +238,7 @@ def test_extract_tex_cycle_does_not_recurse_forever(make_tar):
 
 def test_email_has_matching_plain_and_html_alternatives(config, monkeypatch):
     from email import message_from_string
-    from zotero_arxiv_daily.construct_email import render_email
+    from zot2dailypaper.construct_email import render_email
     from tests.canned_responses import make_sample_paper
     sent = []
     monkeypatch.setattr(smtplib, 'SMTP', make_stub_smtp(sent))
@@ -266,7 +266,7 @@ def test_email_subject_uses_singapore_date(config, monkeypatch, instant, expecte
     from types import SimpleNamespace
     from email import message_from_string
     from email.header import decode_header, make_header
-    from zotero_arxiv_daily import utils
+    from zot2dailypaper import utils
     clock = datetime.datetime.fromisoformat(instant)
     class FrozenClock:
         @staticmethod

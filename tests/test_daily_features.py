@@ -3,12 +3,12 @@ import random
 from types import SimpleNamespace
 import pytest
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.protocol import Paper
+from zot2dailypaper.protocol import Paper
 from tests.canned_responses import make_budget_guard, make_chat_response
-from zotero_arxiv_daily.selection import select_papers, pending_batch, quotas_for, paper_group
-from zotero_arxiv_daily.abstracts import clean_abstract, recover_abstracts
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
-from zotero_arxiv_daily.retriever.openreview_retriever import OpenReviewRetriever
+from zot2dailypaper.selection import select_papers, pending_batch, quotas_for, paper_group
+from zot2dailypaper.abstracts import clean_abstract, recover_abstracts
+from zot2dailypaper.construct_email import render_email, email_plain_text
+from zot2dailypaper.retriever.openreview_retriever import OpenReviewRetriever
 
 def paper(i, source='journals', **kwargs):
     return Paper(source=source,title=f'Paper {i}',abstract='A molecular materials study.',authors=[],url=f'https://example.org/{i}',score=10-i/100,**kwargs)
@@ -24,7 +24,7 @@ def test_quotas_and_unbiased_remaining_sample():
     assert all(p in pool[25:40]+pool[55:] for p in selected[40:])
 
 def test_shortage_pending_reservation_and_persistence(tmp_path):
-    from zotero_arxiv_daily.state import State
+    from zot2dailypaper.state import State
     quotas={'journals':25,'preprints':15,'random':5}
     old=[paper(200,recommendation_group='random')]
     selected=select_papers([paper(1),paper(2,'openreview')],quotas,old)
@@ -47,7 +47,7 @@ def test_clean_abstract():
     assert clean_abstract(None)==''
 
 def test_recovery_validates_doi_and_falls_back(monkeypatch):
-    import zotero_arxiv_daily.abstracts as module
+    import zot2dailypaper.abstracts as module
     calls=[]
     class Client:
         def __enter__(self):return self
@@ -62,7 +62,7 @@ def test_recovery_validates_doi_and_falls_back(monkeypatch):
     assert p.abstract=='Molecular study' and p.abstract_source=='OpenAlex' and len(calls)==2
 
 def test_recovery_access_denied_visible_and_bounded(monkeypatch, capsys):
-    import zotero_arxiv_daily.abstracts as module
+    import zot2dailypaper.abstracts as module
     calls=[]
     class Client:
         def __enter__(self):return self
@@ -113,7 +113,7 @@ def test_openreview_access_error_is_not_empty_success(config):
     with pytest.raises(RuntimeError,match='access blocked HTTP 403'):r._get(client,'/notes',{})
 
 def test_openreview_pagination_deduplicates_and_reports_partial(config,monkeypatch):
-    import zotero_arxiv_daily.retriever.openreview_retriever as module
+    import zot2dailypaper.retriever.openreview_retriever as module
     config.source.openreview.venues=['TMLR'];r=retriever(config)
     records=[note(r)[2]]
     pages=iter([{'notes':records,'count':3},{'notes':records+[dict(records[0],id='second')],'count':3}])
@@ -189,7 +189,7 @@ def test_summary_input_selection_and_no_fulltext_prefix(mode,full_text,expected,
 
 def test_full_text_budget_fallback_is_one_call(config):
     from decimal import Decimal
-    from zotero_arxiv_daily.budget import BudgetRequests, utc_day
+    from zot2dailypaper.budget import BudgetRequests, utc_day
     config.llm.budget.enabled=True;config.llm.input_mode='full_text'
     calls=[]
     def create(**kwargs):
@@ -203,8 +203,8 @@ def test_full_text_budget_fallback_is_one_call(config):
     assert p.summary_input_fallback in render_email([p])
 
 def test_abstract_mode_never_fetches_fulltext(config):
-    from zotero_arxiv_daily.executor import Executor
-    from zotero_arxiv_daily.llm import ModelRequests
+    from zot2dailypaper.executor import Executor
+    from zot2dailypaper.llm import ModelRequests
     executor=Executor.__new__(Executor);executor.config=config;executor.openai_client=None
     executor.model_requests=ModelRequests()
     executor.retrievers={'journals':SimpleNamespace(enrich=lambda p:pytest.fail('abstract mode fetched full text'))}
@@ -235,7 +235,7 @@ def test_next_year_iclr_group_discovery(config):
     assert all('/Workshop' not in group for group,inv in groups)
 
 def test_invalid_summary_mode_fails_before_source_or_api_setup(config):
-    from zotero_arxiv_daily.executor import Executor
+    from zot2dailypaper.executor import Executor
     config.llm.input_mode='prefix'
     with pytest.raises(ValueError,match='input_mode'):Executor(config)
 
@@ -251,7 +251,7 @@ def test_abstract_cleaner_preserves_scientific_inequalities(text,expected):
     assert clean_abstract(text)==expected
 
 def test_dedup_adopts_abstract_provenance_without_overwriting():
-    from zotero_arxiv_daily.identity import deduplicate
+    from zot2dailypaper.identity import deduplicate
     a=paper(1,doi='10.1000/same');a.abstract=''
     b=paper(1,'openreview',doi='10.1000/same',abstract_source='OpenReview')
     merged=deduplicate([a,b])[0]
@@ -277,7 +277,7 @@ def test_openreview_malformed_content_does_not_drop_valid_neighbors(config,monke
     ('TMLR','unknown',True,'preprint','preprints'),
 ])
 def test_verified_publication_classification(config,venue,status,pdate,kind,group):
-    from zotero_arxiv_daily.selection import publication_group
+    from zot2dailypaper.selection import publication_group
     r=retriever(config);identity='TMLR' if venue=='TMLR' else 'ICLR.cc/2026/Conference'
     r.venue_ids[identity]={'accepted':identity,'under_review':identity+'/Under_Review','decision_pending':identity+'/Decision_Pending'}
     raw=note(r,venueid=status);raw=(venue,identity,raw[2])
@@ -391,7 +391,7 @@ def test_openreview_public_note_without_exclusions_is_retained(config,explicit_e
 
 
 def test_openreview_pagination_uses_supported_queries_and_local_date_filter(config,monkeypatch):
-    import zotero_arxiv_daily.retriever.openreview_retriever as module
+    import zot2dailypaper.retriever.openreview_retriever as module
     config.source.openreview.venues=['TMLR'];r=retriever(config);queries=[]
     public=note(r)[2];public['readers']=['everyone']
     class Client:

@@ -2,9 +2,9 @@
 
 ## Observed cause
 
-Run [37239640651](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/37239640651)
+Run [37239640651](https://github.com/wankiwi/zot2dailypaper/actions/runs/37239640651)
 saved 3,102 vectors after PyTorch CPU inference in FP32. Run
-[37396029673](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/37396029673)
+[37396029673](https://github.com/wankiwi/zot2dailypaper/actions/runs/37396029673)
 authenticated and restored those 3,102 vectors, then loaded the same configured
 model on a runner whose automatic CPU precision was BF16:
 

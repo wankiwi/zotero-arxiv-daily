@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.reranker.base import BaseReranker
-from zotero_arxiv_daily.state import paper_dict, load_paper
-from zotero_arxiv_daily.construct_email import render_email
+from zot2dailypaper.reranker.base import BaseReranker
+from zot2dailypaper.state import paper_dict, load_paper
+from zot2dailypaper.construct_email import render_email
 from tests.canned_responses import make_sample_paper, make_sample_corpus
 
 

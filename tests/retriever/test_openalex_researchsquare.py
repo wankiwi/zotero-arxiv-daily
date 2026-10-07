@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 import pytest
 from omegaconf import open_dict
-from zotero_arxiv_daily.retriever.researchsquare_retriever import ResearchSquareRetriever
-from zotero_arxiv_daily.retriever.openalex_researchsquare import abstract_text
+from zot2dailypaper.retriever.researchsquare_retriever import ResearchSquareRetriever
+from zot2dailypaper.retriever.openalex_researchsquare import abstract_text
 from tests.test_preprint_interests import _profile
 
 SOURCES = ['S4306525896', 'S4306402450']
@@ -41,7 +41,7 @@ def setup(config, monkeypatch, pages, source_name='Research Square', catalog=Non
             else:
                 data = pages.pop(0)
             return SimpleNamespace(status_code=status, raise_for_status=lambda: None, json=lambda: data)
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.openalex_researchsquare.session', Client)
+    monkeypatch.setattr('zot2dailypaper.retriever.openalex_researchsquare.session', Client)
     return ResearchSquareRetriever(config), calls
 
 
@@ -151,8 +151,8 @@ def test_zero_results_is_success(config, monkeypatch):
 
 
 def test_one_missing_source_preserves_other_and_reports_failure(config, monkeypatch):
-    from zotero_arxiv_daily.retriever.openalex_researchsquare import MissingOpenAlexRecord
-    import zotero_arxiv_daily.retriever.openalex_researchsquare as module
+    from zot2dailypaper.retriever.openalex_researchsquare import MissingOpenAlexRecord
+    import zot2dailypaper.retriever.openalex_researchsquare as module
     retriever,calls=setup(config, monkeypatch, [page([item()])])
     original=module.get_json
     def get(client,path,params=None):
@@ -182,6 +182,6 @@ def test_all_missing_sources_do_not_query_works(config, monkeypatch):
     ({'valid':[1],'bad':[True,-1,100000],'next':[3]},'valid next'),
 ])
 def test_shared_abstract_decoder_preserves_science_and_placeholders(index,expected):
-    from zotero_arxiv_daily.abstracts import inverted_abstract
-    from zotero_arxiv_daily.retriever.openalex_researchsquare import abstract_text
+    from zot2dailypaper.abstracts import inverted_abstract
+    from zot2dailypaper.retriever.openalex_researchsquare import abstract_text
     assert abstract_text(index)==inverted_abstract(index)==expected

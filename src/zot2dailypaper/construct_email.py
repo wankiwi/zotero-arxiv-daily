@@ -84,7 +84,7 @@ framework = '''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <p style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;margin:12px 0 0;font-size:14px;line-height:1.6;color:#dce5ee;">__COUNT__ · Journal and preprint selections ranked by relevance; random picks sampled from remaining eligible papers</p></td></tr>
 <tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.6;color:#526174;">__SCORING__ Scores range from 0 to 100. Higher scores mean a closer match, not a probability or accuracy estimate. Scores are shown to one decimal place.</td></tr>
 __CONTENT__
-<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.7;color:#526174;">Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.</td></tr>
+<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px 4px;font-size:12px;line-height:1.7;color:#526174;">zot2dailypaper · Based on Zotero-arXiv-Daily. To stop delivery, disable the scheduled workflow in GitHub Actions.</td></tr>
 </table><!--[if mso]></td></tr></table><![endif]-->
 </td></tr></table></body></html>'''
 
