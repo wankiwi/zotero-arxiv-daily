@@ -12,6 +12,29 @@ from scripts.prepare_workflow import prepare
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize('event', ['schedule', 'workflow_dispatch'])
+@pytest.mark.parametrize('llm_mode', ['configured', 'disabled'])
+def test_custom_request_policy_merges_without_changing_cost_or_delivery_policy(tmp_path, event, llm_mode):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))
+    custom = ('llm:\n  enabled: true\n  budget: {daily_cny: 0.30}\n'
+              '  request: {max_attempts: 3, timeout_seconds: 20}\n'
+              'reranker: {strategy: multi_interest_profile}\n'
+              'interest_profile: {keyword_weight: 0.4, zotero_weight: 0.6}\n'
+              'executor: {quotas: {journals: 25, preprints: 20, random: 5}}\n')
+    prepare(tmp_path, {'GITHUB_EVENT_NAME': event, 'PAPER_CONFIG': 'interests',
+                       'CUSTOM_CONFIG': custom, 'LLM_MODE': llm_mode})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        effective = compose(config_name='runtime')
+    assert effective.llm.enabled is (llm_mode == 'configured')
+    assert effective.llm.request.max_attempts == 3 and effective.llm.request.timeout_seconds == 20
+    assert effective.llm.request.failure_threshold == 3 and effective.llm.request.max_retry_wait_seconds == 5
+    assert effective.llm.budget.enabled and effective.llm.budget.daily_cny == .30
+    assert effective.output.email.enabled and not effective.output.rss.enabled and effective.state.enabled
+    assert dict(effective.executor.quotas) == {'journals': 25, 'preprints': 20, 'random': 5}
+    assert effective.reranker.strategy == 'multi_interest_profile'
+    assert effective.interest_profile.keyword_weight == .4 and effective.interest_profile.zotero_weight == .6
+
+
 @pytest.mark.parametrize('strategy', ['multi_interest_profile', 'legacy_mean'])
 def test_scheduled_strategy_default_and_custom_rollback_preserve_other_policy(tmp_path, strategy):
     shutil.copytree(ROOT / 'config', tmp_path / 'config', ignore=shutil.ignore_patterns('runtime.yaml', 'private.yaml'))

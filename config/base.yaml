@@ -70,8 +70,15 @@ email:
 
 llm:
   input_mode: abstract # abstract (default) or full_text with explicit fallback.
+  request:
+    timeout_seconds: 30 # Bound each SDK attempt; automatic SDK retries remain disabled.
+    max_attempts: 2 # Transient failures only; each attempt consumes another full budget slot.
+    retry_backoff_seconds: 1
+    max_retry_wait_seconds: 5 # Longer/unparseable Retry-After stops this run instead of retrying early.
+    failure_threshold: 3 # Consecutive transport/5xx failures stop queued calls for the run.
   budget:
     enabled: true # Fail closed unless provider pricing and token bounds are verified.
+    timezone: Asia/Singapore # Local calendar day; v1 UTC claims block overlapping dates during cutover.
     daily_cny: 0.30
   enabled: true
   api:

@@ -10,7 +10,7 @@ from zotero_arxiv_daily.protocol import CorpusPaper, Paper
 # OpenAI client stub
 # ---------------------------------------------------------------------------
 
-_TLDR_RESPONSE = "Hello! How can I assist you today?"
+_TLDR_RESPONSE = "该研究报告了经过验证的分子模拟结果。"
 
 
 def make_chat_response(content: str, model='test-model') -> SimpleNamespace:

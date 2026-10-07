@@ -176,6 +176,7 @@ def test_executor_fail_closed_retains_abstract_without_client(config,monkeypatch
     from zotero_arxiv_daily.reranker.api import ApiReranker
     import numpy as np
     monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget',budget.prepare_budget)
+    monkeypatch.setattr('zotero_arxiv_daily.executor.budget_plan',budget.budget_plan)
     monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI',lambda **kw:pytest.fail('Blocked budget created client'))
     monkeypatch.setattr('zotero_arxiv_daily.executor.zotero.Zotero',lambda *a,**kw:make_stub_zotero_client())
     monkeypatch.setattr(ApiReranker,'get_similarity_score',lambda self,a,b:np.ones((len(a),len(b))))

@@ -13,9 +13,9 @@ from .reranker import get_reranker_cls
 from .interest_profile import interest_profile
 from .construct_email import render_email
 from .utils import send_email
-from openai import OpenAI
-from .llm import ModelRequests
-from .budget import prepare_budget, BudgetUnavailable
+from openai import OpenAI, DefaultHttpxClient
+from .llm import ModelRequests, request_policy
+from .budget import budget_plan, prepare_budget, BudgetUnavailable
 from .preprint_interests import enabled_sources
 from .scores import minimum_score
 from .selection import quotas_for, select_papers, pending_batch, is_cover_title
@@ -44,6 +44,10 @@ def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key:
 class Executor:
     def __init__(self, config: DictConfig):
         self.config = config
+        if type(config.llm.get('enabled', True)) is not bool:
+            raise ValueError('llm.enabled must be a YAML boolean, not a string or number')
+        if config.llm.get('enabled', True):
+            request_policy(config.llm)
         if config.llm.get("input_mode", "abstract") not in ("abstract", "full_text"):
             raise ValueError("llm.input_mode must be abstract or full_text")
         self.include_path_patterns = normalize_path_patterns(config.zotero.include_path, "include_path")
@@ -53,8 +57,12 @@ class Executor:
             raise ValueError('No enabled sources remain after preprint interest configuration')
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = None
+        self.llm_http_client = None
         self.llm_blocked_reason = None
         self.llm_blocked_code = None
+        self.llm_blocked_day = None
+        self.llm_blocked_timezone = None
+        self.llm_retry_at = None
         self.effective_interest_weights = None
         self.model_requests = ModelRequests()
         self.library_dois, self.library_titles, self.library_titles_without_doi = set(), set(), set()
@@ -123,16 +131,30 @@ class Executor:
                 except Exception as exc:
                     logger.warning(f"Full text unavailable for {paper.url}: {exc}")
         if self.openai_client:
-            if not paper.tldr:
+            if not paper.has_ai_summary:
                 paper.generate_tldr(self.openai_client, self.config.llm, self.model_requests)
-        elif not paper.tldr:
+        elif not paper.has_ai_summary:
             paper.tldr_status, paper.tldr_error, paper.tldr_error_reason = 'not_generated', None, None
+            paper.tldr_attempts = 0
+            paper.tldr_budget_day = getattr(self, 'llm_blocked_day', None)
+            paper.tldr_budget_timezone = getattr(self, 'llm_blocked_timezone', None)
+            paper.tldr_retry_at = getattr(self, 'llm_retry_at', None)
+            paper.tldr_error_reason = 'llm_disabled' if not self.config.llm.get('enabled', True) else 'input_unavailable'
             if getattr(self, 'llm_blocked_reason', None):
                 paper.tldr = paper.abstract
                 paper.tldr_status = 'fallback' if paper.abstract else 'not_generated'
                 paper.tldr_error = 'budget_unavailable'
                 paper.tldr_error_reason = getattr(self, 'llm_blocked_code', None) or 'budget_guard_unavailable'
         return paper
+
+    def _close_llm(self):
+        for client in (self.openai_client, self.llm_http_client):
+            if client is not None and hasattr(client, 'close'):
+                try:
+                    client.close()
+                except Exception as exc:
+                    logger.warning(f'Cannot close LLM client ({type(exc).__name__})')
+        self.openai_client = self.llm_http_client = None
 
     def run(self):
         output = self.config.get('output', {})
@@ -155,6 +177,8 @@ class Executor:
             raise ValueError('max_paper_num must be positive and enrichment_workers must be between 1 and 8')
         errors = []
         self.model_requests = ModelRequests()
+        self.llm_blocked_reason = self.llm_blocked_code = self.llm_blocked_day = self.llm_retry_at = None
+        self.llm_blocked_timezone = None
         try:
             ranked = self._recommend(state, errors, maximum, workers)
         except Exception as exc:
@@ -162,18 +186,17 @@ class Executor:
             errors.append(f'recommendations: {exc}')
             ranked = []
         finally:
-            if self.openai_client is not None and hasattr(self.openai_client, 'close'):
-                try:
-                    self.openai_client.close()
-                except Exception as exc:
-                    logger.warning(f'Cannot close LLM client: {exc}')
-                self.openai_client = None
+            self._close_llm()
         state.add(ranked)
         state.save()  # Preserve pending deliveries before contacting transports.
         if email_enabled:
             pending = pending_batch(state.pending('email'), quotas, maximum)
             if pending or (self.config.executor.send_empty and not errors):
                 try:
+                    generated = sum(p.has_ai_summary for p in pending)
+                    reasons = dict(Counter(p.tldr_error_reason or p.tldr_error or 'not_generated'
+                                           for p in pending if not p.has_ai_summary))
+                    logger.info(f'Email AI summaries: {generated} generated; {len(pending) - generated} unavailable; reasons={reasons}')
                     send_email(self.config, render_email(pending, affiliation_max_chars=self.config.email.get('affiliation_max_chars', 180),
                                                          zotero_action_origin=self.config.email.get('zotero_action_origin'),
                                                          interest_weights=self.effective_interest_weights,
@@ -263,14 +286,28 @@ class Executor:
                     f'{sum(not p.affiliations for p in ranked)}/{len(ranked)} affiliations unavailable; '
                     f'author statuses={dict(Counter(p.authors_status or "unknown" for p in ranked if not p.authors))}; '
                     f'affiliation statuses={dict(Counter(p.affiliations_status or "unknown" for p in ranked if not p.affiliations))}')
-        if ranked and self.config.llm.get('enabled', True):
+        eligible_input = any(isinstance(p.abstract, str) and p.abstract.strip() for p in ranked)
+        if ranked and self.config.llm.get('enabled', True) and (eligible_input or self.config.llm.get('input_mode') == 'full_text'):
             try:
+                policy = request_policy(self.config.llm)
+                budget_plan(self.config.llm)  # Reject unverified destinations before resolving client credentials.
+                # Constructing a client sends no request. Fail before reserving
+                # an entire day when local credentials/client setup are invalid.
+                self.llm_http_client = DefaultHttpxClient(follow_redirects=False)
+                self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url,
+                                            max_retries=0, timeout=policy['timeout_seconds'], http_client=self.llm_http_client)
                 self.model_requests = prepare_budget(self.config.llm)
-                self.openai_client = OpenAI(api_key=self.config.llm.api.key, base_url=self.config.llm.api.base_url, max_retries=0)
             except BudgetUnavailable as exc:
+                self._close_llm()
                 self.llm_blocked_reason = str(exc)
                 self.llm_blocked_code = exc.reason
+                self.llm_blocked_day, self.llm_retry_at = exc.day, exc.retry_at
+                self.llm_blocked_timezone = exc.timezone_name
                 logger.warning(f'LLM budget guard: {exc}')
+            except Exception as exc:
+                self._close_llm()
+                self.llm_blocked_reason, self.llm_blocked_code = 'Local LLM client setup failed', 'client_setup_failed'
+                logger.warning(f'LLM client setup failed ({type(exc).__name__}); retaining original abstracts')
         # Fork-based PDF extraction must run outside worker threads.
         if workers > 1 and self.config.llm.get('input_mode', 'abstract') != 'full_text':
             with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -278,7 +315,7 @@ class Executor:
         else:
             ranked = [self._enrich(p) for p in ranked]
         failed = sum(bool(p.tldr_error) for p in ranked)
-        generated = sum(p.tldr_status == 'generated' for p in ranked)
+        generated = sum(p.has_ai_summary for p in ranked)
         not_generated = sum(p.tldr_status == 'not_generated' and not p.tldr_error for p in ranked)
         if failed:
             reasons = dict(Counter(p.tldr_error_reason or p.tldr_error for p in ranked if p.tldr_error))
@@ -287,4 +324,8 @@ class Executor:
                            f'Reasons={reasons}; model unavailable={self.model_requests.unavailable}')
         else:
             logger.info(f'AI summaries: {generated} generated; {not_generated} not generated')
+        guard = getattr(self, 'model_requests', None)
+        logger.info(f'LLM request attempts: {sum(p.tldr_attempts for p in ranked)}; '
+                    f'budget day={getattr(guard, "day", None) or getattr(self, "llm_blocked_day", None)}; '
+                    f'circuit={getattr(guard, "stop_reason", None) or "closed"}')
         return ranked

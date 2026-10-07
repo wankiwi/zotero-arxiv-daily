@@ -7,6 +7,50 @@ from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, quote
 from collections import Counter
+import re
+
+
+SUMMARY_REASONS = {
+    'daily_budget_exhausted': 'daily AI budget reached',
+    'daily_budget_reserved': 'daily AI budget already reserved by an earlier run or attempt',
+    'legacy_budget_overlap': 'earlier UTC budget reservation overlaps this local budget day; reservation preserved',
+    'budget_timezone_invalid': 'AI budget timezone configuration invalid',
+    'budget_ledger_invalid': 'AI budget ledger or timestamps invalid; requests stopped',
+    'day_changed': 'AI budget day changed',
+    'budget_guard_unavailable': 'AI budget unavailable',
+    'billing_unverified': 'AI billing verification failed',
+    'model_unavailable': 'AI model unavailable',
+    'request_failed': 'AI request failed',
+    'request_timeout': 'AI request timed out',
+    'connection_failed': 'AI connection failed',
+    'provider_unavailable': 'AI provider temporarily unavailable',
+    'authentication_failed': 'AI authentication rejected; requests stopped',
+    'access_denied': 'AI access denied; no bypass attempted',
+    'rate_limited': 'AI provider rate limited; requests stopped',
+    'request_rejected': 'AI request rejected; requests stopped',
+    'circuit_open': 'AI requests stopped after repeated temporary failures',
+    'retry_wait_exceeded': 'AI provider retry delay exceeds the bounded wait; requests stopped',
+    'retry_not_permitted': 'AI provider prohibited retries; requests stopped',
+    'output_truncated': 'AI output truncated; original abstract retained',
+    'content_filtered': 'AI output filtered',
+    'empty_response': 'AI returned no summary text',
+    'invalid_response': 'AI response invalid',
+    'summary_language_mismatch': 'AI summary did not use the requested language',
+    'summary_format_invalid': 'AI summary did not follow the single-sentence format',
+    'client_setup_failed': 'AI client setup failed',
+    'configuration_invalid': 'AI configuration invalid',
+    'input_unavailable': 'no usable scientific summary input',
+}
+
+
+def summary_reason(paper):
+    reason = SUMMARY_REASONS.get(paper.tldr_error_reason)
+    if not reason and paper.tldr_error == 'budget_unavailable':
+        reason = 'AI budget unavailable'
+    if paper.tldr_error_reason == 'daily_budget_reserved' and re.fullmatch(r'\d{4}-\d{2}-\d{2}', paper.tldr_budget_day or ''):
+        zone = 'Asia/Singapore' if paper.tldr_budget_timezone == 'Asia/Singapore' else 'UTC'
+        reason += f' ({zone} {paper.tldr_budget_day}; reservation preserved)'
+    return reason
 
 
 def safe_url(value):
@@ -81,25 +125,16 @@ def shorten_affiliations(affiliations, max_chars=180):
 
 
 def email_summary(paper):
-    if paper.tldr_status == 'generated' and not paper.tldr_error and isinstance(paper.tldr, str) and paper.tldr.strip():
+    if paper.has_ai_summary:
         return paper.tldr.strip(), 'AI summary'
     if paper.abstract:
-        if paper.abstract_recovery_status == 'recovered_indexed_abstract':
-            return paper.abstract, 'Indexed abstract (Semantic Scholar; version unverified)'
-        if paper.abstract_recovery_status == 'recovered_doi_linked_manuscript':
-            return paper.abstract, f'Manuscript abstract ({paper.abstract_source})'
+        reason = summary_reason(paper)
+        if paper.abstract_recovery_status in ('recovered_indexed_abstract', 'recovered_doi_linked_manuscript'):
+            label = ('Indexed abstract (Semantic Scholar; version unverified)' if paper.abstract_recovery_status == 'recovered_indexed_abstract'
+                     else f'Manuscript abstract ({paper.abstract_source})')
+            return paper.abstract, label + (f' — {reason}' if reason else '')
         if paper.tldr_status == 'not_generated' and not paper.tldr_error:
             return paper.abstract, 'Original abstract (AI summary not generated)'
-        reason = {
-            'daily_budget_exhausted': 'daily AI budget reached',
-            'day_changed': 'AI budget day changed',
-            'budget_guard_unavailable': 'AI budget unavailable',
-            'billing_unverified': 'AI billing verification failed',
-            'model_unavailable': 'AI model unavailable',
-            'request_failed': 'AI request failed',
-        }.get(paper.tldr_error_reason)
-        if not reason and paper.tldr_error == 'budget_unavailable':
-            reason = 'AI budget unavailable'
         if reason:
             return paper.abstract, f'Original abstract ({reason})'
         return paper.abstract, 'Original abstract (AI summary unavailable)'
@@ -131,6 +166,8 @@ def email_summary(paper):
         details.append(f"{attempt.get('provider', 'Metadata')}: {reason}")
     if paper.abstract_recovery_status and not details:
         details.append(reasons.get(paper.abstract_recovery_status, paper.abstract_recovery_status.replace('_', ' ')))
+    if summary_reason(paper):
+        details.append(summary_reason(paper))
     return 'No abstract available' + ('. ' + '; '.join(details) if details else ''), 'Abstract unavailable'
 
 
@@ -234,6 +271,17 @@ def render_email(papers: list[Paper], *, affiliation_max_chars=180, zotero_actio
         sections.append('<tr><td class="digest-section" width="100%" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:0 0 24px;">' + heading +
                         '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;table-layout:fixed;">' + ''.join(parts) + '</table></td></tr>')
     content = ''.join(sections)
+    degraded = [p for p in papers if p.tldr_error or p.tldr_error_reason not in (None, 'llm_disabled')
+                or (p.tldr_status == 'generated' and not p.has_ai_summary)]
+    if degraded:
+        generated = sum(p.has_ai_summary for p in papers)
+        reasons = Counter(summary_reason(p) or 'AI summary unavailable' for p in degraded)
+        detail = '; '.join(f'{reason}: {count}' for reason, count in sorted(reasons.items()))
+        content = ('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px;'
+                   'background:#fff3cd;color:#713f12;font-size:14px;line-height:1.7;">'
+                   '<strong>AI 摘要状态 / AI summary status</strong><br>'
+                   + escape(f'{generated}/{len(papers)} generated. Original abstracts retained when available. {detail}')
+                   + '</td></tr>') + content
     warning = pricing_warning()
     if warning:
         content = ('<tr><td style="font-family:Aptos,Calibri,Arial,Helvetica,sans-serif;padding:16px;'
