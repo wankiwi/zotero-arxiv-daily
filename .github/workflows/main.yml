@@ -31,7 +31,7 @@ on:
         options: [configured, disabled]
         default: configured
   schedule:
-    - cron: '17 19 * * *' # 19:17 UTC / 03:17 next day Asia/Shanghai; GitHub schedules may be delayed.
+    - cron: '17 19 * * *' # 19:17 UTC / 03:17 next day Asia/Singapore; GitHub schedules may be delayed.
 concurrency:
   group: daily-papers
   cancel-in-progress: false
@@ -64,7 +64,7 @@ jobs:
           LLM_MODE: ${{ inputs.llm_mode || 'configured' }}
         run: uv run --frozen python scripts/prepare_workflow.py
       - name: Check private cache eligibility
-        if: ${{ github.repository == 'wankiwi/zotero-arxiv-daily' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ github.repository == 'wankiwi/zot2dailypaper' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         id: embedding-cache-gate
         env:
           EMBEDDING_CACHE_KEY: ${{ secrets.EMBEDDING_CACHE_KEY }}
@@ -96,7 +96,7 @@ jobs:
           OPENAI_API_BASE: ${{ vars.OPENAI_API_BASE || secrets.OPENAI_API_BASE || 'https://api.openai.com/v1' }}
           LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
           RSS_SITE_URL: ${{ vars.RSS_SITE_URL }}
-        run: uv run --frozen python -m zotero_arxiv_daily.main --config-name=runtime
+        run: uv run --frozen python -m zot2dailypaper.main --config-name=runtime
       - name: Save successful and pending deliveries
         if: ${{ always() && !cancelled() }}
         run: uv run --frozen python scripts/workflow_state.py save

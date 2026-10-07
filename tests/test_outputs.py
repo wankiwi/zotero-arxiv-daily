@@ -4,10 +4,10 @@ import json
 import pytest
 
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily.identity import deduplicate, normalize_doi, paper_id
-from zotero_arxiv_daily.state import State
-from zotero_arxiv_daily.output.rss import write_rss
-from zotero_arxiv_daily.construct_email import render_email
+from zot2dailypaper.identity import deduplicate, normalize_doi, paper_id
+from zot2dailypaper.state import State
+from zot2dailypaper.output.rss import write_rss
+from zot2dailypaper.construct_email import render_email
 
 
 def test_doi_url_normalization_and_arxiv_versions():
@@ -83,7 +83,7 @@ def test_historical_rss_covers_are_filtered_before_limit_without_history_mutatio
 
 
 def test_direct_rss_page_uses_same_cover_filter(tmp_path):
-    from zotero_arxiv_daily.output.rss import write_rss_page
+    from zot2dailypaper.output.rss import write_rss_page
     cover = make_sample_paper(title='Inside Back Cover: Image')
     research = make_sample_paper(title='Cover times in random walks')
     write_rss_page(tmp_path/'feed.xml', [cover,research])
@@ -135,7 +135,7 @@ def test_arxiv_query_and_fragment_do_not_break_version_identity():
 
 
 def test_old_state_keys_migrate_without_repeating_or_breaking_pending_delivery(tmp_path):
-    from zotero_arxiv_daily.state import paper_dict
+    from zot2dailypaper.state import paper_dict
     first = make_sample_paper(title='First', doi=None, url='https://example.org/article?id=1')
     second = make_sample_paper(title='Second', doi=None, url='https://doi.org/10.1021/second')
     path = tmp_path / 'state.json'

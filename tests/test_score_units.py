@@ -2,9 +2,9 @@ import json
 from datetime import datetime, timezone
 import pytest
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.scores import minimum_score, SCORE_SCHEMA
-from zotero_arxiv_daily.state import State, paper_dict, load_paper
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
+from zot2dailypaper.scores import minimum_score, SCORE_SCHEMA
+from zot2dailypaper.state import State, paper_dict, load_paper
+from zot2dailypaper.construct_email import render_email, email_plain_text
 from tests.canned_responses import make_sample_paper
 
 
@@ -53,6 +53,6 @@ def test_unknown_score_schema_preserves_file_and_fails_closed(tmp_path):
 
 
 def test_quota_sum_is_authoritative_over_legacy_maximum():
-    from zotero_arxiv_daily.selection import quotas_for
+    from zot2dailypaper.selection import quotas_for
     config=OmegaConf.create({'quotas':{'journals':25,'preprints':20,'random':5},'max_paper_num':45})
     assert sum(quotas_for(config).values())==50

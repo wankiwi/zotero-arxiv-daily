@@ -1,6 +1,6 @@
-"""Tests for zotero_arxiv_daily.construct_email: render_email, get_block_html."""
+"""Tests for zot2dailypaper.construct_email: render_email, get_block_html."""
 
-from zotero_arxiv_daily.construct_email import render_email, get_block_html
+from zot2dailypaper.construct_email import render_email, get_block_html
 from tests.canned_responses import make_sample_paper
 import pytest
 
@@ -36,7 +36,7 @@ def test_render_email_affiliation_truncation():
     affiliations = ['A very long university affiliation ' * 20, 'ANOTHER_AFFILIATION']
     paper = make_sample_paper(affiliations=affiliations, score=7.0, tldr="ok")
     html = render_email([paper], affiliation_max_chars=60)
-    from zotero_arxiv_daily.construct_email import email_plain_text, shorten_affiliations
+    from zot2dailypaper.construct_email import email_plain_text, shorten_affiliations
     shortened = shorten_affiliations(affiliations, 60)
     assert len(shortened) <= 60 and shortened.endswith('…')
     assert shortened in html and shortened in email_plain_text(html)
@@ -60,7 +60,7 @@ def test_get_block_html_contains_all_fields():
 
 
 def test_numbering_scores_links_and_plain_text():
-    from zotero_arxiv_daily.construct_email import email_plain_text
+    from zot2dailypaper.construct_email import email_plain_text
     papers = [make_sample_paper(title=f'Paper {i}', score=-0.15, doi=f'10.1000/example{i}',
                               tldr=None, abstract='原文 & abstract', tldr_status='not_generated') for i in range(50)]
     html = render_email(papers)
@@ -75,7 +75,7 @@ def test_numbering_scores_links_and_plain_text():
 
 
 def test_email_rejects_unsafe_links_and_escapes_untrusted_fields():
-    from zotero_arxiv_daily.construct_email import email_plain_text
+    from zot2dailypaper.construct_email import email_plain_text
     paper = make_sample_paper(title='<img src=x onerror=alert(1)>', pdf_url='javascript:alert(1)',
                               url='https://[broken', score=None, authors=[], tldr='<b>text</b>',
                               tldr_status='generated', doi='10.1000/a" onclick="bad')
@@ -105,7 +105,7 @@ def test_email_inline_font_coverage():
 @pytest.mark.parametrize('status,summary,error', [('legacy','Old summary',None),
     ('generated','',None), ('generated','Invalid summary','request_failed')])
 def test_invalid_or_unverified_summary_never_hides_original(status, summary, error):
-    from zotero_arxiv_daily.construct_email import email_plain_text
+    from zot2dailypaper.construct_email import email_plain_text
     paper = make_sample_paper(abstract='ORIGINAL EVIDENCE', tldr=summary,
                               tldr_status=status, tldr_error=error)
     html = render_email([paper])
@@ -121,7 +121,7 @@ def test_affiliation_limit_validation(limit):
 
 
 def test_affiliations_are_shortened_before_html_escaping():
-    from zotero_arxiv_daily.construct_email import email_plain_text, shorten_affiliations
+    from zot2dailypaper.construct_email import email_plain_text, shorten_affiliations
     affiliations = ['<unsafe> & Institute ' * 20]
     paper = make_sample_paper(affiliations=affiliations)
     short = shorten_affiliations(affiliations, 35)

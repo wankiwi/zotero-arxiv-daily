@@ -1,7 +1,7 @@
 import pytest
 
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily.selection import is_cover_title, select_papers, pending_batch
+from zot2dailypaper.selection import is_cover_title, select_papers, pending_batch
 
 
 @pytest.mark.parametrize('title', [

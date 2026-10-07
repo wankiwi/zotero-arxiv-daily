@@ -96,7 +96,7 @@ class PublisherSession(requests.Session):
 
 def publisher_session():
     client = PublisherSession()  # Zero automatic retries, especially on 403/429.
-    client.headers['User-Agent'] = 'zotero-arxiv-daily/1.0 (public abstract metadata)'
+    client.headers['User-Agent'] = 'zot2dailypaper/1.0 (public abstract metadata)'
     return client
 
 

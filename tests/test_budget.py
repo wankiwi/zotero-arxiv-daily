@@ -5,8 +5,8 @@ import json
 import subprocess
 from types import SimpleNamespace
 import pytest
-from zotero_arxiv_daily import budget
-from zotero_arxiv_daily.protocol import Paper
+from zot2dailypaper import budget
+from zot2dailypaper.protocol import Paper
 
 
 def test_production_pricing_is_fail_closed(config,monkeypatch):
@@ -120,7 +120,7 @@ def test_concurrent_repository_claims_only_one_wins(tmp_path,monkeypatch):
     git,checkout,remote=make_git(tmp_path,monkeypatch)
     # Two independent processes, like workflow reruns, share only the remote ref.
     second=tmp_path/'second';git('clone',str(remote),str(second))
-    code="from zotero_arxiv_daily.budget import reserve_day; from decimal import Decimal; reserve_day(Decimal('.20'),'2026-10-01')"
+    code="from zot2dailypaper.budget import reserve_day; from decimal import Decimal; reserve_day(Decimal('.20'),'2026-10-01')"
     import sys
     jobs=[subprocess.Popen([sys.executable,'-c',code],cwd=path,stdout=subprocess.PIPE,stderr=subprocess.PIPE) for path in (checkout,second)]
     statuses=[]
@@ -170,15 +170,15 @@ def test_disabled_budget_does_not_mean_unlimited(config):
 
 
 def test_executor_fail_closed_retains_abstract_without_client(config,monkeypatch,tmp_path):
-    from zotero_arxiv_daily.executor import Executor
-    from zotero_arxiv_daily.state import State
+    from zot2dailypaper.executor import Executor
+    from zot2dailypaper.state import State
     from tests.canned_responses import make_stub_zotero_client,make_sample_paper
-    from zotero_arxiv_daily.reranker.api import ApiReranker
+    from zot2dailypaper.reranker.api import ApiReranker
     import numpy as np
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget',budget.prepare_budget)
-    monkeypatch.setattr('zotero_arxiv_daily.executor.budget_plan',budget.budget_plan)
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI',lambda **kw:pytest.fail('Blocked budget created client'))
-    monkeypatch.setattr('zotero_arxiv_daily.executor.zotero.Zotero',lambda *a,**kw:make_stub_zotero_client())
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget',budget.prepare_budget)
+    monkeypatch.setattr('zot2dailypaper.executor.budget_plan',budget.budget_plan)
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI',lambda **kw:pytest.fail('Blocked budget created client'))
+    monkeypatch.setattr('zot2dailypaper.executor.zotero.Zotero',lambda *a,**kw:make_stub_zotero_client())
     monkeypatch.setattr(ApiReranker,'get_similarity_score',lambda self,a,b:np.ones((len(a),len(b))))
     config.llm.budget.enabled=True
     executor=Executor(config)
@@ -302,7 +302,7 @@ def test_bootstrap_rejects_shallow_history(tmp_path,monkeypatch):
 
 
 def test_stale_pricing_warns_continues_and_renders_email(config,monkeypatch):
-    from zotero_arxiv_daily.construct_email import render_email,email_plain_text
+    from zot2dailypaper.construct_email import render_email,email_plain_text
     monkeypatch.setattr(budget,'utc_day',lambda:'2026-10-09')
     config.llm.api.base_url='https://api.siliconflow.cn/v1'
     config.llm.generation_kwargs.model='deepseek-ai/DeepSeek-V4-Flash'

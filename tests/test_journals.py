@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from omegaconf import open_dict
 import pytest
 
-from zotero_arxiv_daily.journals import CORE, NATURE, discover_nature, selected_journals
-from zotero_arxiv_daily.retriever.journal_retriever import JournalRetriever, crossref_date
+from zot2dailypaper.journals import CORE, NATURE, discover_nature, selected_journals
+from zot2dailypaper.retriever.journal_retriever import JournalRetriever, crossref_date
 
 
 def test_requested_presets_and_reviews(config):
@@ -151,13 +151,13 @@ def test_strict_nature_refresh_failure_is_visible(config, tmp_path, monkeypatch)
     def unavailable(*args):
         raise OSError('catalog offline')
         yield
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session', unavailable)
+    monkeypatch.setattr('zot2dailypaper.retriever.journal_retriever.session', unavailable)
     with pytest.raises(OSError, match='catalog offline'):
         retriever._catalog()
 
 
 def test_journal_configuration_rejects_invalid_issn_and_plain_http_feed():
-    from zotero_arxiv_daily.journals import Journal
+    from zot2dailypaper.journals import Journal
     with pytest.raises(ValueError, match='ISSN'):
         Journal('bad', 'Bad', ('wrong',))
     with pytest.raises(ValueError, match='HTTPS'):
@@ -210,7 +210,7 @@ def test_six_additional_journals_survive_live_catalog(config):
 
 
 def test_discovered_entry_does_not_erase_verified_issn(config):
-    from zotero_arxiv_daily.journals import Journal
+    from zot2dailypaper.journals import Journal
     discovered = {'npjcompumats': Journal('npjcompumats', 'npj Computational Materials')}
     journals = selected_journals(config.source.journals, discovered)
     assert [j for j in journals if j.id == 'npjcompumats'] == [CORE['npjcompumats']]
@@ -238,7 +238,7 @@ def test_rss_recovery_is_not_reported_as_complete_window(config, monkeypatch):
     from contextlib import nullcontext
     retriever = JournalRetriever(config)
     paper = SimpleNamespace(title='Article', doi='10.1021/example', url='https://doi.org/10.1021/example')
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
+    monkeypatch.setattr('zot2dailypaper.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
     monkeypatch.setattr(retriever,'_rss',lambda *args:[paper])
     monkeypatch.setattr(retriever,'_crossref',lambda *args:(_ for _ in ()).throw(RuntimeError('429 exhausted')))
     _, papers, failed = retriever._journal(CORE['jacs'], None, None)
@@ -251,7 +251,7 @@ def test_unindexed_journal_rss_fallback_is_explicit(config, monkeypatch, indexed
     from contextlib import nullcontext
     import requests
     retriever = JournalRetriever(config)
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
+    monkeypatch.setattr('zot2dailypaper.retriever.journal_retriever.session', lambda *args:nullcontext(object()))
     def rss(*args):
         if not rss_available:
             raise ValueError('invalid feed')
@@ -265,7 +265,7 @@ def test_unindexed_journal_rss_fallback_is_explicit(config, monkeypatch, indexed
         raise requests.HTTPError('Not indexed', response=response)
     monkeypatch.setattr(retriever, '_crossref', crossref)
     warnings = []
-    monkeypatch.setattr('zotero_arxiv_daily.retriever.journal_retriever.logger.warning', warnings.append)
+    monkeypatch.setattr('zot2dailypaper.retriever.journal_retriever.logger.warning', warnings.append)
     _, papers, failed = retriever._journal(CORE['jacs'], None, None)
     assert papers == [] and failed == (not rss_available)
     if rss_available:

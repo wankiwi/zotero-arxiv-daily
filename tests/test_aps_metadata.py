@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from zotero_arxiv_daily import aps_metadata as module
+from zot2dailypaper import aps_metadata as module
 from tests.canned_responses import make_sample_paper
 
 DOI = '10.1103/synthetic'
@@ -67,7 +67,7 @@ def test_arxiv_rate_limit_is_three_seconds_and_one_connection(monkeypatch):
 
 
 def test_nonpublisher_abstract_labels_remain_honest():
-    from zotero_arxiv_daily.construct_email import render_email,email_plain_text
+    from zot2dailypaper.construct_email import render_email,email_plain_text
     paper=make_sample_paper(abstract=TEXT,tldr=None,tldr_status='not_generated',
         abstract_source='arXiv v2 (DOI-linked manuscript)',abstract_recovery_status='recovered_doi_linked_manuscript')
     assert 'Manuscript abstract (arXiv v2' in email_plain_text(render_email([paper]))

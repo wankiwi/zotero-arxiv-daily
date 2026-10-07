@@ -7,8 +7,8 @@ import zipfile
 import numpy as np
 import pytest
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from zotero_arxiv_daily.reranker.embedding_cache import EmbeddingCache
-from zotero_arxiv_daily.reranker import encrypted_cache as module
+from zot2dailypaper.reranker.embedding_cache import EmbeddingCache
+from zot2dailypaper.reranker import encrypted_cache as module
 from scripts import embedding_cache_state as bridge
 
 KEY = b'\x01'*32
@@ -24,6 +24,26 @@ def test_authenticated_roundtrip_has_no_plaintext_names_or_vectors(tmp_path):
     target=tmp_path/'target'
     assert module.unseal(blob,KEY,target)==1
     assert np.array_equal(EmbeddingCache({'model':'test'},target,dimension=3,dtype='float32').get('PRIVATE-TEXT'),vector)
+
+
+def test_repository_rename_restores_legacy_authenticated_ciphertext(tmp_path):
+    # This literal is the deployed v1 format identity, independent of the new
+    # package name or current trusted-repository authorization checks.
+    legacy_aad = b'wankiwi/zotero-arxiv-daily:private-embedding-cache:v1'
+    source = tmp_path/'source'
+    cache = EmbeddingCache({'model':'legacy'}, source, dimension=2, dtype='float32')
+    vector = np.array([0.25, 0.75], dtype=np.float32)
+    cache.put('synthetic-legacy-vector', vector)
+    sealed = module.seal(source, KEY)
+    nonce = sealed[len(module.MAGIC):len(module.MAGIC)+12]
+    plaintext = AESGCM(KEY).decrypt(nonce, sealed[len(module.MAGIC)+12:], legacy_aad)
+    legacy_nonce = b'\x05'*12
+    legacy_blob = module.MAGIC + legacy_nonce + AESGCM(KEY).encrypt(legacy_nonce, plaintext, legacy_aad)
+    target = tmp_path/'restored'
+    assert module.unseal(legacy_blob, KEY, target) == 1
+    restored = EmbeddingCache({'model':'legacy'}, target, dimension=2, dtype='float32')
+    assert np.array_equal(restored.get('synthetic-legacy-vector'), vector)
+    assert restored.stats['disk_hits'] == 1 and restored.stats['misses'] == 0
 
 
 @pytest.mark.parametrize('kind',['wrong_key','tamper','oversize'])
@@ -52,10 +72,11 @@ def test_key_format_rejects_invalid_values(value):
 
 
 def test_only_trusted_main_can_use_key(tmp_path,capsys):
-    env={'GITHUB_REPOSITORY':'wankiwi/zotero-arxiv-daily','GITHUB_REF':'refs/heads/main','GITHUB_EVENT_NAME':'schedule',
+    env={'GITHUB_REPOSITORY':'wankiwi/zot2dailypaper','GITHUB_REF':'refs/heads/main','GITHUB_EVENT_NAME':'schedule',
          'EMBEDDING_CACHE_KEY':base64.b64encode(KEY).decode(),'GITHUB_OUTPUT':str(tmp_path/'output')}
     assert bridge.key_for(env)==KEY
-    for change in [{'GITHUB_REF':'refs/heads/feature'},{'GITHUB_EVENT_NAME':'pull_request'},{'GITHUB_REPOSITORY':'fork/repo'}]:
+    for change in [{'GITHUB_REF':'refs/heads/feature'},{'GITHUB_EVENT_NAME':'pull_request'},
+                   {'GITHUB_REPOSITORY':'fork/repo'}, {'GITHUB_REPOSITORY':'wankiwi/zotero-arxiv-daily'}]:
         assert bridge.key_for(env|change) is None
     bridge.main('gate',env|{'EMBEDDING_CACHE_KEY':''})
     assert 'enabled=false' in (tmp_path/'output').read_text()
@@ -63,7 +84,7 @@ def test_only_trusted_main_can_use_key(tmp_path,capsys):
 
 
 def test_two_simulated_runs_restore_disk_hit_without_secret_output(tmp_path,monkeypatch,capsys):
-    env={'GITHUB_REPOSITORY':'wankiwi/zotero-arxiv-daily','GITHUB_REF':'refs/heads/main','GITHUB_EVENT_NAME':'schedule',
+    env={'GITHUB_REPOSITORY':'wankiwi/zot2dailypaper','GITHUB_REF':'refs/heads/main','GITHUB_EVENT_NAME':'schedule',
          'EMBEDDING_CACHE_KEY':base64.b64encode(KEY).decode(),'RUNNER_TEMP':str(tmp_path),'GITHUB_ENV':str(tmp_path/'env')}
     monkeypatch.setattr(bridge,'BLOB',tmp_path/'cipher'/'private.enc')
     bridge.main('restore',env)
@@ -77,7 +98,7 @@ def test_two_simulated_runs_restore_disk_hit_without_secret_output(tmp_path,monk
     assert env['EMBEDDING_CACHE_KEY'] not in capsys.readouterr().out
 
 def test_array_header_cannot_request_unbounded_allocation(tmp_path):
-    from zotero_arxiv_daily.reranker.embedding_cache import validate_array_archive
+    from zot2dailypaper.reranker.embedding_cache import validate_array_archive
     header = io.BytesIO()
     np.lib.format.write_array_header_1_0(header, {'descr': '<f4', 'fortran_order': False, 'shape': (2**40,)})
     buffer = io.BytesIO()

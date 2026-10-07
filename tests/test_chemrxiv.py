@@ -6,10 +6,10 @@ import shutil
 import requests
 import pytest
 from hydra import initialize_config_dir,compose
-from zotero_arxiv_daily.retriever import chemrxiv_retriever as module
-from zotero_arxiv_daily.identity import canonical_doi,deduplicate,crossref_equivalent_dois
-from zotero_arxiv_daily.state import State
-from zotero_arxiv_daily.selection import publication_group
+from zot2dailypaper.retriever import chemrxiv_retriever as module
+from zot2dailypaper.identity import canonical_doi,deduplicate,crossref_equivalent_dois
+from zot2dailypaper.state import State
+from zot2dailypaper.selection import publication_group
 from tests.canned_responses import make_sample_paper
 
 TEXT='A complete original abstract describing molecular dynamics and chemistry in interfacial water.'
@@ -173,7 +173,7 @@ def test_indexed_cursor_does_not_stop_on_out_of_window_page(config,monkeypatch):
 @pytest.mark.parametrize('found_version',['v1','v2'])
 def test_abstract_recovery_uses_exact_chemrxiv_version(monkeypatch,found_version):
     from types import SimpleNamespace
-    from zotero_arxiv_daily import abstracts
+    from zot2dailypaper import abstracts
     calls=[]
     def get(url,**kwargs):
         calls.append(url)

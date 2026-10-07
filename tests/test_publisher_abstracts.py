@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily import publisher_abstracts as module
+from zot2dailypaper import publisher_abstracts as module
 
 
 DOI = '10.1038/synthetic-test'
@@ -163,7 +163,7 @@ def test_real_requests_redirect_preparation_never_reads_oversized_body(guarded):
 
 def test_recovery_pipeline_bounds_publisher_calls_and_records_provenance(monkeypatch):
     from contextlib import nullcontext
-    from zotero_arxiv_daily import abstracts
+    from zot2dailypaper import abstracts
     metadata = SimpleNamespace(get=lambda *a, **kw: SimpleNamespace(status_code=404))
     monkeypatch.setattr(abstracts, 'session', lambda *a:nullcontext(metadata))
     monkeypatch.setattr(abstracts, 'publisher_session', lambda:nullcontext(object()))

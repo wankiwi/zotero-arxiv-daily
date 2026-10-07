@@ -3,7 +3,7 @@ import argparse
 import shutil
 from pathlib import Path
 from huggingface_hub import hf_hub_download
-from zotero_arxiv_daily.reranker.onnx_encoder import MODEL, REVISION, ARTIFACTS, file_digest
+from zot2dailypaper.reranker.onnx_encoder import MODEL, REVISION, ARTIFACTS, file_digest
 
 
 def main():

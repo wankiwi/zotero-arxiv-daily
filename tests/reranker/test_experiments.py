@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily.protocol import CorpusPaper
-from zotero_arxiv_daily.reranker.experiments import settings, paper_text, unique_corpus, aggregate
-from zotero_arxiv_daily.reranker.base import BaseReranker
+from zot2dailypaper.protocol import CorpusPaper
+from zot2dailypaper.reranker.experiments import settings, paper_text, unique_corpus, aggregate
+from zot2dailypaper.reranker.base import BaseReranker
 
 
 @pytest.mark.parametrize('bad', [{'top_k':0}, {'top_k':True}, {'temperature':float('nan')},

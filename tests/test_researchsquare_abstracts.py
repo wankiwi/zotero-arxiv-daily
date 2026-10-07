@@ -1,6 +1,6 @@
 import pytest
-from zotero_arxiv_daily import abstracts, aps_metadata
-from zotero_arxiv_daily.identity import paper_id
+from zot2dailypaper import abstracts, aps_metadata
+from zot2dailypaper.identity import paper_id
 from tests.canned_responses import make_sample_paper
 import json
 

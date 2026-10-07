@@ -12,11 +12,11 @@ import pytest
 
 from tests.canned_responses import make_sample_paper, make_stub_openai_client, make_budget_guard
 from tests.test_pipeline import pipeline  # noqa: F401 -- reuse the isolated pipeline fixture
-from zotero_arxiv_daily.construct_email import render_email
-from zotero_arxiv_daily.executor import Executor
-from zotero_arxiv_daily.llm import ModelRequests
-from zotero_arxiv_daily.output.rss import write_rss
-from zotero_arxiv_daily.state import State, load_paper, paper_dict
+from zot2dailypaper.construct_email import render_email
+from zot2dailypaper.executor import Executor
+from zot2dailypaper.llm import ModelRequests
+from zot2dailypaper.output.rss import write_rss
+from zot2dailypaper.state import State, load_paper, paper_dict
 
 
 def not_found(message, code=404):
@@ -125,7 +125,7 @@ def test_pipeline_summarizes_degradation_without_provider_payload(pipeline, monk
     def unavailable(**kw):
         calls.append(kw)
         raise not_found('This model is unavailable for free')
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kw: client_with(unavailable))
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', lambda **kw: client_with(unavailable))
     executor = Executor(pipeline)
     papers = [make_sample_paper(title=f'Paper {i}', url=f'https://example.org/{i}') for i in range(6)]
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: papers)
@@ -146,7 +146,7 @@ def test_disabled_llm_needs_no_credentials_and_emits_no_degradation_warning(pipe
     with open_dict(pipeline):
         pipeline.llm.api = {'key': '???', 'base_url': '???'}
         pipeline.llm.generation_kwargs = {'model': '???'}
-    monkeypatch.setattr('zotero_arxiv_daily.executor.OpenAI', lambda **kw: pytest.fail('Disabled LLM must not be constructed'))
+    monkeypatch.setattr('zot2dailypaper.executor.OpenAI', lambda **kw: pytest.fail('Disabled LLM must not be constructed'))
     executor = Executor(pipeline)
     monkeypatch.setattr(executor.retrievers['arxiv'], 'retrieve_papers', lambda: [make_sample_paper()])
     logs = []

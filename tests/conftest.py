@@ -57,8 +57,8 @@ def config(_base_config, monkeypatch):
     """
     # Pipeline unit tests stub providers; no remote budget writes may occur.
     from tests.canned_responses import make_budget_guard
-    monkeypatch.setattr('zotero_arxiv_daily.executor.prepare_budget', lambda _: make_budget_guard())
-    monkeypatch.setattr('zotero_arxiv_daily.executor.budget_plan', lambda _: (None, None))
+    monkeypatch.setattr('zot2dailypaper.executor.prepare_budget', lambda _: make_budget_guard())
+    monkeypatch.setattr('zot2dailypaper.executor.budget_plan', lambda _: (None, None))
     # Optional free metadata recovery has dedicated transport/integration tests.
-    monkeypatch.setattr('zotero_arxiv_daily.executor.recover_metadata', lambda *a, **kw: None)
+    monkeypatch.setattr('zot2dailypaper.executor.recover_metadata', lambda *a, **kw: None)
     return copy.deepcopy(_base_config)

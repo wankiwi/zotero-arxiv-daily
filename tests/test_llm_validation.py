@@ -7,7 +7,7 @@ from openai import OpenAI, AuthenticationError
 import pytest
 
 from scripts import validate_llm as smoke
-from zotero_arxiv_daily.budget import BudgetRequests, utc_day
+from zot2dailypaper.budget import BudgetRequests, utc_day
 from tests.canned_responses import make_sample_paper
 
 

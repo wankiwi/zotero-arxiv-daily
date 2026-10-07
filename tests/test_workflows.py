@@ -289,7 +289,7 @@ def test_daily_schedule_uses_requested_utc_time():
     ('executor: {quotas: null}', None),
 ])
 def test_custom_quotas_override_defaults_for_scheduled_and_manual_runs(tmp_path,event,override,expected):
-    from zotero_arxiv_daily.selection import quotas_for
+    from zot2dailypaper.selection import quotas_for
     shutil.copytree(ROOT/'config',tmp_path/'config',ignore=shutil.ignore_patterns('runtime.yaml','private.yaml'))
     prepare(tmp_path,{'GITHUB_EVENT_NAME':event,'PAPER_CONFIG':'interests','CUSTOM_CONFIG':override})
     with initialize_config_dir(config_dir=str(tmp_path/'config'),version_base=None):

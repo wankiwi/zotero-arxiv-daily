@@ -5,8 +5,8 @@ from urllib.error import HTTPError
 
 from omegaconf import open_dict
 
-from zotero_arxiv_daily.retriever.base import BaseRetriever, register_retriever, get_retriever_cls
-from zotero_arxiv_daily.protocol import Paper
+from zot2dailypaper.retriever.base import BaseRetriever, register_retriever, get_retriever_cls
+from zot2dailypaper.protocol import Paper
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ class NoneRetriever(BaseRetriever):
 
 
 def test_retrieve_papers_skips_conversion_errors(config, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+    monkeypatch.setattr("zot2dailypaper.retriever.base.sleep", lambda _: None)
     with open_dict(config.source):
         config.source.failing_test = {}
     retriever = FailingTestRetriever(config)
@@ -84,7 +84,7 @@ def test_retrieve_papers_skips_conversion_errors(config, monkeypatch):
 
 
 def test_retrieve_papers_runs_serially(config, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+    monkeypatch.setattr("zot2dailypaper.retriever.base.sleep", lambda _: None)
     with open_dict(config.source):
         config.source.serial_test = {}
     seen: list[str] = []
@@ -95,7 +95,7 @@ def test_retrieve_papers_runs_serially(config, monkeypatch):
 
 
 def test_retrieve_papers_skips_none_results(config, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+    monkeypatch.setattr("zot2dailypaper.retriever.base.sleep", lambda _: None)
     with open_dict(config.source):
         config.source.none_test = {}
     retriever = NoneRetriever(config)
@@ -104,7 +104,7 @@ def test_retrieve_papers_skips_none_results(config, monkeypatch):
 
 
 def test_retrieve_papers_empty_raw(config, monkeypatch):
-    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
+    monkeypatch.setattr("zot2dailypaper.retriever.base.sleep", lambda _: None)
 
     @register_retriever("empty_test")
     class EmptyRetriever(BaseRetriever):

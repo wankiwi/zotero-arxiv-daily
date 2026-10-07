@@ -2,11 +2,11 @@
 
 ## Production evidence
 
-The latest **Send emails daily** run is [37239640651](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/37239640651),
+The latest **Send emails daily** run is [37239640651](https://github.com/wankiwi/zot2dailypaper/actions/runs/37239640651),
 using `267c09116aab826bef3bfd565f1e9630f7cb4107`. It started on October 4 at
 22:20:27 UTC (October 5 in Asia/Singapore).
 
-The [recommend job](https://github.com/wankiwi/zotero-arxiv-daily/actions/runs/37239640651/job/111545566133)
+The [recommend job](https://github.com/wankiwi/zot2dailypaper/actions/runs/37239640651/job/111545566133)
 recorded a bioRxiv `no posts found` response at 22:25:10. The program incorrectly
 treated that legitimate empty category/date window as a source failure. At
 22:59:45 SMTP nevertheless accepted **50 recommendations**, then
@@ -15,7 +15,7 @@ the previously collected bioRxiv error. This was a retrieval-status bug after
 successful email acceptance, rather than an SMTP failure.
 
 No run artifacts were published. The stored output is the `recommendations.json`
-file on `paper-state`, committed by [db422635](https://github.com/wankiwi/zotero-arxiv-daily/commit/db422635bccdd538500b9305fd0a3e44cbf15557)
+file on `paper-state`, committed by [db422635](https://github.com/wankiwi/zot2dailypaper/commit/db422635bccdd538500b9305fd0a3e44cbf15557)
 at 22:59:47. Exactly 50 records were added at 22:59:39 and all 50 have
 `channels.email=true`. Reconstructing the original renderer from those records
 produces 50 repeated `Scored using` sentences.
@@ -175,7 +175,7 @@ modified by the replay.
 
 - Red reproduction on the released source: `tests/test_oct5_regressions.py`
   produced 19 failures and eight passes before fixes.
-- Locked-dependency suite: `uv run --frozen pytest --cov=src/zotero_arxiv_daily
+- Locked-dependency suite: `uv run --frozen pytest --cov=src/zot2dailypaper
   --cov-report=term-missing` — **834 passed, one slow model-download test
   deselected**, 90.2563% total statement coverage (3557/3941 statements).
 - The 82 newly added cases cover empty responses, incomplete pagination,

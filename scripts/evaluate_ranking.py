@@ -14,11 +14,11 @@ import random
 from time import perf_counter
 import numpy as np
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.identity import paper_id
-from zotero_arxiv_daily.scores import SCORE_SCHEMA
-from zotero_arxiv_daily.protocol import Paper, CorpusPaper
-from zotero_arxiv_daily.reranker.local import LocalReranker
-from zotero_arxiv_daily.reranker.onnx_encoder import MODEL, REVISION
+from zot2dailypaper.identity import paper_id
+from zot2dailypaper.scores import SCORE_SCHEMA
+from zot2dailypaper.protocol import Paper, CorpusPaper
+from zot2dailypaper.reranker.local import LocalReranker
+from zot2dailypaper.reranker.onnx_encoder import MODEL, REVISION
 
 VARIANTS = {
     'baseline': {}, 'keyword_query': {'keyword_prompt':'query'},

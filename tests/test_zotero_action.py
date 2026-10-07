@@ -1,8 +1,8 @@
 import hashlib
 import pytest
-from zotero_arxiv_daily.zotero_action import confirmation_link
-from zotero_arxiv_daily.identity import paper_id
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
+from zot2dailypaper.zotero_action import confirmation_link
+from zot2dailypaper.identity import paper_id
+from zot2dailypaper.construct_email import render_email, email_plain_text
 from tests.canned_responses import make_sample_paper
 
 

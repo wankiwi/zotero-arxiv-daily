@@ -7,11 +7,11 @@ import pytest
 from omegaconf import OmegaConf
 
 from tests.canned_responses import make_sample_paper
-from zotero_arxiv_daily.construct_email import render_email, email_plain_text
-from zotero_arxiv_daily.protocol import CorpusPaper
-from zotero_arxiv_daily.reranker.base import BaseReranker
-from zotero_arxiv_daily.reranker.strategies import ProfileSettings, directional_scores, strategy_settings
-from zotero_arxiv_daily.state import paper_dict, load_paper
+from zot2dailypaper.construct_email import render_email, email_plain_text
+from zot2dailypaper.protocol import CorpusPaper
+from zot2dailypaper.reranker.base import BaseReranker
+from zot2dailypaper.reranker.strategies import ProfileSettings, directional_scores, strategy_settings
+from zot2dailypaper.state import paper_dict, load_paper
 
 
 def corpus(size):
@@ -135,7 +135,7 @@ def test_library_only_profiles_keep_direction_anchors_and_joint_winner_is_not_ke
 
 
 def test_stable_candidate_and_direction_ties_and_bounded_affinity_requests(monkeypatch):
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.base.AFFINITY_ELEMENTS', 4)
+    monkeypatch.setattr('zot2dailypaper.reranker.base.AFFINITY_ELEMENTS', 4)
     ranker = MatrixReranker([[.2] * 5 + [.8, .8]] * 2, [[.5, .5]] * 5)
     papers = [make_sample_paper(title=name, abstract=f'c{i}') for i, name in enumerate(['B', 'A'])]
     ranked = ranker.rerank(papers, list(reversed(corpus(5))))
@@ -213,12 +213,12 @@ def test_email_explains_profile_once_escapes_interest_and_preserves_mixed_pendin
 
 
 def test_api_affinity_uses_already_encoded_texts_without_extra_provider_requests(config, monkeypatch):
-    from zotero_arxiv_daily.reranker.api import ApiReranker
+    from zot2dailypaper.reranker.api import ApiReranker
     requested = []
     def create(*, input, model):
         requested.append(input)
         return SimpleNamespace(data=[SimpleNamespace(index=i, embedding=[1., i + 1.]) for i in range(len(input))])
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.api.OpenAI',
+    monkeypatch.setattr('zot2dailypaper.reranker.api.OpenAI',
                         lambda **_: SimpleNamespace(embeddings=SimpleNamespace(create=create)))
     config.reranker.strategy = 'multi_interest_profile'
     config.interest_profile.keywords = ['water', 'sampling']

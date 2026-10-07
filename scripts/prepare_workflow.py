@@ -5,7 +5,7 @@ import re
 
 from omegaconf import OmegaConf
 from hydra import compose, initialize_config_dir
-from zotero_arxiv_daily.preprint_interests import enabled_sources
+from zot2dailypaper.preprint_interests import enabled_sources
 
 
 def prepare(root: Path, environ=os.environ):

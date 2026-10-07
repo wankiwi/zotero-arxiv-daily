@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import pytest
 import requests
-from zotero_arxiv_daily.http import CrossrefAdapter, BoundedRetry, session
+from zot2dailypaper.http import CrossrefAdapter, BoundedRetry, session
 
 
 def test_crossref_uses_shared_gate_and_bounded_retries():
@@ -17,8 +17,8 @@ def test_crossref_uses_shared_gate_and_bounded_retries():
 def test_crossref_pacing_across_sessions(monkeypatch):
     clock=[100.0]
     starts=[]
-    monkeypatch.setattr('zotero_arxiv_daily.http.time.monotonic',lambda:clock[0])
-    monkeypatch.setattr('zotero_arxiv_daily.http.time.sleep',lambda delay:clock.__setitem__(0,clock[0]+delay))
+    monkeypatch.setattr('zot2dailypaper.http.time.monotonic',lambda:clock[0])
+    monkeypatch.setattr('zot2dailypaper.http.time.sleep',lambda delay:clock.__setitem__(0,clock[0]+delay))
     monkeypatch.setattr(CrossrefAdapter,'_last_start',0.0)
     monkeypatch.setattr('requests.adapters.HTTPAdapter.send',lambda *a,**kw:starts.append(clock[0]))
     CrossrefAdapter().send(object())

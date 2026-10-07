@@ -2,10 +2,10 @@ import random
 import numpy as np
 import pytest
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.interest_profile import interest_profile
-from zotero_arxiv_daily.reranker.base import BaseReranker
-from zotero_arxiv_daily.construct_email import render_email
-from zotero_arxiv_daily.selection import select_papers
+from zot2dailypaper.interest_profile import interest_profile
+from zot2dailypaper.reranker.base import BaseReranker
+from zot2dailypaper.construct_email import render_email
+from zot2dailypaper.selection import select_papers
 from tests.canned_responses import make_sample_paper, make_sample_corpus
 
 
@@ -94,8 +94,8 @@ def test_fused_ranking_retains_quota_then_disjoint_random_selection():
 
 def test_keyword_only_executor_still_filters_seen_duplicates_and_library(config, monkeypatch):
     from types import SimpleNamespace
-    from zotero_arxiv_daily.executor import Executor
-    from zotero_arxiv_daily.identity import title_key
+    from zot2dailypaper.executor import Executor
+    from zot2dailypaper.identity import title_key
     config.interest_profile.keywords = ['water']
     config.llm.enabled = False
     config.executor.quotas = None
@@ -129,7 +129,7 @@ def test_profile_survives_workflow_without_broadening_source_filters(tmp_path):
     from pathlib import Path
     from hydra import compose, initialize_config_dir
     from scripts.prepare_workflow import prepare
-    from zotero_arxiv_daily.preprint_interests import categories_for
+    from zot2dailypaper.preprint_interests import categories_for
     root = Path(__file__).resolve().parents[2]
     shutil.copytree(root / 'config', tmp_path / 'config')
     patch = OmegaConf.load(root / 'config/keyword_interests.yaml').interest_profile
@@ -145,7 +145,7 @@ def test_profile_survives_workflow_without_broadening_source_filters(tmp_path):
 
 
 def test_weight_edits_recompute_scores_and_state_keeps_provenance():
-    from zotero_arxiv_daily.state import paper_dict, load_paper
+    from zot2dailypaper.state import paper_dict, load_paper
     ranker = Controlled([[0.2, 0.8]], keywords=['water'])
     paper = make_sample_paper()
     ranker.rerank([paper], make_sample_corpus(1))

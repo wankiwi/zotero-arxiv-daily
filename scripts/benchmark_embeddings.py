@@ -12,8 +12,8 @@ import tempfile
 from time import perf_counter
 import numpy as np
 from omegaconf import OmegaConf
-from zotero_arxiv_daily.reranker.local import LocalReranker
-from zotero_arxiv_daily.reranker.onnx_encoder import MODEL, REVISION
+from zot2dailypaper.reranker.local import LocalReranker
+from zot2dailypaper.reranker.onnx_encoder import MODEL, REVISION
 
 
 def worker(backend, directory):

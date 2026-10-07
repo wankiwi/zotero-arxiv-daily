@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   save:
-    if: ${{ github.repository == 'wankiwi/zotero-arxiv-daily' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.repository == 'wankiwi/zot2dailypaper' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,7 +27,7 @@ jobs:
           key: embedding-validation-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
   restore:
     needs: save
-    if: ${{ github.repository == 'wankiwi/zotero-arxiv-daily' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.repository == 'wankiwi/zot2dailypaper' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

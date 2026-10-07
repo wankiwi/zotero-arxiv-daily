@@ -8,8 +8,8 @@ import httpx
 from omegaconf import OmegaConf
 from openai import OpenAI, APIStatusError
 
-from zotero_arxiv_daily.budget import budget_plan, prepare_budget, git
-from zotero_arxiv_daily.state import load_paper
+from zot2dailypaper.budget import budget_plan, prepare_budget, git
+from zot2dailypaper.state import load_paper
 
 
 def request_audit(events):

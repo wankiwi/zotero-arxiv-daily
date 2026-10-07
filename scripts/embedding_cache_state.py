@@ -3,13 +3,13 @@ import argparse
 import os
 from pathlib import Path
 import tempfile
-from zotero_arxiv_daily.reranker.encrypted_cache import decode_key, seal, unseal, MAX_PACKAGE
+from zot2dailypaper.reranker.encrypted_cache import decode_key, seal, unseal, MAX_PACKAGE
 
 BLOB = Path('.embedding-cache/private.enc')
 
 
 def authorized(environ):
-    return (environ.get('GITHUB_REPOSITORY') == 'wankiwi/zotero-arxiv-daily'
+    return (environ.get('GITHUB_REPOSITORY') == 'wankiwi/zot2dailypaper'
             and environ.get('GITHUB_REF') == 'refs/heads/main'
             and environ.get('GITHUB_EVENT_NAME') in ('schedule', 'workflow_dispatch'))
 

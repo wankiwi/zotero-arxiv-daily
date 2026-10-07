@@ -2,7 +2,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
-from zotero_arxiv_daily.reranker.local import LocalReranker
+from zot2dailypaper.reranker.local import LocalReranker
 
 
 @pytest.fixture
@@ -69,7 +69,7 @@ def test_prompt_change_invalidates(config, encoder):
 
 
 def test_cpu_without_bf16_upcasts_same_encoder(config, encoder, monkeypatch):
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16',lambda:False)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16',lambda:False)
     ranker=LocalReranker(config)
     ranker.get_similarity_score(['a'],['b'])
     assert next(ranker._encoder.parameters()).dtype == torch.float32
@@ -77,7 +77,7 @@ def test_cpu_without_bf16_upcasts_same_encoder(config, encoder, monkeypatch):
 
 def test_cpu_native_preserves_dtype(config, encoder, monkeypatch):
     config.reranker.local.cpu_dtype='native'
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16',lambda:False)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16',lambda:False)
     ranker=LocalReranker(config)
     ranker.get_similarity_score(['a'],['b'])
     assert next(ranker._encoder.parameters()).dtype == torch.bfloat16
@@ -85,11 +85,11 @@ def test_cpu_native_preserves_dtype(config, encoder, monkeypatch):
 
 def test_auto_bf16_runner_reuses_fp32_cache_with_actual_upcast(config, encoder, tmp_path, monkeypatch):
     config.reranker.local.cache_dir = str(tmp_path)
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: False)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16', lambda: False)
     cold = LocalReranker(config)
     score = cold.get_similarity_score(['a'], ['b'])
     namespace = cold._cache_namespace
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16', lambda: True)
     warm = LocalReranker(config)
     assert np.array_equal(score, warm.get_similarity_score(['a'], ['b']))
     assert next(warm._encoder.parameters()).dtype == torch.float32
@@ -106,7 +106,7 @@ def test_native_bf16_still_invalidates_fp32_pool(config, encoder, tmp_path, monk
     cold = LocalReranker(config)
     cold.get_similarity_score(['a'], ['b'])
     config.reranker.local.cpu_dtype = 'native'
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16', lambda: True)
     native = LocalReranker(config)
     native.get_similarity_score(['a'], ['b'])
     assert native._cache_namespace != cold._cache_namespace
@@ -120,7 +120,7 @@ def test_auto_prefers_existing_native_pool_and_freezes_precision_across_roles(co
     fp32 = LocalReranker(config)
     fp32._encode_texts(['query text'], 'query')
     config.reranker.local.cpu_dtype = 'auto'
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16', lambda: True)
     native = LocalReranker(config)
     native._encode_texts(['document text'], 'document')
     native._encode_texts(['query text'], 'query')
@@ -138,7 +138,7 @@ def test_corrupt_fp32_pool_cannot_select_auto_precision(config, encoder, tmp_pat
     cold._encode_texts(['a'])
     next(cold._cache.directory.glob('*.npz')).write_bytes(b'corrupt synthetic fixture')
     config.reranker.local.cpu_dtype = 'auto'
-    monkeypatch.setattr('zotero_arxiv_daily.reranker.local.cpu_has_bf16', lambda: True)
+    monkeypatch.setattr('zot2dailypaper.reranker.local.cpu_has_bf16', lambda: True)
     warm = LocalReranker(config)
     warm._encode_texts(['a'])
     assert next(warm._encoder.parameters()).dtype == torch.bfloat16
@@ -155,7 +155,7 @@ def test_model_revision_change_reloads(config, encoder):
 
 
 def test_cpu_thread_count_respects_quota(monkeypatch):
-    from zotero_arxiv_daily.reranker.local import available_cpu_threads
+    from zot2dailypaper.reranker.local import available_cpu_threads
     monkeypatch.setattr('os.sched_getaffinity',lambda pid:set(range(8)))
     monkeypatch.setattr('pathlib.Path.read_text',lambda self:'200000 100000')
     assert available_cpu_threads()==2
@@ -196,7 +196,7 @@ def test_interest_weights_reuse_vectors_new_phrase_encodes_only_new_text(config,
 def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkeypatch):
     from tests.canned_responses import make_sample_paper,make_sample_corpus
     from omegaconf import OmegaConf
-    from zotero_arxiv_daily.protocol import Paper
+    from zot2dailypaper.protocol import Paper
     monkeypatch.setattr(Paper,'generate_tldr',lambda *a,**kw:pytest.fail('Ranking must not call LLM'))
     config.interest_profile=OmegaConf.create({'keywords':['water']})
     ranker=LocalReranker(config)
@@ -214,7 +214,7 @@ def test_penalty_edit_uses_existing_embeddings_without_llm(config,encoder,monkey
 
 
 def test_optional_onnx_load_failure_falls_back_and_never_mixes_cache(config,encoder,tmp_path,monkeypatch):
-    from zotero_arxiv_daily.reranker.onnx_encoder import OnnxEncoder
+    from zot2dailypaper.reranker.onnx_encoder import OnnxEncoder
     config.reranker.local.backend='onnx_fp32';config.reranker.local.cache_dir=str(tmp_path)
     def fail(*a,**k):raise OSError('synthetic unavailable')
     monkeypatch.setattr(OnnxEncoder,'__init__',fail)
@@ -227,7 +227,7 @@ def test_optional_onnx_load_failure_falls_back_and_never_mixes_cache(config,enco
 
 
 def test_backend_namespace_and_inference_fallback(config,encoder,monkeypatch):
-    from zotero_arxiv_daily.reranker import onnx_encoder
+    from zot2dailypaper.reranker import onnx_encoder
     class FakeOnnx(encoder):
         def __init__(self,*a,**kw):super().__init__();self.artifact_identity={'graph':'verified'}
     monkeypatch.setattr(onnx_encoder,'OnnxEncoder',FakeOnnx)
@@ -241,7 +241,7 @@ def test_backend_namespace_and_inference_fallback(config,encoder,monkeypatch):
 
 
 def test_actual_backend_change_invalidates_otherwise_identical_disk_identity(config, encoder, tmp_path, monkeypatch):
-    from zotero_arxiv_daily.reranker import onnx_encoder
+    from zot2dailypaper.reranker import onnx_encoder
     class FakeOnnx(encoder):
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -273,7 +273,7 @@ def test_query_role_separates_cache_and_preserves_document_reuse(config,encoder)
 
 
 def test_query_inference_fallback_reencodes_documents(config,encoder,monkeypatch):
-    from zotero_arxiv_daily.reranker import onnx_encoder
+    from zot2dailypaper.reranker import onnx_encoder
     config.interest_profile.keywords=['keyword']
     class FakeOnnx(encoder):
         def encode(self,texts,**kwargs):
