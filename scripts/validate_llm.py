@@ -37,6 +37,7 @@ def response_audit(events):
 
 
 def validate(config, paper, client, events):
+    config = OmegaConf.merge(config, {'request': {'max_attempts': 1}})  # Explicit smoke validation authorizes one paid attempt only.
     budget_plan(config)  # Verify destination before transmitting even a model-list request.
     if config.get('language') != 'Chinese' or config.get('input_mode', 'abstract') != 'abstract':
         raise ValueError('Validation requires Chinese abstract mode')
@@ -54,6 +55,7 @@ def validate(config, paper, client, events):
     preserved = paper.abstract == original
     return {'status': 'success' if generated and chinese and sentences == 1 and preserved else 'summary_failed',
             'summary_status': paper.tldr_status, 'summary_error': paper.tldr_error,
+            'summary_error_reason': paper.tldr_error_reason, 'summary_attempts': paper.tldr_attempts,
             'contains_chinese': chinese if generated else False,
             'sentence_count': sentences if generated else 0,
             'summary_characters': len(paper.tldr or '') if generated else 0,

@@ -3,22 +3,28 @@
 The entire daily allowance is consumed by one run, including failed calls and
 unused balance. This intentionally trades utilization for crash safety.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
 from threading import Lock
 from urllib.parse import urlsplit
-from .llm import ModelRequests
+from uuid import uuid4
+from .llm import ModelRequests, request_policy
+from .budget_calendar import (LOCAL_TIMEZONE, LedgerInvalid, window_at, migrated_ledger, legacy_digest,
+                              validate_local, overlapping_legacy, next_unblocked_window)
 from loguru import logger
 
 class BudgetUnavailable(RuntimeError):
-    def __init__(self, message, *, reason='budget_guard_unavailable'):
+    def __init__(self, message, *, reason='budget_guard_unavailable', day=None, retry_at=None, timezone_name='UTC'):
         super().__init__(message)
         self.reason = reason
+        self.day, self.retry_at = day, retry_at
+        self.timezone_name = timezone_name
 
 # Reviewed public provider contract: explicit non-thinking, peak CNY tariff.
 # Different endpoints/models fail closed; stale pricing warns and continues.
@@ -40,6 +46,10 @@ def utc_day():
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def budget_now():
+    return datetime.now(timezone.utc)
+
+
 def pricing_warning():
     if VERIFIED_PRICING and utc_day() > VERIFIED_PRICING['valid_through']:
         return ('LLM 价格复核已过期：继续按最后复核费率估算并执行配置的每日记账额度；'
@@ -50,6 +60,8 @@ def pricing_warning():
 
 def budget_plan(config):
     budget = config.get('budget', {})
+    if budget.get('timezone', LOCAL_TIMEZONE) != LOCAL_TIMEZONE:
+        raise BudgetUnavailable('Only the approved Asia/Singapore budget timezone is supported', reason='budget_timezone_invalid')
     if budget.get('enabled', True) is not True:
         raise BudgetUnavailable('Budget guard disabled: paid calls prohibited, not unlimited')
     # CUSTOM_CONFIG supplies the amount. Never replace it with a fixed ceiling
@@ -114,6 +126,7 @@ def _push_ledger(parent, data, message):
 def reserve_day(cap, day=None):
     """Compare-and-swap via fast-forward push; no force and no history rewrite."""
     day = day or utc_day()
+    reservation_id = str(uuid4())  # Distinct invocations must never create identical grant commits.
     branch, name = 'paper-state', 'llm_budget.json'
     # Require existing delivery state: do not silently initialize another ledger.
     for _ in range(3):
@@ -129,12 +142,23 @@ def reserve_day(cap, day=None):
             data = json.loads(git('show', f'{parent}:{name}'))
         except (ValueError, TypeError) as exc:
             raise BudgetUnavailable('Invalid budget ledger; preserve and investigate') from exc
-        if not isinstance(data, dict) or data.get('version') != 1 or not isinstance(data.get('days'), dict):
+        if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 1 or not isinstance(data.get('days'), dict):
             raise BudgetUnavailable('Invalid budget ledger; preserve and investigate')
         if day in data['days']:
-            raise BudgetUnavailable('Daily LLM allowance already reserved; retaining original abstracts')
+            # Never infer that an older/crashed/rerun reservation was unused.
+            # This is a normal allowance conflict, distinct from a broken guard.
+            retry_at = (date.fromisoformat(day) + timedelta(days=1)).isoformat() + 'T00:00:00+00:00'
+            raise BudgetUnavailable(f'Daily LLM allowance already reserved for UTC {day}; retaining original abstracts',
+                                    reason='daily_budget_reserved', day=day, retry_at=retry_at)
+        owner = {}
+        for key, env, pattern in (('run_id', 'GITHUB_RUN_ID', r'\d{1,20}'),
+                                  ('run_attempt', 'GITHUB_RUN_ATTEMPT', r'\d{1,6}'),
+                                  ('head_sha', 'GITHUB_SHA', r'[0-9a-fA-F]{40}')):
+            value = os.environ.get(env, '')
+            if re.fullmatch(pattern, value):
+                owner[key] = value
         data['days'][day] = {'reserved_cny': str(cap), 'policy': 'whole-day-no-refund',
-                             'created_at': datetime.now(timezone.utc).isoformat()}
+                             'created_at': datetime.now(timezone.utc).isoformat(), 'reservation_id': reservation_id, **owner}
         if _push_ledger(parent, data, 'Reserve daily LLM budget before requests'):
             return day
         # A concurrent writer may have advanced the branch. Re-fetch and
@@ -143,34 +167,144 @@ def reserve_day(cap, day=None):
 
 
 class BudgetRequests(ModelRequests):
-    def __init__(self, cap, per_call, day):
-        super().__init__()
+    def __init__(self, cap, per_call, day, *, failure_threshold=None, max_retry_wait=5,
+                 expected_model=None, expected_endpoint=None, window=None):
+        try:
+            cap, per_call = Decimal(str(cap)), Decimal(str(per_call))
+        except InvalidOperation:
+            raise BudgetUnavailable('Invalid request reservation bounds') from None
+        if not cap.is_finite() or not per_call.is_finite() or not 0 < per_call <= cap:
+            raise BudgetUnavailable('Invalid request reservation bounds')
+        super().__init__(failure_threshold=failure_threshold, max_retry_wait=max_retry_wait)
         self.remaining, self.per_call, self.day = cap, per_call, day
+        self.expected_model, self.expected_endpoint = expected_model, expected_endpoint
+        self.window = window
+        self.timezone_name = window.timezone_name if window is not None else 'UTC'
         self._budget_lock = Lock()
+
+    def check_window(self):
+        current = budget_now() if self.window is not None else None
+        if ((self.window is not None and not self.window.start <= current < self.window.end)
+                or (self.window is None and utc_day() != self.day)):
+            raise BudgetUnavailable('Budget day changed; no new request until a fresh run reserves that day',
+                                    reason='day_changed', day=self.day, timezone_name=self.timezone_name)
 
     def call(self, operation):
         # Serialize reservation and actual dispatch. Queued callers must observe
         # terminal aborts before sending, not merely before precharging a slot.
         with self._budget_lock:
             if getattr(self, '_aborted', False):
-                raise BudgetUnavailable('Paid requests stopped after an unexpected billing response', reason='billing_unverified')
-            if utc_day() != self.day:
-                raise BudgetUnavailable('UTC day changed; no new request until a fresh run reserves that day', reason='day_changed')
+                raise BudgetUnavailable('Paid requests stopped for this reservation', reason=self._abort_reason,
+                                        day=self.day, timezone_name=self.timezone_name)
+            self.check_available()  # Cooldown/terminal checks precede the final UTC check and charge.
+            self.check_window()
             if self.remaining < self.per_call:
                 raise BudgetUnavailable('Daily LLM budget exhausted; retaining original abstract', reason='daily_budget_exhausted')
             self.remaining -= self.per_call
             try:
                 return super().call(operation)
-            except BudgetUnavailable:
+            except BudgetUnavailable as exc:
                 self._aborted = True
+                self._abort_reason = exc.reason
                 self.remaining = Decimal(0)
                 raise
 
 
 def prepare_budget(config):
+    policy = request_policy(config)
     cap, per_call = budget_plan(config)
-    day = reserve_day(cap)
-    return BudgetRequests(cap, per_call, day)
+    window = reserve_local_day(cap, config.get('budget', {}).get('timezone', LOCAL_TIMEZONE))
+    return BudgetRequests(cap, per_call, window.day, failure_threshold=policy['failure_threshold'],
+                          max_retry_wait=policy['max_retry_wait_seconds'],
+                          expected_model=config.generation_kwargs.model, expected_endpoint=str(config.api.base_url), window=window)
+
+
+def reserve_local_day(cap, timezone_name=LOCAL_TIMEZONE):
+    """CAS cutover and local claim in one ledger; immutable old windows block overlaps.
+
+    A winning v2 marker fences new v1 reservations because old readers reject
+    version 2. Already-admitted old guards are covered by their retained UTC
+    windows; those windows block all overlapping local dates, without refunds.
+    """
+    try:
+        cap = Decimal(str(cap))
+    except InvalidOperation:
+        raise BudgetUnavailable('Invalid explicitly configured budget cap') from None
+    if not cap.is_finite() or cap <= 0:
+        raise BudgetUnavailable('Invalid explicitly configured budget cap')
+    admitted = budget_now()
+    reservation_id = str(uuid4())  # Stable across this call's CAS retries, unique across processes/reruns.
+    try:
+        window = window_at(admitted, timezone_name)
+    except LedgerInvalid as exc:
+        raise BudgetUnavailable(str(exc), reason='budget_timezone_invalid') from None
+    for _ in range(3):
+        refs = git('ls-remote', '--heads', 'origin', 'refs/heads/paper-state').decode().split()
+        if len(refs) != 2 or refs[1] != 'refs/heads/paper-state':
+            raise BudgetUnavailable('Existing budget state branch is required')
+        parent = refs[0]
+        git('fetch', '--no-tags', '--no-write-fetch-head', 'origin', parent)
+        if b'llm_budget.json' not in git('ls-tree', '--name-only', parent, '--', 'llm_budget.json').splitlines():
+            raise BudgetUnavailable('Budget ledger is missing; explicit audited bootstrap required')
+        try:
+            data = json.loads(git('show', f'{parent}:llm_budget.json'))
+            snapshot_now = budget_now()
+            migration = isinstance(data, dict) and type(data.get('version')) is int and data['version'] == 1
+            if migration:
+                data = migrated_ledger(data, parent, snapshot_now)
+            validate_local(data, budget_now())
+            blocked = overlapping_legacy(data['legacy_utc'], window)
+            retry_at = next_unblocked_window(data, window) if blocked or window.key in data['claims'] else None
+        except (ValueError, TypeError, KeyError) as exc:
+            raise BudgetUnavailable('Invalid budget ledger or timestamps; preserve and investigate', reason='budget_ledger_invalid') from exc
+        if blocked:
+            if migration and not _push_ledger(parent, data, 'Migrate LLM budget clock preserving all UTC reservations'):
+                continue  # An old/new writer won; re-read all claims before deciding.
+            raise BudgetUnavailable('Legacy UTC reservation overlaps this Asia/Singapore budget day; no allowance reclaimed',
+                                    reason='legacy_budget_overlap', day=window.day, retry_at=retry_at,
+                                    timezone_name=LOCAL_TIMEZONE)
+        if window.key in data['claims']:
+            raise BudgetUnavailable(f'Daily LLM allowance already reserved for Asia/Singapore {window.day}',
+                                    reason='daily_budget_reserved', day=window.day, retry_at=retry_at,
+                                    timezone_name=LOCAL_TIMEZONE)
+        owner = {}
+        for key, env, pattern in (('run_id', 'GITHUB_RUN_ID', r'\d{1,20}'),
+                                  ('run_attempt', 'GITHUB_RUN_ATTEMPT', r'\d{1,6}'),
+                                  ('head_sha', 'GITHUB_SHA', r'[0-9a-fA-F]{40}')):
+            value = os.environ.get(env, '')
+            if re.fullmatch(pattern, value):
+                owner[key] = value
+        ready_at = budget_now()
+        if not window.start <= ready_at < window.end or ready_at < snapshot_now:
+            raise BudgetUnavailable('Budget window changed during reservation; no paid call authorized',
+                                    reason='day_changed', day=window.day, timezone_name=LOCAL_TIMEZONE)
+        data['claims'][window.key] = {'reserved_cny': str(cap), 'policy': 'whole-day-no-refund',
+            'timezone': LOCAL_TIMEZONE, 'day': window.day, 'created_at': ready_at.isoformat(),
+            'window_start_utc': window.start.isoformat(), 'window_end_utc': window.end.isoformat(),
+            'reservation_id': reservation_id, **owner}
+        data['claims_sha256'] = legacy_digest(data['claims'])
+        # A slow Git operation may cross midnight. The returned guard still
+        # belongs only to this admitted window and cannot roll into another one.
+        if _push_ledger(parent, data, 'Reserve Asia/Singapore daily LLM budget before requests'):
+            return window
+    raise BudgetUnavailable('Could not persist local budget reservation; paid calls disabled')
+
+
+def verify_paid_client(client, model, requests):
+    """Bind production dispatch to the destination/model used by the reservation."""
+    if requests.expected_model is not None and requests.expected_model != model:
+        raise BudgetUnavailable('Request model differs from the reservation', reason='billing_unverified')
+    if requests.expected_endpoint is not None:
+        def origin(value):
+            url = urlsplit(str(value))
+            return (url.scheme, url.hostname, url.port or 443, url.path.rstrip('/'),
+                    url.query, url.fragment, url.username, url.password)
+        try:
+            matches = origin(getattr(client, 'base_url', '')) == origin(requests.expected_endpoint)
+        except ValueError:
+            matches = False
+        if not matches:
+            raise BudgetUnavailable('Request endpoint differs from the reservation', reason='billing_unverified')
 
 
 def audit_response(response, expected_model):
@@ -185,11 +319,15 @@ def audit_response(response, expected_model):
         raise BudgetUnavailable('Provider response usage is invalid', reason='billing_unverified')
     prompt, completion, total = counts
     details = getattr(usage, 'completion_tokens_details', None)
-    reasoning = getattr(details, 'reasoning_tokens', 0) or 0
+    reasoning = getattr(details, 'reasoning_tokens', 0)
+    if reasoning is None:
+        reasoning = 0
     if type(reasoning) is not int or reasoning != 0 or prompt > PROMPT_BYTES + SYSTEM_BYTES + FRAMING_TOKENS or completion > MAX_OUTPUT_TOKENS or total != prompt + completion:
         raise BudgetUnavailable('Provider usage exceeded or contradicted the reserved bound', reason='billing_unverified')
-    choices = getattr(response, 'choices', [])
-    if len(choices) != 1 or getattr(choices[0].message, 'reasoning_content', None):
+    choices = getattr(response, 'choices', None)
+    if not isinstance(choices, list) or len(choices) != 1 or getattr(choices[0], 'message', None) is None:
+        raise BudgetUnavailable('Provider choices/message are invalid', reason='billing_unverified')
+    if getattr(choices[0].message, 'reasoning_content', None):
         raise BudgetUnavailable('Provider unexpectedly emitted reasoning or extra choices', reason='billing_unverified')
 
 
@@ -212,10 +350,10 @@ def bootstrap_ledger():
         raise BudgetUnavailable('Bootstrap push failed; inspect remote before retrying')
 
 
-def no_retry_client(client):
+def no_retry_client(client, timeout=30):
     """Enforce the reservation's one-request contract at the paid boundary."""
     options = getattr(client, 'with_options', None)
-    request_client = options(max_retries=0) if callable(options) else client
+    request_client = options(max_retries=0, timeout=timeout) if callable(options) else client
     retries = getattr(request_client, 'max_retries', None)
     if type(retries) is not int or retries != 0:
         raise BudgetUnavailable('Paid client must explicitly disable automatic retries')

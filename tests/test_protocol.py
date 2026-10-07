@@ -11,7 +11,7 @@ def llm_params():
 def test_tldr_returns_response(llm_params):
     paper=make_sample_paper()
     result=paper.generate_tldr(make_stub_openai_client(),llm_params,make_budget_guard())
-    assert result=='Hello! How can I assist you today?' and paper.tldr_status=='generated'
+    assert result=='该研究报告了经过验证的分子模拟结果。' and paper.tldr_status=='generated'
 
 @pytest.mark.parametrize('params',[{}, {'budget':{}}, {'budget':{'enabled':False}}])
 def test_missing_or_disabled_reservation_blocks_all_direct_summary_paths(params):
