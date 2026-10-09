@@ -8,8 +8,46 @@ from hydra import compose, initialize_config_dir
 import pytest
 
 from scripts.prepare_workflow import prepare
+from zot2dailypaper.recommendation_sync import WORKER_ORIGIN
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize('event', ['schedule', 'workflow_dispatch'])
+def test_worker_sync_uses_approved_origin_without_resolving_credentials(tmp_path, event):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config')
+    prepare(tmp_path, {
+        'GITHUB_EVENT_NAME': event,
+        'ZOTERO_WORKER_SYNC': 'free',
+        'CUSTOM_CONFIG': 'email: {zotero_action_origin: https://old.example.org}\nllm: {budget: {daily_cny: 0.21}}',
+    })
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.email.worker_sync == 'free'
+    assert config.email.zotero_action_origin == WORKER_ORIGIN
+    assert config.llm.budget.enabled and config.llm.budget.daily_cny == .21
+    assert config.state.enabled and config.output.email.enabled and not config.output.rss.enabled
+    assert 'ZOTERO_WORKER_D1_TOKEN' not in (tmp_path / 'config/runtime.yaml').read_text()
+
+
+def test_disabled_sync_retains_old_email_link_and_rejects_unsupported_mode(tmp_path):
+    shutil.copytree(ROOT / 'config', tmp_path / 'config')
+    prepare(tmp_path, {'CUSTOM_CONFIG': 'email: {zotero_action_origin: https://old.example.org}'})
+    with initialize_config_dir(config_dir=str(tmp_path / 'config'), version_base=None):
+        config = compose(config_name='runtime')
+    assert config.email.worker_sync == 'disabled'
+    assert config.email.zotero_action_origin == 'https://old.example.org'
+    with pytest.raises(ValueError, match='ZOTERO_WORKER_SYNC'):
+        prepare(tmp_path, {'ZOTERO_WORKER_SYNC': 'paid'})
+
+
+def test_daily_workflow_has_sync_setup_and_no_worker_deployment():
+    import yaml
+    workflow = yaml.load((ROOT / '.github/workflows/main.yml').read_text(), Loader=yaml.BaseLoader)
+    steps = {step.get('name'): step for step in workflow['jobs']['recommend']['steps']}
+    assert steps['Prepare runtime configuration']['env']['ZOTERO_WORKER_SYNC'] == "${{ vars.ZOTERO_WORKER_SYNC || 'disabled' }}"
+    assert steps['Retrieve, rank and deliver']['env']['ZOTERO_WORKER_D1_TOKEN'] == "${{ secrets.ZOTERO_WORKER_D1_TOKEN }}"
+    assert not any('wrangler' in step.get('run', '') for step in steps.values())
 
 
 @pytest.mark.parametrize('event', ['schedule', 'workflow_dispatch'])
