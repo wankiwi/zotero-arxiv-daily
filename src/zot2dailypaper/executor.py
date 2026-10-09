@@ -23,6 +23,7 @@ from .abstracts import clean_abstract, recover_abstracts, RecoveryContext, recov
 from time import monotonic
 from collections import Counter
 from .metadata import recover_metadata
+from .recommendation_sync import sync_client
 
 
 def normalize_path_patterns(patterns: list[str] | ListConfig | None, config_key: str) -> list[str] | None:
@@ -160,6 +161,8 @@ class Executor:
         output = self.config.get('output', {})
         email_cfg, rss_cfg = output.get('email', {}), output.get('rss', {})
         email_enabled, rss_enabled = email_cfg.get('enabled', True), rss_cfg.get('enabled', False)
+        # Validate secure sync setup before retrieval or any budgeted enrichment.
+        metadata_sync = sync_client(self.config.email) if email_enabled else None
         # Deliberately exclude recipient, model credentials, endpoints and custom YAML.
         logger.info(f'Effective configuration: sources={list(self.retrievers)}, '
                     f'llm_enabled={bool(self.config.llm.get("enabled", True))}, '
@@ -193,6 +196,9 @@ class Executor:
             pending = pending_batch(state.pending('email'), quotas, maximum)
             if pending or (self.config.executor.send_empty and not errors):
                 try:
+                    if metadata_sync is not None:
+                        metadata_sync.sync(pending, state)
+                        logger.info(f'Verified {len(pending)} recommendation citations in D1')
                     generated = sum(p.has_ai_summary for p in pending)
                     reasons = dict(Counter(p.tldr_error_reason or p.tldr_error or 'not_generated'
                                            for p in pending if not p.has_ai_summary))

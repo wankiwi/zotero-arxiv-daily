@@ -6,6 +6,7 @@ import re
 from omegaconf import OmegaConf
 from hydra import compose, initialize_config_dir
 from zot2dailypaper.preprint_interests import enabled_sources
+from zot2dailypaper.recommendation_sync import WORKER_ORIGIN
 
 
 def prepare(root: Path, environ=os.environ):
@@ -20,6 +21,13 @@ def prepare(root: Path, environ=os.environ):
         if not OmegaConf.is_dict(supplied) or 'defaults' in supplied:
             raise ValueError('CUSTOM_CONFIG must be a YAML mapping without defaults')
         config = OmegaConf.merge(config, supplied)
+    sync_mode = environ.get('ZOTERO_WORKER_SYNC', 'disabled')
+    if sync_mode not in ('disabled', 'free'):
+        raise ValueError('ZOTERO_WORKER_SYNC must be disabled or free')
+    config = OmegaConf.merge(config, {'email': {'worker_sync': sync_mode}})
+    if sync_mode == 'free':
+        # Approved destination wins over a stale Site origin in CUSTOM_CONFIG.
+        config = OmegaConf.merge(config, {'email': {'zotero_action_origin': WORKER_ORIGIN}})
     profile = 'interests' if scheduled else environ.get('PREPRINT_PROFILE', 'configured')
     if profile not in ('configured', 'interests'):
         raise ValueError('Invalid preprint profile')

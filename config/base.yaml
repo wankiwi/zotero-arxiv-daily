@@ -60,6 +60,7 @@ source:
     category: null # The categories of target medrxiv papers. Find categories from [here](https://www.medrxiv.org/) Example: ["psychiatry and clinical psychology", "neurology"]
 
 email:
+  worker_sync: disabled # free explicitly acknowledges the existing Workers/D1 Free plan.
   zotero_action_origin: null # Disabled until an authenticated confirmation service is approved/deployed.
   affiliation_max_chars: 180 # Email display limit, including ellipsis; full metadata is retained (20-1000).
   sender: ??? # The email account of the SMTP server that sends you email. Example: abc@qq.com
