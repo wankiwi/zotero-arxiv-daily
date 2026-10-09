@@ -17,6 +17,14 @@ from zot2dailypaper.state import State
 from zot2dailypaper.zotero_action import confirmation_link
 
 FAKE_TOKEN = 'test-token-never-a-real-secret-0000'
+SQLITE_CLIENTS = []
+
+
+@pytest.fixture(autouse=True)
+def close_test_databases():
+    yield
+    while SQLITE_CLIENTS:
+        SQLITE_CLIENTS.pop().db.close()
 
 
 class Response:
@@ -36,6 +44,7 @@ class Response:
 class D1:
     def __init__(self):
         self.db = sqlite3.connect(':memory:')
+        SQLITE_CLIENTS.append(self)
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
             CREATE TABLE papers(id TEXT PRIMARY KEY, canonical_identity TEXT NOT NULL,
