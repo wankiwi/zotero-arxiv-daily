@@ -87,7 +87,7 @@ def test_parameterized_batches_readback_and_public_only_fields(tmp_path):
         assert FAKE_TOKEN not in row['payload']
     assert client.db.execute('SELECT * FROM credentials').fetchone()[0] == 'ciphertext-placeholder'
     assert client.db.execute('SELECT * FROM saves').fetchone()[0] == 'existing-save'
-    assert State(state.path).pending('email') == papers
+    assert [paper_id(p) for p in State(state.path).pending('email')] == [paper_id(p) for p in papers]
     assert not client.closed  # Caller owns a supplied transport.
 
 
@@ -219,7 +219,7 @@ def test_sync_precedes_smtp_and_failed_sync_does_not_mark_delivery(config, tmp_p
     config.state.path = str(tmp_path / 'state.json')
     config.llm.enabled = False
     config.email.zotero_action_origin = WORKER_ORIGIN
-    history(tmp_path)
+    state, _ = history(tmp_path)
     events = []
     def sync(pending, current_state):
         events.append('sync')
@@ -250,3 +250,53 @@ def test_missing_secret_blocks_before_recommendation_or_paid_work(config, monkey
     monkeypatch.setattr(executor, '_recommend', lambda *args: pytest.fail('Must validate setup first'))
     with pytest.raises(SyncUnavailable, match='Actions secret'):
         executor.run()
+
+
+def test_owned_transport_disables_ambient_auth_and_is_closed(tmp_path, monkeypatch):
+    state, papers = history(tmp_path)
+    client = D1()
+    client.trust_env = True
+    monkeypatch.setattr('zot2dailypaper.recommendation_sync.requests.Session', lambda: client)
+    RecommendationSync(FAKE_TOKEN).sync(papers, state)
+    assert client.trust_env is False and client.closed
+
+
+def test_empty_batch_and_admission_cap_make_no_requests(tmp_path):
+    state, papers = history(tmp_path)
+    client = D1()
+    sync = RecommendationSync(FAKE_TOKEN)
+    sync.sync([], state, client=client)
+    assert client.calls == []
+    with pytest.raises(SyncUnavailable, match='batch exceeds'):
+        sync.sync(papers * 1001, state, client=client)
+    assert client.calls == []
+
+
+def test_deadline_closes_response_and_stops_remaining_batches(tmp_path, monkeypatch):
+    state, papers = history(tmp_path, 21)
+    client = D1()
+    clock = iter([0, 1, 121])
+    monkeypatch.setattr('zot2dailypaper.recommendation_sync.monotonic', lambda: next(clock))
+    with pytest.raises(SyncUnavailable, match='email remains pending'):
+        RecommendationSync(FAKE_TOKEN).sync(papers, state, client=client)
+    assert len(client.calls) == 1 and client.responses[0].closed
+
+
+def test_partial_failure_can_replay_all_batches_without_duplicate_rows(tmp_path):
+    state, papers = history(tmp_path, 21)
+    client = D1()
+    original = client.post
+    def fail_second_write(url, **kwargs):
+        if len(client.calls) == 2:
+            client.calls.append((url, kwargs))
+            return Response(status=503, raw=b'private upstream message')
+        return original(url, **kwargs)
+    client.post = fail_second_write
+    sync = RecommendationSync(FAKE_TOKEN)
+    with pytest.raises(SyncUnavailable):
+        sync.sync(papers, state, client=client)
+    assert client.db.execute('SELECT COUNT(*) FROM papers').fetchone()[0] == 20
+    client.post = original
+    sync.sync(papers, state, client=client)
+    assert client.db.execute('SELECT COUNT(*) FROM papers').fetchone()[0] == 21
+    assert len(State(state.path).pending('email')) == 21
